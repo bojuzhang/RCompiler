@@ -57,21 +57,21 @@ std::string to_string(Token token) {
         // case Token::kawait: return "await";
         case Token::kdyn: return "dyn";
 
-        // // 弱关键字
-        // case Token::kabstract: return "abstract";
-        // case Token::kbecome: return "become";
-        // case Token::kbox: return "box";
-        // case Token::kdo: return "do";
-        // case Token::kfinal: return "final";
-        // case Token::kmacro: return "macro";
-        // case Token::koverride: return "override";
-        // case Token::kpriv: return "priv";
-        // case Token::ktypeof: return "typeof";
-        // case Token::kunsized: return "unsized";
-        // case Token::kvirtual: return "virtual";
-        // case Token::kyield: return "yield";
-        // case Token::ktry: return "try";
-        // case Token::kgen: return "gen";
+        // 弱关键字
+        case Token::kabstract: return "abstract";
+        case Token::kbecome: return "become";
+        case Token::kbox: return "box";
+        case Token::kdo: return "do";
+        case Token::kfinal: return "final";
+        case Token::kmacro: return "macro";
+        case Token::koverride: return "override";
+        case Token::kpriv: return "priv";
+        case Token::ktypeof: return "typeof";
+        case Token::kunsized: return "unsized";
+        case Token::kvirtual: return "virtual";
+        case Token::kyield: return "yield";
+        case Token::ktry: return "try";
+        case Token::kgen: return "gen";
 
         // 标点符号
         case Token::kPlus: return "Plus";
