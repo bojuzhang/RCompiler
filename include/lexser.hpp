@@ -108,6 +108,8 @@ enum class Token {
     kRightSquare,
     kleftParenthe,
     krightParenthe,
+
+    kCOMMENT,
 };
 
 class lexser {
@@ -235,6 +237,8 @@ private:
         {Token::kRightSquare, std::regex(R"(\])")},
         {Token::kleftParenthe, std::regex(R"(\()")},
         {Token::krightParenthe, std::regex(R"(\))")},
+
+        {Token::kCOMMENT, std::regex(R"((//.*\n)|(/\*[\s\S]*\*/))")},
     };
 
 public:

@@ -40,7 +40,7 @@ std::string to_string(Token token) {
         case Token::kmut: return "mut";
         // case Token::kpub: return "pub";
         case Token::kref: return "ref";
-        // case Token::kreturn: return "return";
+        case Token::kreturn: return "return";
         case Token::kself: return "self";
         case Token::kSelf: return "Self";
         case Token::kstatic: return "static";
@@ -129,6 +129,8 @@ std::string to_string(Token token) {
         case Token::kRightSquare: return "RightSquare";
         case Token::kleftParenthe: return "leftParenthe";
         case Token::krightParenthe: return "rightParenthe";
+
+        case Token::kCOMMENT: return "COMMENT";
     }
     return "UNKNOWN_TOKEN"; // 处理未覆盖的情况
 }
