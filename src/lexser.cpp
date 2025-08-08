@@ -1,11 +1,11 @@
 #include "lexser.hpp"
+#include <iostream>
+#include <sstream>
 
 std::vector<std::pair<Token, std::string>> lexser::lexString(std::string s) {
     std::vector<std::pair<Token, std::string>> ans;
     size_t i = 0;
     while (i < s.size()) {
-        while (i < s.size() && isspace(s[i])) ++i;
-
         int bestlen = 0;
         std::pair<Token, std::string> bestmatch;
         for (size_t j = 0; j < patterns.size(); j++) {
@@ -22,9 +22,23 @@ std::vector<std::pair<Token, std::string>> lexser::lexString(std::string s) {
                 }
             }
         }
-
-        ans.push_back(bestmatch);
+        
+        if (bestlen > 0) {
+            ans.push_back(bestmatch);
+            i += bestlen - 1;
+        }
+        i++;
     }
+
+    return ans;
+}
+
+std::string lexser::getString() {
+    std::string ans;
+
+    std::stringstream buffer;
+    buffer << std::cin.rdbuf();
+    ans = buffer.str();
 
     return ans;
 }

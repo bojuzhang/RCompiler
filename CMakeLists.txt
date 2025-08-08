@@ -4,4 +4,5 @@ set(CMAKE_CXX_STANDARD 20)
 
 include_directories(include)
 
-add_executable(code src/lexser.cpp)
+add_executable(code src/lexser.cpp
+                    src/lexsertest.cpp)
