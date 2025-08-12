@@ -2,6 +2,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include "lexser.hpp"
 
 class ASTNode;
 
@@ -36,8 +37,8 @@ class ExpressionStatement;
 
 // EXPRESSION Syntax
 class Expression;
-class ExpressionWithoutBlock;
-class ExpressionWithBlock;
+// class ExpressionWithoutBlock;
+// class ExpressionWithBlock;
 class LiteralExpression;
 class PathExpression;
 class GroupedExpression;
@@ -59,10 +60,10 @@ class InfiniteLoopExpression;
 class PredicateLoopExpression;
 class IfExpression;
 class MatchExpression;
-class NegationExpression;
-class ArithmeticOrLogicalExpression;
-class ComparisonExpression;
-class LazyBooleanExpression;
+// class NegationExpression;
+// class ArithmeticOrLogicalExpression;
+// class ComparisonExpression;
+// class LazyBooleanExpression;
 class TypeCastExpression;
 class AssignmentExpression;
 class CompoundAssignmentExpression;
@@ -76,6 +77,8 @@ class Conditions;
 class MatchArms;
 class MatchArm;
 class MatchArmGuard;
+class UnaryExpression;
+class BinaryExpression;
 
 // PATTERN Syntax
 class Pattern;
@@ -242,47 +245,161 @@ private:
 };
 
 // EXPRESSION Syntax
-class Expression : public ASTNode{};
-class ExpressionWithoutBlock : public ASTNode{};
-class ExpressionWithBlock : public ASTNode{};
-class LiteralExpression : public ASTNode {};
-class PathExpression : public ASTNode {};
-class GroupedExpression : public ASTNode {};
-class ArrayExpression : public ASTNode {};
-class IndexExpression : public ASTNode {};
-class TupleExpression : public ASTNode {};
-class TupleIndexingExpression : public ASTNode {};
-class StructExpression : public ASTNode {};
-class CallExpression : public ASTNode {};
-class MethodCallExpression : public ASTNode {};
-class FieldExpression : public ASTNode {};
-class ContinueExpression : public ASTNode {};
-class BreakExpression : public ASTNode {};
-class ReturnExpression : public ASTNode {};
-class UnderscoreExpression : public ASTNode {};
-class BlockExpression : public ASTNode {};
-class ConstBlockExpression : public ASTNode {};
-class InfiniteLoopExpression : public ASTNode {};
-class PredicateLoopExpression : public ASTNode {};
-class IfExpression : public ASTNode {};
-class MatchExpression : public ASTNode {};
-class NegationExpression : public ASTNode {};
-class ArithmeticOrLogicalExpression : public ASTNode {};
-class ComparisonExpression : public ASTNode {};
-class LazyBooleanExpression : public ASTNode {};
-class TypeCastExpression : public ASTNode {};
-class AssignmentExpression : public ASTNode {};
-class CompoundAssignmentExpression : public ASTNode {};
-class ArrayElements : public ASTNode {};
-class TupleElements : public ASTNode {};
-class StructExprFields : public ASTNode {};
-class StructExprField : public ASTNode {};
-class StructBase : public ASTNode {};
-class CallParams : public ASTNode {};
-class Conditions : public ASTNode {};
-class MatchArms : public ASTNode {};
-class MatchArm : public ASTNode {};
-class MatchArmGuard : public ASTNode {};
+class Expression : public ASTNode {};
+class LiteralExpression : public Expression {
+private:
+    std::string literal;
+    Token tokentype;
+};
+class PathExpression : public Expression {
+private:
+    std::unique_ptr<SimplePath> simplepath;
+};
+class GroupedExpression : public Expression {
+private:
+    std::unique_ptr<Expression> expression;
+};
+class ArrayExpression : public Expression {
+private:
+    std::unique_ptr<ArrayElements> arrayelements;
+};
+class IndexExpression : public Expression {
+private:
+    std::unique_ptr<Expression> expressionout;
+    std::unique_ptr<Expression> expressionin;
+};
+class TupleExpression : public Expression {
+private:
+    std::unique_ptr<TupleElements> tupleelements;
+};
+class TupleIndexingExpression : public Expression {
+private:
+    std::unique_ptr<Expression> expression;
+    int tupleindex;
+};
+class StructExpression : public Expression {
+private:
+    std::unique_ptr<PathInExpression> pathinexpression;
+    std::unique_ptr<ASTNode> structinfo; // exprfields or base
+};
+class CallExpression : public Expression {
+private:
+    std::unique_ptr<Expression> expression;
+    std::unique_ptr<CallParams> callparams;
+};
+// class MethodCallExpression : public Expression {
+// private:
+//     std::unique_ptr<Expression> expression;
+//     std::unique_ptr<Path>
+//     std::unique_ptr<CallParams> callparams;
+// };
+class FieldExpression : public Expression {
+private:
+    std::unique_ptr<Expression> expression;
+    std::string indentifier;
+};
+class ContinueExpression : public Expression {
+private:
+    // nothing but continue
+};
+class BreakExpression : public Expression {
+private:
+    std::unique_ptr<Expression> expression;
+};
+class ReturnExpression : public Expression {
+private:
+    std::unique_ptr<Expression> expression;
+};
+class UnderscoreExpression : public Expression {
+private:
+    // nothing but _
+};
+class BlockExpression : public Expression {
+private:
+    std::unique_ptr<Statement> statement;
+};
+class ConstBlockExpression : public Expression {
+private:
+    std::unique_ptr<BlockExpression> blockexpression;
+};
+class InfiniteLoopExpression : public Expression {
+private:
+    std::unique_ptr<BlockExpression> blockexpression;
+};
+class PredicateLoopExpression : public Expression {
+private:
+    std::unique_ptr<Conditions> conditions;
+    std::unique_ptr<BlockExpression> blockexpression;
+};
+class IfExpression : public Expression {
+private:
+    std::unique_ptr<Conditions> conditions;
+    std::unique_ptr<BlockExpression> ifblockexpression;
+    std::unique_ptr<Expression> elseexpression; // block or if
+};
+// class MatchExpression : public Expression {};
+class TypeCastExpression : public Expression {
+private:
+    std::unique_ptr<Expression> expression;
+    std::unique_ptr<TypeNoBounds> typenobounds;
+};  
+class AssignmentExpression : public Expression {
+private:
+    std::unique_ptr<Expression> leftexpression;
+    std::unique_ptr<Expression> rightexpression;
+};
+class CompoundAssignmentExpression : public Expression {
+private:
+    std::unique_ptr<Expression> leftexpression;
+    std::unique_ptr<Expression> rightexpression;
+};
+class ArrayElements : public Expression {
+private:
+    std::vector<std::unique_ptr<Expression>> expressions;
+    bool istwo; 
+};
+class TupleElements : public Expression {
+private:
+    std::vector<std::unique_ptr<Expression>> expressions;
+};
+class StructExprFields : public Expression {
+private:
+    std::vector<std::unique_ptr<StructExprField>> structexprfields;
+    std::unique_ptr<StructBase> structbase;
+};
+class StructExprField : public Expression {
+private:
+    std::string identifier;
+    int tupleindex;
+    std::unique_ptr<Expression> expression;
+};
+class StructBase : public Expression {
+private:
+    std::unique_ptr<Expression> expression;
+};
+class CallParams : public Expression {
+private:
+    std::vector<std::unique_ptr<Expression>> expressions;
+};
+class Conditions : public Expression {
+private:
+    std::unique_ptr<Expression> expression; // except structexpression
+};
+// class MatchArms : public Expression {};
+// class MatchArm : public Expression {};
+// class MatchArmGuard : public Expression {};
+
+class UnaryExpression : public Expression {
+private:
+    std::unique_ptr<Expression> expression;
+    Token unarytype;
+};
+class BinaryExpression : public Expression {
+private:
+    std::unique_ptr<Expression> leftexpression;
+    std::unique_ptr<Expression> rightexpression;
+    Token binarytype;
+};
 
 // PATTERN Syntax
 class Pattern : public ASTNode {
