@@ -1,3 +1,5 @@
+#pragma once
+
 #include <regex>
 #include <utility>
 #include <vector>

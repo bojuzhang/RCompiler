@@ -1,3 +1,5 @@
+#pragma once
+
 #include <algorithm>
 #include <memory>
 #include <string>
@@ -388,12 +390,13 @@ public:
     CallExpression(std::unique_ptr<Expression> expression,
                    std::unique_ptr<CallParams> callparams);
 };
-// class MethodCallExpression : public Expression {
-// private:
-//     std::unique_ptr<Expression> expression;
-//     std::unique_ptr<Path>
-//     std::unique_ptr<CallParams> callparams;
-// };
+class MethodCallExpression : public Expression {
+private:
+    // is it deleted?
+    std::unique_ptr<Expression> expression;
+    // std::unique_ptr<Path>
+    std::unique_ptr<CallParams> callparams;
+};
 class FieldExpression : public Expression {
 private:
     std::unique_ptr<Expression> expression;
@@ -461,7 +464,9 @@ public:
                  std::unique_ptr<BlockExpression> ifblockexpression,
                  std::unique_ptr<Expression> elseexpression);
 };
-// class MatchExpression : public Expression {};
+class MatchExpression : public Expression {
+// is it deleted?
+};
 class TypeCastExpression : public Expression {
 private:
     std::unique_ptr<Expression> expression;
