@@ -193,7 +193,7 @@ IfExpression::IfExpression(std::unique_ptr<Conditions> conditions,
       elseexpression(std::move(elseexpression)) {}
 
 TypeCastExpression::TypeCastExpression(std::unique_ptr<Expression> expression,
-                                       std::unique_ptr<TypeNoBounds> typenobounds)
+                                       std::unique_ptr<Type> typenobounds)
     : expression(std::move(expression)),
       typenobounds(std::move(typenobounds)) {}
 
@@ -304,22 +304,22 @@ SlicePatternItems::SlicePatternItems(std::vector<std::unique_ptr<Pattern>>&& pat
     : patterns(std::move(patterns)) {}
 
 // TYPE Syntax
-Type::Type(std::unique_ptr<TypeNoBounds> typenobounds) 
-    : typenobounds(std::move(typenobounds)) {}
+// Type::Type(std::unique_ptr<TypeNoBounds> typenobounds) 
+//     : typenobounds(std::move(typenobounds)) {}
 
-TypeNoBounds::TypeNoBounds(std::unique_ptr<ASTNode> astnode) 
-    : astnode(std::move(astnode)) {}
+// TypeNoBounds::TypeNoBounds(std::unique_ptr<ASTNode> astnode) 
+//     : astnode(std::move(astnode)) {}
 
-ParenthesizedType::ParenthesizedType(std::unique_ptr<Type> type) 
-    : type(std::move(type)) {}
+// ParenthesizedType::ParenthesizedType(std::unique_ptr<Type> type) 
+//     : type(std::move(type)) {}
 
 TypePath::TypePath(std::vector<std::unique_ptr<SimplePathSegment>>&& simplepathsegements)
     : simplepathsegements(std::move(simplepathsegements)) {}
 
-TupleType::TupleType(std::vector<std::unique_ptr<Type>>&& types) 
-    : types(std::move(types)) {}
+// TupleType::TupleType(std::vector<std::unique_ptr<Type>>&& types) 
+//     : types(std::move(types)) {}
 
-NeverType::NeverType() = default;
+// NeverType::NeverType() = default;
 
 ArrayType::ArrayType(std::unique_ptr<Type> type, std::unique_ptr<Expression> expression)
     : type(std::move(type)), expression(std::move(expression)) {}

@@ -105,14 +105,15 @@ class SlicePatternItems;
 
 // TYPE Syntax
 class Type;
-class TypeNoBounds;
-class ParenthesizedType;
+// class TypeNoBounds;
+// class ParenthesizedType;
 class TypePath;
-class TupleType;
-class NeverType;
+// class TupleType;
+// class NeverType;
 class ArrayType;
 class SliceType;
 class InferredType;
+class ReferenceType;
 
 // PATH Syntax
 class SimplePath;
@@ -326,6 +327,7 @@ public:
 class Expression : public ASTNode {
 public:
     Expression();
+    virtual ~Expression();
 };
 
 class LiteralExpression : public Expression {
@@ -470,10 +472,10 @@ class MatchExpression : public Expression {
 class TypeCastExpression : public Expression {
 private:
     std::unique_ptr<Expression> expression;
-    std::unique_ptr<TypeNoBounds> typenobounds;
+    std::unique_ptr<Type> typenobounds;
 public:
     TypeCastExpression(std::unique_ptr<Expression> expression,
-                       std::unique_ptr<TypeNoBounds> typenobounds);
+                       std::unique_ptr<Type> typenobounds);
 };  
 class AssignmentExpression : public Expression {
 private:
@@ -701,66 +703,71 @@ public:
 
 // TYPE Syntax
 class Type : public ASTNode {
-private:
-    std::unique_ptr<TypeNoBounds> typenobounds;
 public:
-    explicit Type(std::unique_ptr<TypeNoBounds> typenobounds);
+    Type();
+    virtual ~Type();
 };
-class TypeNoBounds : public ASTNode {
-private:
-    std::unique_ptr<ASTNode> astnode; /* ParenthesizedType
-    | TypePath
-    | TupleType
-    | NeverType
-    | ArrayType
-    | SliceType
-    | InferredType
-    */
-public:
-    explicit TypeNoBounds(std::unique_ptr<ASTNode> astnode);
-};
-class ParenthesizedType : public ASTNode {
-private:
-    std::unique_ptr<Type> type;
-public:
-    explicit ParenthesizedType(std::unique_ptr<Type> type);
-};
-class TypePath : public ASTNode {
+// class TypeNoBounds : public Type {
+// private:
+//     std::unique_ptr<ASTNode> astnode; /*
+//     `TypePath
+//     | ArrayType
+//     | SliceType
+//     | InferredType
+//     | ReferenceType
+//     */
+// public:
+//     explicit TypeNoBounds(std::unique_ptr<ASTNode> astnode);
+// };
+// class ParenthesizedType : public ASTNode {
+// private:
+//     std::unique_ptr<Type> type;
+// public:
+//     explicit ParenthesizedType(std::unique_ptr<Type> type);
+// };
+class TypePath : public Type {
 private:
     std::vector<std::unique_ptr<SimplePathSegment>> simplepathsegements;
 public:
     explicit TypePath(std::vector<std::unique_ptr<SimplePathSegment>>&& simplepathsegements);
 };
-class TupleType : public ASTNode {
-private:
-    std::vector<std::unique_ptr<Type>> types;
-public:
-    explicit TupleType(std::vector<std::unique_ptr<Type>>&& types);
-};
-class NeverType : public ASTNode {
-private:
-    // nothing but !
-public:
-    NeverType();
-};
-class ArrayType : public ASTNode {
+// class TupleType : public ASTNode {
+// private:
+//     std::vector<std::unique_ptr<Type>> types;
+// public:
+//     explicit TupleType(std::vector<std::unique_ptr<Type>>&& types);
+// };
+// class NeverType : public ASTNode {
+// private:
+//     // nothing but !
+// public:
+//     NeverType();
+// };
+class ArrayType : public Type {
 private:
     std::unique_ptr<Type> type;
     std::unique_ptr<Expression> expression;
 public:
     ArrayType(std::unique_ptr<Type> type, std::unique_ptr<Expression> expression);
 };
-class SliceType : public ASTNode {
+class SliceType : public Type {
 private:
     std::unique_ptr<Type> type;
 public:
     explicit SliceType(std::unique_ptr<Type> type);
 };
-class InferredType : public ASTNode {
+class InferredType : public Type {
 private:
     // nothing but _
 public:
     InferredType();
+};
+class ReferenceType : public Type {
+private:
+    std::unique_ptr<Type> type;
+    bool ismut;
+public:
+    ReferenceType(std::unique_ptr<Type> type, bool ismut);
 };
 
 // PATH Syntax

@@ -42,10 +42,40 @@ public:
     std::unique_ptr<UnaryExpression> parseUnaryExpression();
     std::unique_ptr<BreakExpression> parseBreakExpression();
     std::unique_ptr<ReturnExpression> parseReturnExpression();
-    std::unique_ptr<TupleExpression> parseTupleExpression();
+    // std::unique_ptr<TupleExpression> parseTupleExpression();
 
     std::unique_ptr<CallExpression> parseCallExpression();
     std::unique_ptr<IndexExpression> parseIndexExpression();
     std::unique_ptr<TypeCastExpression> parseTypeCastExpression();
     std::unique_ptr<MethodCallExpression> parseMethodCallExpression();
+    
+    
+    
+    std::unique_ptr<Item> parseItem();
+
+
+
+
+
+
+    std::unique_ptr<Statement> parseStatement();
+    std::unique_ptr<Conditions> parseConditions();
+
+    std::unique_ptr<SimplePath> parseSimplePath();
+
+    std::unique_ptr<ArrayElements> parseArrayElements();
+    // std::unique_ptr<TupleElements> parseTupleElements();
+
+    std::unique_ptr<CallParams> parseCallParams();
+
+    std::unique_ptr<Type> parseType();
+
+    std::unique_ptr<LetStatement> parseLetStatement();
+
+    std::unique_ptr<ExpressionStatement> parseExpressionStatement();
+    std::unique_ptr<SimplePathSegment> parseSimplePathSegment();
+    std::unique_ptr<TypePath> parseTypePath();
+    std::unique_ptr<ReferenceType> parseReferenceType();
+
+    
 };
