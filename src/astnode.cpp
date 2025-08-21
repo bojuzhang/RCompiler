@@ -13,12 +13,12 @@ Crate::Crate(std::vector<std::unique_ptr<Item>>&& items)
 Item::Item(std::unique_ptr<ASTNode> item) 
     : item(std::move(item)) {}
 
-Function::Function(std::unique_ptr<FunctionQualifiers> functionqualifiers,
+Function::Function(bool isconst,
                    std::string identifier_name,
                    std::unique_ptr<FunctionParameters> functionparameters,
                    std::unique_ptr<FunctionReturnType> functionreturntype,
                    std::unique_ptr<BlockExpression> blockexpression)
-    : functionqualifiers(std::move(functionqualifiers)),
+    : isconst(std::move(isconst)),
       identifier_name(std::move(identifier_name)),
       functionparameters(std::move(functionparameters)),
       functionreturntype(std::move(functionreturntype)),
@@ -37,9 +37,11 @@ Module::Module(std::string identifier,
       items(std::move(items)) {}
 
 StructStruct::StructStruct(std::string identifier,
-                           std::unique_ptr<StructFields> structfileds)
+                           std::unique_ptr<StructFields> structfileds,
+                           bool issemi)
     : identifier(std::move(identifier)),
-      structfileds(std::move(structfileds)) {}
+      structfileds(std::move(structfileds)),
+      issemi(issemi) {}
 
 TupleStruct::TupleStruct(std::string identifier,
                          std::unique_ptr<TupleFields> tuplefields)
@@ -56,8 +58,8 @@ InherentImpl::InherentImpl(std::unique_ptr<Type> type,
     : type(std::move(type)),
       associateditems(std::move(associateditems)) {}
 
-FunctionQualifiers::FunctionQualifiers(bool isconst) 
-    : isconst(isconst) {}
+// FunctionQualifiers::FunctionQualifiers(bool isconst) 
+//     : isconst(isconst) {}
 
 FunctionParameters::FunctionParameters(std::vector<std::unique_ptr<FunctionParam>>&& functionparams)
     : functionparams(std::move(functionparams)) {}
@@ -89,12 +91,8 @@ TupleField::TupleField(std::string identifier,
 EnumVariants::EnumVariants(std::vector<std::unique_ptr<EnumVariant>>&& enumvariants)
     : enumvariants(std::move(enumvariants)) {}
 
-EnumVariant::EnumVariant(std::string identifier,
-                         std::unique_ptr<ASTNode> tupleorstruct,
-                         std::unique_ptr<EnumVariantDiscriminant> enumvariantdiscriminant)
-    : identifier(std::move(identifier)),
-      tupleorstruct(std::move(tupleorstruct)),
-      enumvariantdiscriminant(std::move(enumvariantdiscriminant)) {}
+EnumVariant::EnumVariant(std::string identifier)
+    : identifier(std::move(identifier)) {}
 
 EnumVariantTuple::EnumVariantTuple(std::unique_ptr<TupleFields> tuplefields)
     : tuplefields(std::move(tuplefields)) {}
@@ -119,8 +117,9 @@ LetStatement::LetStatement(std::unique_ptr<PatternNoTopAlt> patternnotopalt,
       type(std::move(type)),
       expression(std::move(expression)) {}
 
-ExpressionStatement::ExpressionStatement(std::unique_ptr<ASTNode> astnode) 
-    : astnode(std::move(astnode)) {}
+ExpressionStatement::ExpressionStatement(std::unique_ptr<Expression> astnode, bool hassemi)
+    : astnode(std::move(astnode)),
+      hassemi(hassemi) {}
 
 // EXPRESSION Syntax
 Expression::Expression() = default;
@@ -313,8 +312,8 @@ SlicePatternItems::SlicePatternItems(std::vector<std::unique_ptr<Pattern>>&& pat
 // ParenthesizedType::ParenthesizedType(std::unique_ptr<Type> type) 
 //     : type(std::move(type)) {}
 
-TypePath::TypePath(std::vector<std::unique_ptr<SimplePathSegment>>&& simplepathsegements)
-    : simplepathsegements(std::move(simplepathsegements)) {}
+TypePath::TypePath(std::unique_ptr<SimplePathSegment> simplepathsegement)
+    : simplepathsegement(std::move(simplepathsegement)) {}
 
 // TupleType::TupleType(std::vector<std::unique_ptr<Type>>&& types) 
 //     : types(std::move(types)) {}
@@ -333,7 +332,7 @@ InferredType::InferredType() = default;
 SimplePath::SimplePath(std::vector<std::unique_ptr<SimplePathSegment>>&& simplepathsegements)
     : simplepathsegements(std::move(simplepathsegements)) {}
 
-SimplePathSegment::SimplePathSegment(std::string identifier, bool isself, bool isSelf, bool iscrate, bool issuper)
-    : identifier(std::move(identifier)), isself(isself), isSelf(isSelf), iscrate(iscrate), issuper(issuper) {}
+SimplePathSegment::SimplePathSegment(std::string identifier, bool isself, bool isSelf)
+    : identifier(std::move(identifier)), isself(isself), isSelf(isSelf) {}
 
 PathInExpression::PathInExpression() = default;

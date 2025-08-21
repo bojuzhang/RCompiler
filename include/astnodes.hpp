@@ -17,7 +17,7 @@ class StructStruct;
 class TupleStruct;
 class Enumeration;
 class InherentImpl;
-class FunctionQualifiers;
+// class FunctionQualifiers;
 class FunctionParameters;
 class FunctionParam;
 class FunctionReturnType;
@@ -142,13 +142,14 @@ public:
 };
 class Function : public ASTNode {
 private:
-    std::unique_ptr<FunctionQualifiers> functionqualifiers;
+    // std::unique_ptr<FunctionQualifiers> functionqualifiers;
+    bool isconst;
     std::string identifier_name;
     std::unique_ptr<FunctionParameters> functionparameters;
     std::unique_ptr<FunctionReturnType> functionreturntype;
     std::unique_ptr<BlockExpression> blockexpression;
 public:
-    Function(std::unique_ptr<FunctionQualifiers> functionqualifiers,
+    Function(bool isconst,
              std::string identifier_name,
              std::unique_ptr<FunctionParameters> functionparameters,
              std::unique_ptr<FunctionReturnType> functionreturntype,
@@ -176,9 +177,11 @@ class StructStruct : public ASTNode {
 private:
     std::string identifier;
     std::unique_ptr<StructFields> structfileds;
+    bool issemi;
 public:
     StructStruct(std::string identifier,
-                 std::unique_ptr<StructFields> structfileds);
+                 std::unique_ptr<StructFields> structfileds,
+                 bool issemi);
 };
 class TupleStruct : public ASTNode {
 private:
@@ -204,12 +207,12 @@ public:
     InherentImpl(std::unique_ptr<Type> type,
                  std::vector<std::unique_ptr<AssociatedItem>>&& associateditems);
 };
-class FunctionQualifiers : public ASTNode {
-private:
-    bool isconst;
-public:
-    explicit FunctionQualifiers(bool isconst);
-};
+// class FunctionQualifiers : public ASTNode {
+// private:
+//     bool isconst;
+// public:
+//     explicit FunctionQualifiers(bool isconst);
+// };
 class FunctionParameters : public ASTNode {
 private:
     std::vector<std::unique_ptr<FunctionParam>> functionparams;
@@ -267,12 +270,8 @@ public:
 class EnumVariant : public ASTNode {
 private:
     std::string identifier;
-    std::unique_ptr<ASTNode> tupleorstruct;
-    std::unique_ptr<EnumVariantDiscriminant> enumvariantdiscriminant;
 public:
-    EnumVariant(std::string identifier,
-                std::unique_ptr<ASTNode> tupleorstruct,
-                std::unique_ptr<EnumVariantDiscriminant> enumvariantdiscriminant);
+    EnumVariant(std::string identifier);
 };
 class EnumVariantTuple : public ASTNode {
 private:
@@ -318,9 +317,10 @@ public:
 };
 class ExpressionStatement : public ASTNode {
 private:
-    std::unique_ptr<ASTNode> astnode; // expression withblock or withnotblock
+    std::unique_ptr<Expression> astnode;
+    bool hassemi;
 public:
-    explicit ExpressionStatement(std::unique_ptr<ASTNode> astnode);
+    explicit ExpressionStatement(std::unique_ptr<Expression> astnode, bool hassemi);
 };
 
 // EXPRESSION Syntax
@@ -727,9 +727,9 @@ public:
 // };
 class TypePath : public Type {
 private:
-    std::vector<std::unique_ptr<SimplePathSegment>> simplepathsegements;
+    std::unique_ptr<SimplePathSegment> simplepathsegement;
 public:
-    explicit TypePath(std::vector<std::unique_ptr<SimplePathSegment>>&& simplepathsegements);
+    explicit TypePath(std::unique_ptr<SimplePathSegment> simplepathsegement);
 };
 // class TupleType : public ASTNode {
 // private:
@@ -780,9 +780,9 @@ public:
 class SimplePathSegment : public ASTNode {
 private:
     std::string identifier;
-    bool isself, isSelf, iscrate, issuper;
+    bool isself, isSelf;
 public:
-    SimplePathSegment(std::string identifier, bool isself, bool isSelf, bool iscrate, bool issuper);
+    SimplePathSegment(std::string identifier, bool isself, bool isSelf);
 };
 class PathInExpression : public ASTNode {
 private:

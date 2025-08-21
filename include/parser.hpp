@@ -50,12 +50,27 @@ public:
     std::unique_ptr<MethodCallExpression> parseMethodCallExpression();
     
     
-    
+    std::unique_ptr<Crate> parseCrate();
     std::unique_ptr<Item> parseItem();
 
+    std::unique_ptr<Function> parseFunction();
+    std::unique_ptr<ConstantItem> parseConstantItem();
+    // std::unique_ptr<Module> parseModule();
+    std::unique_ptr<StructStruct> parseStruct();
+    std::unique_ptr<Enumeration> parseEnumeration();
+    std::unique_ptr<InherentImpl> parseInherentImpl();
 
+    std::unique_ptr<FunctionParameters> parseFunctionParameters();
+    std::unique_ptr<FunctionReturnType> parseFunctionReturnType();
+    std::unique_ptr<FunctionParam> parseFunctionParam();
 
+    std::unique_ptr<StructFields> parseStructFields();
+    std::unique_ptr<StructField> parseStructField();
 
+    std::unique_ptr<EnumVariants> parseEnumVariants();
+    std::unique_ptr<EnumVariant> parseEnumVariant();
+
+    std::unique_ptr<AssociatedItem> parseAssociatedItem();
 
 
     std::unique_ptr<Statement> parseStatement();
@@ -77,5 +92,5 @@ public:
     std::unique_ptr<TypePath> parseTypePath();
     std::unique_ptr<ReferenceType> parseReferenceType();
 
-    
+    std::unique_ptr<PatternNoTopAlt> parsePatternNoTopAlt();
 };
