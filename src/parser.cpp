@@ -588,7 +588,7 @@ std::unique_ptr<FunctionReturnType> Parser::parseFunctionReturnType() {
     return std::make_unique<FunctionReturnType>(std::move(type));
 }
 std::unique_ptr<FunctionParam> Parser::parseFunctionParam() {
-    auto pattern = parsePatternNoTopAlt();
+    auto pattern = parsePattern();
     if (pattern == nullptr) {
         return nullptr;
     }
@@ -685,7 +685,7 @@ std::unique_ptr<LetStatement> Parser::parseLetStatement() {
         return nullptr;
     }
     advance();
-    auto pattern = parsePatternNoTopAlt();
+    auto pattern = parsePattern();
     if (!match(Token::kColon)) {
         return nullptr;
     }
@@ -753,6 +753,91 @@ std::unique_ptr<ReferenceType> Parser::parseReferenceType() {
     return std::make_unique<ReferenceType>(std::move(type), ismut);
 }
 
-std::unique_ptr<PatternNoTopAlt> Parser::parsePatternNoTopAlt() {
+std::unique_ptr<Pattern> Parser::parsePattern() {
+    if (match(Token::kUnderscore)) {
+        advance();
+        return std::make_unique<WildcardPattern>();
+    } else if (match(Token::kAnd) || match(Token::kAndAnd)) {
+        return parseReferencePattern();
+    } else if (match(Token::kref) || match(Token::kmut) || match(Token::kIDENTIFIER)) {
+        return parseIdentifierPattern();
+    } else if (match(Token::kMinus)) {
+        return parseLiteralPattern();
+    } else {
+        auto tmp = pos;
+        auto p = parseLiteralPattern();
+        if (p != nullptr) return p;
+        pos = tmp;
+        auto q = parsePathPattern();
+        if (q != nullptr) return q;
+        return nullptr;
+    }
+}
 
+std::unique_ptr<ReferencePattern> Parser::parseReferencePattern() {
+    bool singleordouble = false;
+    if (match(Token::kAnd)) {
+        singleordouble = false;
+    } else if (match(Token::kAndAnd)) {
+        singleordouble = true;
+    } else {
+        return nullptr;
+    }
+    bool ismut = false;
+    if (match(Token::kmut)) {
+        ismut = true;
+        advance();
+    }
+    auto pattern = parsePattern();
+    return std::make_unique<ReferencePattern>(singleordouble, ismut, std::move(pattern));
+}
+std::unique_ptr<LiteralPattern> Parser::parseLiteralPattern() {
+    bool neg = false;
+    if (match(Token::kMinus)) {
+        neg = true;
+        advance();
+    }
+    auto expression = parseExpression();
+    if (expression == nullptr) {
+        return nullptr;
+    }
+    auto p = dynamic_cast<LiteralExpression*>(expression.get());
+    if (p == nullptr) {
+        return nullptr;
+    }
+    return std::make_unique<LiteralPattern>(neg, std::move(expression));
+}
+std::unique_ptr<IdentifierPattern> Parser::parseIdentifierPattern() {
+    bool isref = false;
+    if (match(Token::kref)) {
+        isref = true;
+        advance();
+    }
+    bool ismut = false;
+    if (match(Token::kmut)) {
+        ismut = true;
+        advance();
+    }
+    auto identifier = getstring();
+    advance();
+    if (match(Token::kAt)) {
+        advance();
+        auto pattern = parsePathPattern();
+        if (pattern == nullptr) {
+            return nullptr;
+        }
+        return std::make_unique<IdentifierPattern>(isref, ismut, identifier, std::move(pattern));
+    }
+    return std::make_unique<IdentifierPattern>(isref, ismut, identifier, nullptr);
+}
+std::unique_ptr<PathPattern> Parser::parsePathPattern() {
+    auto expression = parseExpression();
+    if (expression == nullptr) {
+        return nullptr;
+    }
+    auto p = dynamic_cast<PathExpression*>(expression.get());
+    if (p == nullptr) {
+        return nullptr;
+    }
+    return std::make_unique<PathPattern>(std::move(expression));
 }

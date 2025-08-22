@@ -1,4 +1,5 @@
 #include "astnodes.hpp"
+#include <utility>
 
 // constrict function
 
@@ -64,7 +65,7 @@ InherentImpl::InherentImpl(std::unique_ptr<Type> type,
 FunctionParameters::FunctionParameters(std::vector<std::unique_ptr<FunctionParam>>&& functionparams)
     : functionparams(std::move(functionparams)) {}
 
-FunctionParam::FunctionParam(std::unique_ptr<PatternNoTopAlt> patternnotopalt,
+FunctionParam::FunctionParam(std::unique_ptr<Pattern> patternnotopalt,
                              std::unique_ptr<Type> type)
     : patternnotopalt(std::move(patternnotopalt)),
       type(std::move(type)) {}
@@ -110,7 +111,7 @@ AssociatedItem::AssociatedItem(std::unique_ptr<ASTNode> consttantitem_or_functio
 Statement::Statement(std::unique_ptr<ASTNode> astnode) 
     : astnode(std::move(astnode)) {}
 
-LetStatement::LetStatement(std::unique_ptr<PatternNoTopAlt> patternnotopalt,
+LetStatement::LetStatement(std::unique_ptr<Pattern> patternnotopalt,
                            std::unique_ptr<Type> type,
                            std::unique_ptr<Expression> expression)
     : patternnotopalt(std::move(patternnotopalt)),
@@ -240,67 +241,22 @@ BinaryExpression::BinaryExpression(std::unique_ptr<Expression> leftexpression,
       binarytype(binarytype) {}
 
 // PATTERN Syntax
-Pattern::Pattern(std::vector<std::unique_ptr<PatternNoTopAlt>>&& patternnotopalts)
-    : patternnotopalts(std::move(patternnotopalts)) {}
-
-PatternWithoutRange::PatternWithoutRange(std::unique_ptr<ASTNode> astnode) 
-    : astnode(std::move(astnode)) {}
-
-PatternNoTopAlt::PatternNoTopAlt(std::unique_ptr<PatternWithoutRange> patternwithoutrange)
-    : patternwithoutrange(std::move(patternwithoutrange)) {}
-
-LiteralPattern::LiteralPattern(bool isnegative, std::unique_ptr<LiteralExpression> literalexprerssion)
+LiteralPattern::LiteralPattern(bool isnegative, std::unique_ptr<Expression> literalexprerssion)
     : isnegative(isnegative), literalexprerssion(std::move(literalexprerssion)) {}
 
-IdentifierPattern::IdentifierPattern(bool hasref, bool hasmut, std::string identifier, std::unique_ptr<PatternNoTopAlt> patternnotopalt)
+IdentifierPattern::IdentifierPattern(bool hasref, bool hasmut, std::string identifier, std::unique_ptr<Pattern> patternnotopalt)
     : hasref(hasref), hasmut(hasmut), identifier(std::move(identifier)), patternnotopalt(std::move(patternnotopalt)) {}
 
 WildcardPattern::WildcardPattern() = default;
 
-RestPattern::RestPattern() = default;
-
-StructPattern::StructPattern(std::unique_ptr<PathInExpression> pathinexpression,
-                             std::unique_ptr<StructPatternElements> structpatternelements)
-    : pathinexpression(std::move(pathinexpression)),
-      structpatternelements(std::move(structpatternelements)) {}
-
-TupleStructPattern::TupleStructPattern(std::unique_ptr<PathInExpression> pathinexpression,
-                                       std::unique_ptr<TupleStructItems> tuplestructitems)
-    : pathinexpression(std::move(pathinexpression)),
-      tuplestructitems(std::move(tuplestructitems)) {}
-
-TuplePattern::TuplePattern(std::unique_ptr<TuplePatternItems> tuplepatternitems)
-    : tuplepatternitems(std::move(tuplepatternitems)) {}
-
-GroupedPattern::GroupedPattern(std::unique_ptr<Pattern> pattern) 
-    : pattern(std::move(pattern)) {}
-
-SlicePattern::SlicePattern(std::unique_ptr<SlicePatternItems> slicepatternitems)
-    : slicepatternitems(std::move(slicepatternitems)) {}
-
-PathPattern::PathPattern(std::unique_ptr<PathExpression> pathexpression)
+PathPattern::PathPattern(std::unique_ptr<Expression> pathexpression)
     : pathexpression(std::move(pathexpression)) {}
 
-StructPatternElements::StructPatternElements(std::unique_ptr<StructPatternField> structpatternfield, bool hascomma)
-    : structpatternfield(std::move(structpatternfield)), hascomma(hascomma) {}
+ReferencePattern::ReferencePattern(bool singleordouble, 
+                                   bool hasmut, 
+                                   std::unique_ptr<Pattern> pattern) 
+    : singleordouble(singleordouble), hasmut(hasmut), pattern(std::move(pattern)) {}
 
-StructPatternFields::StructPatternFields(std::vector<StructPatternField>&& structpatternfields)
-    : structpatternfields(std::move(structpatternfields)) {}
-
-StructPatternField::StructPatternField(std::string identifier_or_index, std::unique_ptr<Pattern> pattern, bool hasmut, bool isindex)
-    : identifier_or_index(std::move(identifier_or_index)),
-      pattern(std::move(pattern)),
-      hasmut(hasmut),
-      isindex(isindex) {}
-
-TupleStructItems::TupleStructItems(std::vector<std::unique_ptr<Pattern>>&& patterns)
-    : patterns(std::move(patterns)) {}
-
-TuplePatternItems::TuplePatternItems(std::vector<std::unique_ptr<Pattern>>&& patterns, bool type)
-    : patterns(std::move(patterns)), type(type) {}
-
-SlicePatternItems::SlicePatternItems(std::vector<std::unique_ptr<Pattern>>&& patterns)
-    : patterns(std::move(patterns)) {}
 
 // TYPE Syntax
 // Type::Type(std::unique_ptr<TypeNoBounds> typenobounds) 

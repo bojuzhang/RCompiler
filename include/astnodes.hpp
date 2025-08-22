@@ -84,24 +84,11 @@ class BinaryExpression;
 
 // PATTERN Syntax
 class Pattern;
-class PatternWithoutRange;
-class PatternNoTopAlt;
 class LiteralPattern;
 class IdentifierPattern;
 class WildcardPattern;
-class RestPattern;
-class StructPattern;
-class TupleStructPattern;
-class TuplePattern;
-class GroupedPattern;
-class SlicePattern;
 class PathPattern;
-class StructPatternElements;
-class StructPatternFields;
-class StructPatternField;
-class TupleStructItems;
-class TuplePatternItems;
-class SlicePatternItems;
+class ReferenceType;
 
 // TYPE Syntax
 class Type;
@@ -221,10 +208,10 @@ public:
 };
 class FunctionParam : public ASTNode {
 private:
-    std::unique_ptr<PatternNoTopAlt> patternnotopalt;
+    std::unique_ptr<Pattern> patternnotopalt;
     std::unique_ptr<Type> type;
 public:
-    FunctionParam(std::unique_ptr<PatternNoTopAlt> patternnotopalt,
+    FunctionParam(std::unique_ptr<Pattern> patternnotopalt,
                   std::unique_ptr<Type> type);
 };
 class FunctionReturnType : public ASTNode {
@@ -307,11 +294,11 @@ public:
 };
 class LetStatement : public ASTNode {
 private:
-    std::unique_ptr<PatternNoTopAlt> patternnotopalt;
+    std::unique_ptr<Pattern> patternnotopalt;
     std::unique_ptr<Type> type;
     std::unique_ptr<Expression> expression;
 public:
-    LetStatement(std::unique_ptr<PatternNoTopAlt> patternnotopalt,
+    LetStatement(std::unique_ptr<Pattern> patternnotopalt,
                  std::unique_ptr<Type> type,
                  std::unique_ptr<Expression> expression);
 };
@@ -564,142 +551,47 @@ public:
 
 // PATTERN Syntax
 class Pattern : public ASTNode {
-private:
-    std::vector<std::unique_ptr<PatternNoTopAlt>> patternnotopalts;
 public:
-    explicit Pattern(std::vector<std::unique_ptr<PatternNoTopAlt>>&& patternnotopalts);
+    Pattern() = default;
+    virtual ~Pattern();
 };
-class PatternWithoutRange : public ASTNode {
-private:
-    std::unique_ptr<ASTNode> astnode; /* LiteralPattern
-    | IdentifierPattern
-    | WildcardPattern
-    | RestPattern
-    | StructPattern
-    | TupleStructPattern
-    | TuplePattern
-    | GroupedPattern
-    | SlicePattern
-    | PathPattern
-    */
-public:
-    explicit PatternWithoutRange(std::unique_ptr<ASTNode> astnode);
-};
-class PatternNoTopAlt : public ASTNode {
-private:
-    std::unique_ptr<PatternWithoutRange> patternwithoutrange;
-public:
-    explicit PatternNoTopAlt(std::unique_ptr<PatternWithoutRange> patternwithoutrange);
-};
-class LiteralPattern : public ASTNode {
+class LiteralPattern : public Pattern {
 private:
     bool isnegative;
-    std::unique_ptr<LiteralExpression> literalexprerssion;
+    std::unique_ptr<Expression> literalexprerssion;
 public:
-    LiteralPattern(bool isnegative, std::unique_ptr<LiteralExpression> literalexprerssion);
+    LiteralPattern(bool isnegative, std::unique_ptr<Expression> literalexprerssion);
 };
-class IdentifierPattern : public ASTNode {
+class IdentifierPattern : public Pattern {
 private:
     bool hasref;
     bool hasmut;
     std::string identifier;
-    std::unique_ptr<PatternNoTopAlt> patternnotopalt;
+    std::unique_ptr<Pattern> patternnotopalt;
 public:
-    IdentifierPattern(bool hasref, bool hasmut, std::string identifier, std::unique_ptr<PatternNoTopAlt> patternnotopalt);
+    IdentifierPattern(bool hasref, bool hasmut, std::string identifier, std::unique_ptr<Pattern> patternnotopalt);
 };
-class WildcardPattern : public ASTNode {
+class WildcardPattern : public Pattern {
 private:
     // nothing but _
 public:
     WildcardPattern();
 };
-class RestPattern : public ASTNode {
+class PathPattern : public Pattern {
 private:
-    // temporary nothing
+    std::unique_ptr<Expression> pathexpression;
 public:
-    RestPattern();
+    explicit PathPattern(std::unique_ptr<Expression> pathexpression);
 };
-class StructPattern : public ASTNode {
+class ReferencePattern : public Pattern {
 private:
-    std::unique_ptr<PathInExpression> pathinexpression;
-    std::unique_ptr<StructPatternElements> structpatternelements;
-public:
-    StructPattern(std::unique_ptr<PathInExpression> pathinexpression,
-                  std::unique_ptr<StructPatternElements> structpatternelements);
-};
-class TupleStructPattern : public ASTNode {
-private:
-    std::unique_ptr<PathInExpression> pathinexpression;
-    std::unique_ptr<TupleStructItems> tuplestructitems;
-public:
-    TupleStructPattern(std::unique_ptr<PathInExpression> pathinexpression,
-                       std::unique_ptr<TupleStructItems> tuplestructitems);
-};
-class TuplePattern : public ASTNode {
-private:
-    std::unique_ptr<TuplePatternItems> tuplepatternitems;
-public:
-    explicit TuplePattern(std::unique_ptr<TuplePatternItems> tuplepatternitems);
-};
-class GroupedPattern : public ASTNode {
-private:
-    std::unique_ptr<Pattern> pattern;
-public:
-    explicit GroupedPattern(std::unique_ptr<Pattern> pattern);
-};
-class SlicePattern : public ASTNode {
-private:
-    std::unique_ptr<SlicePatternItems> slicepatternitems;
-public:
-    explicit SlicePattern(std::unique_ptr<SlicePatternItems> slicepatternitems);
-};
-class PathPattern : public ASTNode {
-private:
-    std::unique_ptr<PathExpression> pathexpression;
-public:
-    explicit PathPattern(std::unique_ptr<PathExpression> pathexpression);
-};
-class StructPatternElements : public ASTNode {
-private:
-    std::unique_ptr<StructPatternField> structpatternfield;
-    bool hascomma;
-public:
-    StructPatternElements(std::unique_ptr<StructPatternField> structpatternfield, bool hascomma);
-};
-class StructPatternFields : public ASTNode {
-private:
-    std::vector<StructPatternField> structpatternfields;
-public:
-    explicit StructPatternFields(std::vector<StructPatternField>&& structpatternfields);
-};
-class StructPatternField : public ASTNode {
-private:
-    std::string identifier_or_index;
-    std::unique_ptr<Pattern> pattern;
+    bool singleordouble;
     bool hasmut;
-    bool isindex;
+    std::unique_ptr<Pattern> pattern;
 public:
-    StructPatternField(std::string identifier_or_index, std::unique_ptr<Pattern> pattern, bool hasmut, bool isindex);
+    ReferencePattern(bool singleordouble, bool hasmut, std::unique_ptr<Pattern> pattern);
 };
-class TupleStructItems : public ASTNode {
-private:
-    std::vector<std::unique_ptr<Pattern>> patterns; 
-public:
-    explicit TupleStructItems(std::vector<std::unique_ptr<Pattern>>&& patterns);
-};
-class TuplePatternItems : public ASTNode {
-private:
-    std::vector<std::unique_ptr<Pattern>> patterns;
-    bool type; // true: two, false: one
-public:
-    TuplePatternItems(std::vector<std::unique_ptr<Pattern>>&& patterns, bool type);
-};
-class SlicePatternItems : public ASTNode {
-private:
-    std::vector<std::unique_ptr<Pattern>> patterns;
-public:
-    explicit SlicePatternItems(std::vector<std::unique_ptr<Pattern>>&& patterns);
-};
+
 
 // TYPE Syntax
 class Type : public ASTNode {

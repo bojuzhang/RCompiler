@@ -92,5 +92,9 @@ public:
     std::unique_ptr<TypePath> parseTypePath();
     std::unique_ptr<ReferenceType> parseReferenceType();
 
-    std::unique_ptr<PatternNoTopAlt> parsePatternNoTopAlt();
+    std::unique_ptr<Pattern> parsePattern();
+    std::unique_ptr<ReferencePattern> parseReferencePattern();
+    std::unique_ptr<LiteralPattern> parseLiteralPattern();
+    std::unique_ptr<IdentifierPattern> parseIdentifierPattern();
+    std::unique_ptr<PathPattern> parsePathPattern();
 };
