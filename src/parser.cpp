@@ -734,6 +734,7 @@ std::unique_ptr<SimplePathSegment> Parser::parseSimplePathSegment() {
         advance();
         return std::make_unique<SimplePathSegment>(std::string(), true, false);
     }
+    return nullptr;
 }
 std::unique_ptr<TypePath> Parser::parseTypePath() {
     auto simplepath = parseSimplePathSegment();

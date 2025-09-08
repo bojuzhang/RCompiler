@@ -11,6 +11,113 @@ private:
     std::vector<std::pair<Token, std::string>> tokens;
     size_t pos;
 
+    enum BindingPower {
+        PATH_ACCESS = 200,
+        CALL_INDEX = 190,
+        UNARY = 180,
+        CAST = 170,
+        MULT_DIV_MOD = 160,
+        ADD_SUB = 150,
+        SHIFT = 140,
+        BIT_AND = 130,
+        BIT_XOR = 120,
+        BIT_OR = 110,
+        COMPARISON = 100,
+        LOGICAL_AND = 90,
+        LOGICAL_OR = 80,
+        ASSIGNMENT = 70,
+        FLOW_CONTROL = 60
+    };
+
+    int getLeftTokenBP(Token token) {
+        switch (token) {
+            case Token::kDot:
+                return PATH_ACCESS;
+                
+            case Token::kleftParenthe:
+            case Token::kleftSquare:
+                return CALL_INDEX;
+                
+            case Token::kas:
+                return CAST;
+                
+            case Token::kStar:
+            case Token::kSlash:
+            case Token::kPercent:
+                return MULT_DIV_MOD;
+                
+            case Token::kPlus:
+            case Token::kMinus:
+                return ADD_SUB;
+                
+            case Token::kShl:
+            case Token::kShr:
+                return SHIFT;
+                
+            case Token::kAnd:
+                return BIT_AND;
+                
+            case Token::kCaret:
+                return BIT_XOR;
+    
+            case Token::kOr:
+                return BIT_OR;
+                
+            case Token::kEqEq:
+            case Token::kNe:
+            case Token::kLt:
+            case Token::kGt:
+            case Token::kLe:
+            case Token::kGe:
+                return COMPARISON;
+                
+            case Token::kAndAnd:
+                return LOGICAL_AND;
+                
+            case Token::kOrOr:
+                return LOGICAL_OR;
+                
+            case Token::kEq:
+            case Token::kPlusEq:
+            case Token::kMinusEq:
+            case Token::kStarEq:
+            case Token::kSlashEq:
+            case Token::kPercentEq:
+            case Token::kAndEq:
+            case Token::kCaretEq:
+            case Token::kOrEq:
+            case Token::kShlEq:
+            case Token::kShrEq:
+                return ASSIGNMENT;
+                
+            case Token::kreturn:
+            case Token::kbreak:
+                return FLOW_CONTROL; 
+                
+            default:
+                return 0; // 非运算符
+        }
+    }
+    int getRightTokenBP(Token token) {
+        switch (token) {
+            case Token::kEq:
+            case Token::kPlusEq:
+            case Token::kMinusEq:
+            case Token::kStarEq:
+            case Token::kSlashEq:
+            case Token::kPercentEq:
+            case Token::kAndEq:
+            case Token::kCaretEq:
+            case Token::kOrEq:
+            case Token::kShlEq:
+            case Token::kShrEq:
+                return getLeftTokenBP(token) - 1;
+            
+            default:
+                return getLeftTokenBP(token);
+        }
+    }
+
 public:
     Parser(std::vector<std::pair<Token, std::string>> tokens);
 
@@ -21,9 +128,6 @@ public:
 
 
     // Pratt parser
-    int getLeftTokenBP(Token token);
-    int getRightTokenBP(Token token);
-
     std::unique_ptr<Expression> parseExpression();
     std::unique_ptr<Expression> parseExpressionPratt(int minbp = 0);
     std::unique_ptr<Expression> parsePrefixPratt();
