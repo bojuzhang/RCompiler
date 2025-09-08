@@ -1,6 +1,6 @@
 #include "parser.hpp"
 #include "astnodes.hpp"
-#include "lexser.hpp"
+#include "lexer.hpp"
 #include <memory>
 #include <stdexcept>
 #include <utility>

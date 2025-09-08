@@ -4,7 +4,7 @@
 #include <memory>
 #include <string>
 #include <vector>
-#include "lexser.hpp"
+#include "lexer.hpp"
 
 class ASTNode;
 

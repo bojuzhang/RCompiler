@@ -1,7 +1,7 @@
 #pragma once
 
 #include "astnodes.hpp"
-#include "lexser.hpp"
+#include "lexer.hpp"
 #include <memory>
 #include <utility>
 #include <vector>
