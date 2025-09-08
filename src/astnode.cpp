@@ -5,7 +5,6 @@
 
 // ASTNode
 ASTNode::ASTNode() = default;
-ASTNode::~ASTNode() = default;
 
 // ITEM Syntax
 Crate::Crate(std::vector<std::unique_ptr<Item>>&& items) 
@@ -283,6 +282,9 @@ SliceType::SliceType(std::unique_ptr<Type> type)
     : type(std::move(type)) {}
 
 InferredType::InferredType() = default;
+
+ReferenceType::ReferenceType(std::unique_ptr<Type> type, bool ismut) 
+    : type(std::move(type)), ismut(ismut) {}
 
 // PATH Syntax
 SimplePath::SimplePath(std::vector<std::unique_ptr<SimplePathSegment>>&& simplepathsegements)

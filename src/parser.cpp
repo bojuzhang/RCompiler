@@ -288,7 +288,7 @@ std::unique_ptr<Statement> Parser::parseStatement() {
 std::unique_ptr<Conditions> Parser::parseConditions() {
     auto expression = parseExpression();
     auto p = expression.get();
-    if (!dynamic_cast<StructExpression*>(p)) {
+    if (dynamic_cast<StructExpression*>(p) == nullptr) {
         return std::make_unique<Conditions>(std::move(expression));
     }
     return nullptr;
@@ -712,12 +712,12 @@ std::unique_ptr<ExpressionStatement> Parser::parseExpressionStatement() {
         return std::make_unique<ExpressionStatement>(std::move(expression), true);
     }
     auto ptr = expression.get();
-    if (dynamic_cast<BlockExpression*>(ptr)
-     || dynamic_cast<ConstBlockExpression*>(ptr)
-     || dynamic_cast<InfiniteLoopExpression*>(ptr)
-     || dynamic_cast<PredicateLoopExpression*>(ptr)
-     || dynamic_cast<IfExpression*>(ptr)
-     || dynamic_cast<MatchExpression*>(ptr)) {
+    if (dynamic_cast<BlockExpression*>(ptr) != nullptr
+     || dynamic_cast<ConstBlockExpression*>(ptr) != nullptr
+     || dynamic_cast<InfiniteLoopExpression*>(ptr) != nullptr
+     || dynamic_cast<PredicateLoopExpression*>(ptr) != nullptr
+     || dynamic_cast<IfExpression*>(ptr) != nullptr
+     || dynamic_cast<MatchExpression*>(ptr) != nullptr) {
         return std::make_unique<ExpressionStatement>(std::move(expression), false);
     }
     return nullptr;

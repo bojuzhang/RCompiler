@@ -6,7 +6,7 @@ add_executable(lexer_test lexer_test.cpp test_main.cpp)
 
 # 链接库
 target_link_libraries(lexer_test 
-    mycompiler_lib 
+    compiler_lib 
     GTest::GTest 
     GTest::Main
 )

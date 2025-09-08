@@ -4,10 +4,12 @@ set(CMAKE_CXX_STANDARD 20)
 
 include_directories(include)
 
-add_executable(code src/main.cpp
-                    src/lexer.cpp
-                    src/parser.cpp
-                    src/astnode.cpp)
+add_library(compiler_lib src/lexer.cpp
+                         src/parser.cpp
+                         src/astnode.cpp)
+
+add_executable(code src/main.cpp)
+target_link_libraries(code compiler_lib)
 
 enable_testing()
 

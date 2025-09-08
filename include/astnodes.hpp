@@ -111,7 +111,7 @@ class PathInExpression;
 class ASTNode {
 public:
     ASTNode();
-    virtual ~ASTNode();
+    virtual ~ASTNode() = default;
 };
 
 // ITEM Syntax
@@ -314,7 +314,7 @@ public:
 class Expression : public ASTNode {
 public:
     Expression();
-    virtual ~Expression();
+    virtual ~Expression() = default;
 };
 
 class LiteralExpression : public Expression {
@@ -553,7 +553,7 @@ public:
 class Pattern : public ASTNode {
 public:
     Pattern() = default;
-    virtual ~Pattern();
+    virtual ~Pattern() = default;
 };
 class LiteralPattern : public Pattern {
 private:
@@ -596,8 +596,8 @@ public:
 // TYPE Syntax
 class Type : public ASTNode {
 public:
-    Type();
-    virtual ~Type();
+    Type() = default;
+    virtual ~Type() = default;
 };
 // class TypeNoBounds : public Type {
 // private:
