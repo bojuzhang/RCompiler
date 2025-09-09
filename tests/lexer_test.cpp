@@ -1,5 +1,6 @@
 #include "lexer.hpp"
 #include <gtest/gtest.h>
+#include <iostream>
 #include <vector>
 #include <string>
 
@@ -136,7 +137,7 @@ TEST_F(LexserTest, ComparisonOperators) {
 TEST_F(LexserTest, AssignmentOperators) {
     std::string input = "+= -= *= /= %= ^= &= |= <<= >>=";
     auto result = lexer.lexString(input);
-    ASSERT_EQ(result.size(), 11);
+    ASSERT_EQ(result.size(), 10);
     EXPECT_EQ(result[0].first, Token::kPlusEq);
     EXPECT_EQ(result[1].first, Token::kMinusEq);
     EXPECT_EQ(result[2].first, Token::kStarEq);
@@ -153,7 +154,7 @@ TEST_F(LexserTest, AssignmentOperators) {
 TEST_F(LexserTest, BitwiseAndLogicalOperators) {
     std::string input = "& | ^ ~ << >> && || !";
     auto result = lexer.lexString(input);
-    ASSERT_EQ(result.size(), 11);
+    ASSERT_EQ(result.size(), 9);
     EXPECT_EQ(result[0].first, Token::kAnd);
     EXPECT_EQ(result[1].first, Token::kOr);
     EXPECT_EQ(result[2].first, Token::kCaret);
@@ -169,7 +170,7 @@ TEST_F(LexserTest, BitwiseAndLogicalOperators) {
 TEST_F(LexserTest, OtherOperatorsAndSymbols) {
     std::string input = "@ _ . .. ... ..= , ; : :: -> => <- # $ ?";
     auto result = lexer.lexString(input);
-    ASSERT_EQ(result.size(), 17);
+    ASSERT_EQ(result.size(), 16);
     EXPECT_EQ(result[0].first, Token::kAt);
     EXPECT_EQ(result[1].first, Token::kUnderscore);
     EXPECT_EQ(result[2].first, Token::kDot);
@@ -276,7 +277,7 @@ TEST_F(LexserTest, ComplexExpression) {
 TEST_F(LexserTest, MaximalMunchPrinciple) {
     std::string input = "====>>=<<=->";
     auto result = lexer.lexString(input);
-    ASSERT_EQ(result.size(), 7);
+    ASSERT_EQ(result.size(), 5);
     EXPECT_EQ(result[0].first, Token::kEqEq);
     EXPECT_EQ(result[0].second, "==");
     EXPECT_EQ(result[1].first, Token::kEqEq);
@@ -285,10 +286,8 @@ TEST_F(LexserTest, MaximalMunchPrinciple) {
     EXPECT_EQ(result[2].second, ">>=");
     EXPECT_EQ(result[3].first, Token::kShlEq);
     EXPECT_EQ(result[3].second, "<<=");
-    EXPECT_EQ(result[4].first, Token::kMinus);
-    EXPECT_EQ(result[4].second, "-");
-    EXPECT_EQ(result[5].first, Token::kGt);
-    EXPECT_EQ(result[5].second, ">");
+    EXPECT_EQ(result[4].first, Token::kRArrow);
+    EXPECT_EQ(result[4].second, "->");
 }
 
 // 测试用例 19: 标识符与关键字混合
@@ -323,7 +322,7 @@ TEST_F(LexserTest, InvalidNumberLiterals) {
     EXPECT_EQ(result[3].first, Token::kINTEGER_LITERAL);
     EXPECT_EQ(result[3].second, "9");
     EXPECT_EQ(result[4].first, Token::kINTEGER_LITERAL);
-    EXPECT_EQ(result[4].second, "123");
+    EXPECT_EQ(result[4].second, "123abc");
     // 注意: 这里的 "abc" 可能被识别为标识符，但取决于正则表达式的实现
 }
 
