@@ -188,18 +188,18 @@ private:
         {Token::kgen, std::regex("gen")},
 
         {Token::kIDENTIFIER, std::regex("[a-zA-Z][a-zA-Z0-9_]*")},
-        {Token::kCHAR_LITERAL, std::regex(R"('([^'\\\n\r\t])|(\\'\\")|(0x[0-7][0-9a-fA-F]|\n|\r|\t|\\\\|\0)'([a-zA-Z][a-zA-Z0-9_]*)?)")},
-        {Token::kSTRING_LITERAL, std::regex(R"delimiter("(([^"\\\r\t])|(\\'\\")|(0x[0-7][0-9a-fA-F]|\n|\r|\t|\\\\|\0)|(\\\n))*"([a-zA-Z][a-zA-Z0-9_]*)?)delimiter")},
+        {Token::kCHAR_LITERAL, std::regex(R"('(([^'\\\n\r\t])|(\\')|(\\")|(\\x[0-7][0-9a-fA-F])|(\\n)|(\\r)|(\\t)|(\\\\)|(\\0))'([a-zA-Z][a-zA-Z0-9_]*)?)")},
+        {Token::kSTRING_LITERAL, std::regex(R"("(([^"\\\r\t])|(\\')|(\\")|((\\x[0-7][0-9a-fA-F])|(\\n)|(\\r)|(\\t)|(\\\\)|(\\0))|(\\\n))*"([a-zA-Z][a-zA-Z0-9_]*)?)")},
         {Token::kRAW_STRING_LITERAL, std::regex(R"(r([#]+)([^\r])*?(\1))")},
         {Token::kBYTE_LITERAL, std::regex(R"(b'(([^'\\\r\t\n])|(0x[0-7][0-9a-fA-F]|\n|\r|\t|\\\\|\0)|(\\\n)|(\\')|(\\"))'([a-zA-Z][a-zA-Z0-9_]*)?)")},
         {Token::kBYTE_STRING_LITERAL, std::regex(R"delimeter(b"(([^"\\\r])|(0x[0-7][0-9a-fA-F]|\n|\r|\t|\\\\|\0)|((\\\n)|(\\')|(\\")|(\\\n)))*"([a-zA-Z][a-zA-Z0-9_]*)?)delimeter")},
         {Token::kRAW_BYTE_STRING_LITERAL, std::regex(R"(br([#]+)([^\r])*?(\1))")},
-        {Token::kC_STRING_LITERAL, std::regex(R"(c"(([^"\\\r\0])|(0x[0-7][0-9a-fA-F]|\n|\r|\t|\\\\)|(\\\n))*")")},
+        {Token::kC_STRING_LITERAL, std::regex(R"(c"(([^"\\\r\0])|(\\x[0-7][0-9a-fA-F])|(\\n)|(\\r)|(\\t)|\\\\|(\\\n))*")")},
         {Token::kRAW_C_STRING_LITERAL, std::regex(R"(cr([#]+)([^\r\0])*?(\1))")},
-        {Token::kINTEGER_LITERAL, std::regex("(([0-9][0-9_]*)|(0b[0-1_]*[0-1][0-1_]*)|(0o[0-7_]*[0-7][0-7_]*)|(0x[0-9a-fA-F_]*[0-9a-fA-F][0-9a-fA-F_]*))([a-df-zA-DF-Z][a-zA-Z0-9_]*)?")},
+        {Token::kINTEGER_LITERAL, std::regex("((0b[0-1_]*[0-1][0-1_]*)|(0o[0-7_]*[0-7][0-7_]*)|(0x[0-9a-fA-F_]*[0-9a-fA-F][0-9a-fA-F_]*)|([0-9][0-9_]*))((u32)|(i32)|(usize)|(isize))?")},
         // {Token::kFLOAT_LITERAL, std::regex("(([0-9][0-9_]*).(?![._a-zA-Z]))|(([0-9][0-9_]*).([0-9][0-9_]*)([a-df-zA-DF-Z][a-zA-Z0-9_]*)?)")},
         // {Token::kPUNCTUATION, std::regex()}, 
-        {Token::kRESERVED_TOKEN, std::regex(R"delimiter((#+"(([^'\\\r\t])|(\\'\\")|(0x[0-7][0-9a-fA-F]|\n|\r|\t|\\\\|\0)|(\\\n))*"([a-zA-Z][a-zA-Z0-9_]*)?)|((0b[0-1_]*[0-1][0-1_]*[2-9])|(0o[0-7_]*[0-7][0-7_]*[8-9])|((0b[0-1_]*[0-1][0-1_]*)|(0o[0-7_]*[0-7][0-7_]*)|(0x[0-9a-fA-F_]*[0-9a-fA-F][0-9a-fA-F_]*).(?![._a-zA-Z]))|))delimiter")},
+        // {Token::kRESERVED_TOKEN, std::regex(R"delimiter((#+"(([^'\\\r\t])|(\\'\\")|(0x[0-7][0-9a-fA-F]|\n|\r|\t|\\\\|\0)|(\\\n))*"([a-zA-Z][a-zA-Z0-9_]*)?)|((0b[0-1_]*[0-1][0-1_]*[2-9])|(0o[0-7_]*[0-7][0-7_]*[8-9])|((0b[0-1_]*[0-1][0-1_]*)|(0o[0-7_]*[0-7][0-7_]*)|(0x[0-9a-fA-F_]*[0-9a-fA-F][0-9a-fA-F_]*).(?![._a-zA-Z]))|))delimiter")},
 
         {Token::kPlus, std::regex(R"(\+)")},
         {Token::kMinus, std::regex("-")},
@@ -256,7 +256,7 @@ private:
         {Token::kleftParenthe, std::regex(R"(\()")},
         {Token::krightParenthe, std::regex(R"(\))")},
 
-        {Token::kCOMMENT, std::regex(R"((//.*\n)|(/\*[\s\S]*\*/))")},
+        {Token::kCOMMENT, std::regex(R"((//([^\n])*(\n)?)|(/\*[\s\S]*\*/))")},
     };
 
 public:
