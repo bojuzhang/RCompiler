@@ -28,5 +28,22 @@ jobs:
     - name: Build project
       run: cmake --build build
       
-    - name: Run tests
-      run: cd build && ctest --output-on-failure --verbose
+    - name: Run lexer tests
+      run: cd build && ./tests/lexser_test --gtest_output=xml:lexser_test_results.xml
+      
+    - name: Run parser tests
+      run: cd build && ./tests/parser_test --gtest_output=xml:parser_test_results.xml
+      
+    - name: Upload lexer test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: lexser-test-results
+        path: build/lexser_test_results.xml
+        
+    - name: Upload parser test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: parser-test-results
+        path: build/parser_test_results.xml
