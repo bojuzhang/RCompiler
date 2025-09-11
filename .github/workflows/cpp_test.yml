@@ -34,16 +34,10 @@ jobs:
     - name: Run parser tests
       run: cd build && ./tests/parser_test --gtest_output=xml:parser_test_results.xml
       
-    - name: Upload lexer test results
-      uses: actions/upload-artifact@v3
+    - name: Publish Test Results
+      uses: EnricoMi/publish-unit-test-result-action@v2
       if: always()
       with:
-        name: lexer-test-results
-        path: build/lexer_test_results.xml
-        
-    - name: Upload parser test results
-      uses: actions/upload-artifact@v3
-      if: always()
-      with:
-        name: parser-test-results
-        path: build/parser_test_results.xml
+        files: |
+          build/lexer_test_results.xml
+          build/parser_test_results.xml
