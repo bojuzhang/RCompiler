@@ -128,6 +128,8 @@ enum class Token {
     krightParenthe,
 
     kCOMMENT,
+
+    kEnd
 };
 
 class lexser {

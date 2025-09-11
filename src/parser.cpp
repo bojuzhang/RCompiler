@@ -9,6 +9,7 @@
 Parser::Parser(std::vector<std::pair<Token, std::string>> tokens) : tokens(tokens) { }
 
 Token Parser::peek() {
+    if (pos >= tokens.size()) return Token::kEnd;
     return tokens[pos].first;
 }
 bool Parser::match(Token token) {
@@ -18,6 +19,7 @@ void Parser::advance() {
     ++pos;
 }
 std::string Parser::getstring() {
+    if (pos >= tokens.size()) return "";
     return tokens[pos].second;
 }
 
@@ -83,6 +85,7 @@ std::unique_ptr<Expression> Parser::parsePrefixPratt() {
 std::unique_ptr<Expression> Parser::parseInfixPratt(std::unique_ptr<Expression> lhs, int minbp) {
     while (true) {
         auto type = peek();
+        if (type == Token::kEnd) break;
         advance();
 
         int leftbp = getLeftTokenBP(type);
