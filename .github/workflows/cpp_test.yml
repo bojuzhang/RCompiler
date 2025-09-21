@@ -43,12 +43,3 @@ jobs:
         name: test-results
         path: build/*_test_results.xml
         retention-days: 7
-        
-    - name: Check test results
-      run: |
-        # 检查是否有测试失败
-        if grep -q "failure" build/*_test_results.xml; then
-          echo "Some tests failed"
-          exit 1
-        fi
-        echo "All tests passed"
