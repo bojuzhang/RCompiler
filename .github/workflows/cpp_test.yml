@@ -12,7 +12,7 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       
     - name: Install dependencies
       run: |
@@ -30,14 +30,25 @@ jobs:
       
     - name: Run lexer tests
       run: cd build && ./tests/lexer_test --gtest_output=xml:lexer_test_results.xml
+      continue-on-error: true
       
     - name: Run parser tests
       run: cd build && ./tests/parser_test --gtest_output=xml:parser_test_results.xml
+      continue-on-error: true
       
-    - name: Publish Test Results
-      uses: EnricoMi/publish-unit-test-result-action@v2
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
       if: always()
       with:
-        files: |
-          build/lexer_test_results.xml
-          build/parser_test_results.xml
+        name: test-results
+        path: build/*_test_results.xml
+        retention-days: 7
+        
+    - name: Check test results
+      run: |
+        # 检查是否有测试失败
+        if grep -q "failure" build/*_test_results.xml; then
+          echo "Some tests failed"
+          exit 1
+        fi
+        echo "All tests passed"
