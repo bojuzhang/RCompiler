@@ -9,7 +9,7 @@
 class Parser {
 private:
     std::vector<std::pair<Token, std::string>> tokens;
-    size_t pos;
+    size_t pos = 0;
 
     enum BindingPower {
         PATH_ACCESS = 200,
@@ -95,7 +95,7 @@ private:
                 return FLOW_CONTROL; 
                 
             default:
-                return 0; // 非运算符
+                return -1; // 非运算符
         }
     }
     int getRightTokenBP(Token token) {

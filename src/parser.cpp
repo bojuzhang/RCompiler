@@ -1,6 +1,7 @@
 #include "parser.hpp"
 #include "astnodes.hpp"
 #include "lexer.hpp"
+#include <iostream>
 #include <memory>
 #include <stdexcept>
 #include <utility>
@@ -40,6 +41,7 @@ std::unique_ptr<Expression> Parser::parseExpression() {
     } else if (type == Token::kmatch) {
         return parseMatchExpression();
     } else {
+        // std::cerr << "expression pratt\n";
         return parseExpressionPratt(0);
     }
 }
@@ -47,6 +49,7 @@ std::unique_ptr<Expression> Parser::parseExpressionPratt(int minbp) {
     return parseInfixPratt(parsePrefixPratt(), minbp);
 }
 std::unique_ptr<Expression> Parser::parsePrefixPratt() {
+    // std::cerr << pos << " " << (int)peek() << " " << to_string(peek()) << "\n";
     auto type = peek();
     advance();
     switch (type) {
@@ -56,6 +59,8 @@ std::unique_ptr<Expression> Parser::parsePrefixPratt() {
         case Token::kC_STRING_LITERAL:
         case Token::kRAW_STRING_LITERAL:
         case Token::kRAW_C_STRING_LITERAL:
+        case Token::ktrue:
+        case Token::kfalse:
             return std::make_unique<LiteralExpression>(getstring(), type);
         case Token::kleftParenthe:
             return parseGroupedExpression();
@@ -77,6 +82,9 @@ std::unique_ptr<Expression> Parser::parsePrefixPratt() {
         case Token::kPathSep:
         case Token::kIDENTIFIER:
             return parsePathExpression();
+
+        case Token::kEnd:
+            return nullptr;
         
         default:
             throw std::runtime_error("invalid Prefix");
@@ -85,12 +93,13 @@ std::unique_ptr<Expression> Parser::parsePrefixPratt() {
 std::unique_ptr<Expression> Parser::parseInfixPratt(std::unique_ptr<Expression> lhs, int minbp) {
     while (true) {
         auto type = peek();
+        // std::cerr << "hdfjhfjd: " << pos << " " << to_string(type) << " " << getLeftTokenBP(type) << "\n";
         if (type == Token::kEnd) break;
-        advance();
 
         int leftbp = getLeftTokenBP(type);
         if (leftbp < minbp) break;
-        
+        advance();
+
         if (type == Token::kleftParenthe) {
             lhs = parseCallExpression();
         } else if (type == Token::kleftSquare) {
@@ -109,6 +118,9 @@ std::unique_ptr<Expression> Parser::parseInfixPratt(std::unique_ptr<Expression> 
 }
 
 std::unique_ptr<BlockExpression> Parser::parseBlockExpression() {
+    if (match(Token::kleftCurly)) {
+        advance();
+    }
     if (match(Token::krightCurly)) {
         advance();
         return std::make_unique<BlockExpression>(nullptr);
@@ -166,10 +178,9 @@ std::unique_ptr<PathExpression> Parser::parsePathExpression() {
     return std::make_unique<PathExpression>(std::move(parseSimplePath()));
 }
 std::unique_ptr<GroupedExpression> Parser::parseGroupedExpression() {
-    if (!match(Token::kleftParenthe)) {
-        return nullptr;
+    if (match(Token::kleftParenthe)) {
+        advance();
     }
-    advance();
     auto expression = parseExpression();
     if (!match(Token::krightParenthe)) {
         return nullptr;
@@ -178,10 +189,9 @@ std::unique_ptr<GroupedExpression> Parser::parseGroupedExpression() {
     return std::make_unique<GroupedExpression>(std::move(expression));
 }
 std::unique_ptr<ArrayExpression> Parser::parseArrayExpression() {
-    if (!match(Token::kleftSquare)) {
-        return nullptr;
+    if (match(Token::kleftSquare)) {
+        advance();
     }
-    advance();
     auto arrayelements = parseArrayElements();
     if (!match(Token::kRightSquare)) {
         return nullptr;
@@ -196,18 +206,16 @@ std::unique_ptr<UnaryExpression> Parser::parseUnaryExpression() {
     return std::make_unique<UnaryExpression>(std::move(expression), unarytype);
 }
 std::unique_ptr<BreakExpression> Parser::parseBreakExpression() {
-    if (!match(Token::kbreak)) {
-        return nullptr;
+    if (match(Token::kbreak)) {
+        advance();
     }
-    advance();
     auto expression = parseExpression();
     return std::make_unique<BreakExpression>(std::move(expression));
 }
 std::unique_ptr<ReturnExpression> Parser::parseReturnExpression() {
-    if (!match(Token::kbreak)) {
-        return nullptr;
+    if (match(Token::kreturn)) {
+        advance();
     }
-    advance();
     auto expression = parseExpression();
     return std::make_unique<ReturnExpression>(std::move(expression));
 }
@@ -289,7 +297,15 @@ std::unique_ptr<Statement> Parser::parseStatement() {
     return nullptr;
 }
 std::unique_ptr<Conditions> Parser::parseConditions() {
+    if (!match(Token::kleftParenthe)) {
+        return nullptr;
+    }
+    advance();
     auto expression = parseExpression();
+    if (!match(Token::krightParenthe)) {
+        return nullptr;
+    }
+    advance();
     auto p = expression.get();
     if (dynamic_cast<StructExpression*>(p) == nullptr) {
         return std::make_unique<Conditions>(std::move(expression));
@@ -320,19 +336,13 @@ std::unique_ptr<ArrayElements> Parser::parseArrayElements() {
         vec.push_back(std::move(expression2));
         return std::make_unique<ArrayElements>(std::move(vec), true);
     }
-    if (!match(Token::kleftParenthe)) {
-        return nullptr;
-    }
-    advance();
     while (match(Token::kComma)) {
         advance();
         auto expression2 = parseExpression();
-        vec.push_back(std::move(expression2));
+        if (expression2 != nullptr) {
+            vec.push_back(std::move(expression2));
+        }
     }
-    if (!match(Token::krightParenthe)) {
-        return nullptr;
-    }
-    advance();
     return std::make_unique<ArrayElements>(std::move(vec), false);
 }
 // std::unique_ptr<TupleElements> Parser::parseTupleElements() {
@@ -787,6 +797,7 @@ std::unique_ptr<ReferencePattern> Parser::parseReferencePattern() {
     } else {
         return nullptr;
     }
+    advance();
     bool ismut = false;
     if (match(Token::kmut)) {
         ismut = true;

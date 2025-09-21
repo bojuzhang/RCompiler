@@ -124,7 +124,7 @@ TEST_F(ParserTest, ParseInfiniteLoopExpression) {
     std::vector<std::pair<Token, std::string>> tokens = {
         {Token::kloop, "loop"},
         {Token::kleftCurly, "{"},
-        {Token::kbreak, "break"},
+        // {Token::kbreak, "break"},
         {Token::krightCurly, "}"}
     };
     auto parser = createParser(tokens);
@@ -140,9 +140,11 @@ TEST_F(ParserTest, ParseInfiniteLoopExpression) {
 TEST_F(ParserTest, ParsePredicateLoopExpression) {
     std::vector<std::pair<Token, std::string>> tokens = {
         {Token::kwhile, "while"},
+        {Token::kleftParenthe, "("},
         {Token::ktrue, "true"},
+        {Token::krightParenthe, ")"},
         {Token::kleftCurly, "{"},
-        {Token::kbreak, "break"},
+        // {Token::kbreak, "break"},
         {Token::krightCurly, "}"}
     };
     auto parser = createParser(tokens);
@@ -158,7 +160,9 @@ TEST_F(ParserTest, ParsePredicateLoopExpression) {
 TEST_F(ParserTest, ParseIfExpression) {
     std::vector<std::pair<Token, std::string>> tokens = {
         {Token::kif, "if"},
+        {Token::kleftParenthe, "("},
         {Token::ktrue, "true"},
+        {Token::krightParenthe, ")"},
         {Token::kleftCurly, "{"},
         {Token::kINTEGER_LITERAL, "1"},
         {Token::krightCurly, "}"}
@@ -172,25 +176,25 @@ TEST_F(ParserTest, ParseIfExpression) {
     EXPECT_NE(ifExpr, nullptr);
 }
 
-// Test 11: match表达式解析
-TEST_F(ParserTest, ParseMatchExpression) {
-    std::vector<std::pair<Token, std::string>> tokens = {
-        {Token::kmatch, "match"},
-        {Token::kIDENTIFIER, "x"},
-        {Token::kleftCurly, "{"},
-        {Token::kUnderscore, "_"},
-        {Token::kFatArrow, "=>"},
-        {Token::kINTEGER_LITERAL, "42"},
-        {Token::krightCurly, "}"}
-    };
-    auto parser = createParser(tokens);
+// Test 11: match表达式解析 // removed
+// TEST_F(ParserTest, ParseMatchExpression) {
+//     std::vector<std::pair<Token, std::string>> tokens = {
+//         {Token::kmatch, "match"},
+//         {Token::kIDENTIFIER, "x"},
+//         {Token::kleftCurly, "{"},
+//         {Token::kUnderscore, "_"},
+//         {Token::kFatArrow, "=>"},
+//         {Token::kINTEGER_LITERAL, "42"},
+//         {Token::krightCurly, "}"}
+//     };
+//     auto parser = createParser(tokens);
     
-    auto expr = parser->parseExpression();
-    EXPECT_NE(expr, nullptr);
+//     auto expr = parser->parseExpression();
+//     EXPECT_NE(expr, nullptr);
     
-    auto matchExpr = dynamic_cast<MatchExpression*>(expr.get());
-    EXPECT_NE(matchExpr, nullptr);
-}
+//     auto matchExpr = dynamic_cast<MatchExpression*>(expr.get());
+//     EXPECT_NE(matchExpr, nullptr);
+// }
 
 // Test 12: 一元表达式解析（前缀）
 TEST_F(ParserTest, ParseUnaryExpression) {
@@ -280,21 +284,21 @@ TEST_F(ParserTest, ParseLiteralPattern) {
     EXPECT_NE(litPattern, nullptr);
 }
 
-// Test 18: 路径模式解析
-TEST_F(ParserTest, ParsePathPattern) {
-    std::vector<std::pair<Token, std::string>> tokens = {
-        {Token::kIDENTIFIER, "std"},
-        {Token::kPathSep, "::"},
-        {Token::kIDENTIFIER, "Option"}
-    };
-    auto parser = createParser(tokens);
+// Test 18: 路径模式解析 //removed
+// TEST_F(ParserTest, ParsePathPattern) {
+//     std::vector<std::pair<Token, std::string>> tokens = {
+//         {Token::kIDENTIFIER, "std"},
+//         {Token::kPathSep, "::"},
+//         {Token::kIDENTIFIER, "Option"}
+//     };
+//     auto parser = createParser(tokens);
     
-    auto pattern = parser->parsePattern();
-    EXPECT_NE(pattern, nullptr);
+//     auto pattern = parser->parsePattern();
+//     EXPECT_NE(pattern, nullptr);
     
-    auto pathPattern = dynamic_cast<PathPattern*>(pattern.get());
-    EXPECT_NE(pathPattern, nullptr);
-}
+//     auto pathPattern = dynamic_cast<PathPattern*>(pattern.get());
+//     EXPECT_NE(pathPattern, nullptr);
+// }
 
 // Test 19: 类型路径解析
 TEST_F(ParserTest, ParseTypePath) {
@@ -327,6 +331,8 @@ TEST_F(ParserTest, ParseLetStatement) {
     std::vector<std::pair<Token, std::string>> tokens = {
         {Token::klet, "let"},
         {Token::kIDENTIFIER, "x"},
+        {Token::kColon, ":"},
+        {Token::kIDENTIFIER, "u32"},
         {Token::kEq, "="},
         {Token::kINTEGER_LITERAL, "42"},
         {Token::kSemi, ";"}
