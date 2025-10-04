@@ -38,9 +38,11 @@ std::unique_ptr<Expression> Parser::parseExpression() {
         return parsePredicateLoopExpression();
     } else if (type == Token::kif) {
         return parseIfExpression();
-    } else if (type == Token::kmatch) {
-        return parseMatchExpression();
-    } else {
+    } 
+    // else if (type == Token::kmatch) {
+    //     return parseMatchExpression();
+    // } 
+    else {
         // std::cerr << "expression pratt\n";
         return parseExpressionPratt(0);
     }
@@ -104,9 +106,11 @@ std::unique_ptr<Expression> Parser::parseInfixPratt(std::unique_ptr<Expression> 
             lhs = parseCallExpression();
         } else if (type == Token::kleftSquare) {
             lhs = parseIndexExpression();
-        } else if (type == Token::kDot) {
-            lhs = parseMethodCallExpression();
-        } else if (type == Token::kas) {
+        } 
+        // else if (type == Token::kDot) {
+        //     lhs = parseMethodCallExpression();
+        // } 
+        else if (type == Token::kas) {
             lhs = parseTypeCastExpression();
         }
 
@@ -170,9 +174,9 @@ std::unique_ptr<IfExpression> Parser::parseIfExpression() {
     }
     return std::make_unique<IfExpression>(std::move(conditions), std::move(blockexpression), std::move(elseexpression));
 }
-std::unique_ptr<MatchExpression> Parser::parseMatchExpression() {
-    return nullptr;
-}
+// std::unique_ptr<MatchExpression> Parser::parseMatchExpression() {
+//     return nullptr;
+// }
 
 std::unique_ptr<PathExpression> Parser::parsePathExpression() {
     return std::make_unique<PathExpression>(std::move(parseSimplePath()));
@@ -267,15 +271,15 @@ std::unique_ptr<TypeCastExpression> Parser::parseTypeCastExpression() {
     auto typenobounds = parseType();
     return std::make_unique<TypeCastExpression>(std::move(expression), std::move(typenobounds));
 }
-std::unique_ptr<MethodCallExpression> Parser::parseMethodCallExpression() {
-    // auto expression = parseExpression();
-    // if (!match(Token::kDot)) {
-    //     return nullptr;
-    // }
-    // advance();
-    // auto pathexprsegment = 
-    return nullptr;
-}
+// std::unique_ptr<MethodCallExpression> Parser::parseMethodCallExpression() {
+//     // auto expression = parseExpression();
+//     // if (!match(Token::kDot)) {
+//     //     return nullptr;
+//     // }
+//     // advance();
+//     // auto pathexprsegment = 
+//     return nullptr;
+// }
 
 std::unique_ptr<Statement> Parser::parseStatement() {
     if (match(Token::kSemi)) {
@@ -729,8 +733,7 @@ std::unique_ptr<ExpressionStatement> Parser::parseExpressionStatement() {
      || dynamic_cast<ConstBlockExpression*>(ptr) != nullptr
      || dynamic_cast<InfiniteLoopExpression*>(ptr) != nullptr
      || dynamic_cast<PredicateLoopExpression*>(ptr) != nullptr
-     || dynamic_cast<IfExpression*>(ptr) != nullptr
-     || dynamic_cast<MatchExpression*>(ptr) != nullptr) {
+     || dynamic_cast<IfExpression*>(ptr) != nullptr) {
         return std::make_unique<ExpressionStatement>(std::move(expression), false);
     }
     return nullptr;

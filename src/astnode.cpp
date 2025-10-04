@@ -31,10 +31,10 @@ ConstantItem::ConstantItem(std::string identifier,
       type(std::move(type)),
       expression(std::move(expression)) {}
 
-Module::Module(std::string identifier,
-               std::vector<std::unique_ptr<Item>>&& items)
-    : identifier(std::move(identifier)),
-      items(std::move(items)) {}
+// Module::Module(std::string identifier,
+//                std::vector<std::unique_ptr<Item>>&& items)
+//     : identifier(std::move(identifier)),
+//       items(std::move(items)) {}
 
 StructStruct::StructStruct(std::string identifier,
                            std::unique_ptr<StructFields> structfileds,
@@ -43,10 +43,10 @@ StructStruct::StructStruct(std::string identifier,
       structfileds(std::move(structfileds)),
       issemi(issemi) {}
 
-TupleStruct::TupleStruct(std::string identifier,
-                         std::unique_ptr<TupleFields> tuplefields)
-    : identifier(std::move(identifier)),
-      tuplefields(std::move(tuplefields)) {}
+// TupleStruct::TupleStruct(std::string identifier,
+//                          std::unique_ptr<TupleFields> tuplefields)
+//     : identifier(std::move(identifier)),
+//       tuplefields(std::move(tuplefields)) {}
 
 Enumeration::Enumeration(std::string identifier,
                          std::unique_ptr<EnumVariants> enumvariants)
@@ -80,13 +80,13 @@ StructField::StructField(std::string identifier,
     : identifier(std::move(identifier)),
       type(std::move(type)) {}
 
-TupleFields::TupleFields(std::vector<std::unique_ptr<TupleField>>&& tuplefields)
-    : tuplefields(std::move(tuplefields)) {}
+// TupleFields::TupleFields(std::vector<std::unique_ptr<TupleField>>&& tuplefields)
+//     : tuplefields(std::move(tuplefields)) {}
 
-TupleField::TupleField(std::string identifier,
-                       std::unique_ptr<Type> type)
-    : identifier(std::move(identifier)),
-      type(std::move(type)) {}
+// TupleField::TupleField(std::string identifier,
+//                        std::unique_ptr<Type> type)
+//     : identifier(std::move(identifier)),
+//       type(std::move(type)) {}
 
 EnumVariants::EnumVariants(std::vector<std::unique_ptr<EnumVariant>>&& enumvariants)
     : enumvariants(std::move(enumvariants)) {}
@@ -94,14 +94,14 @@ EnumVariants::EnumVariants(std::vector<std::unique_ptr<EnumVariant>>&& enumvaria
 EnumVariant::EnumVariant(std::string identifier)
     : identifier(std::move(identifier)) {}
 
-EnumVariantTuple::EnumVariantTuple(std::unique_ptr<TupleFields> tuplefields)
-    : tuplefields(std::move(tuplefields)) {}
+// EnumVariantTuple::EnumVariantTuple(std::unique_ptr<TupleFields> tuplefields)
+//     : tuplefields(std::move(tuplefields)) {}
 
-EnumVariantStruct::EnumVariantStruct(std::unique_ptr<StructFields> structfields)
-    : structfields(std::move(structfields)) {}
+// EnumVariantStruct::EnumVariantStruct(std::unique_ptr<StructFields> structfields)
+//     : structfields(std::move(structfields)) {}
 
-EnumVariantDiscriminant::EnumVariantDiscriminant(std::unique_ptr<Expression> expression)
-    : expression(std::move(expression)) {}
+// EnumVariantDiscriminant::EnumVariantDiscriminant(std::unique_ptr<Expression> expression)
+//     : expression(std::move(expression)) {}
 
 AssociatedItem::AssociatedItem(std::unique_ptr<ASTNode> consttantitem_or_function)
     : consttantitem_or_function(std::move(consttantitem_or_function)) {}
