@@ -14,7 +14,7 @@ public:
     ASTNode();
     virtual ~ASTNode() = default;
 
-    virtual void accept(ASTVisitor &visitor);
+    virtual void accept(ASTVisitor &visitor) = 0;
 };
 
 // ITEM Syntax

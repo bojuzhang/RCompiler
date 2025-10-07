@@ -94,6 +94,6 @@ private:
     void collectFieldSymbols(StructStruct& node);
     void collectVariantSymbols(Enumeration& node);
     
-    std::shared_ptr<Type> resolveTypeFromNode(Type& node);
-    std::shared_ptr<Type> createSimpleType(const std::string& name);
+    std::shared_ptr<SemanticType> resolveTypeFromNode(Type& node);
+    std::shared_ptr<SemanticType> createSimpleType(const std::string& name);
 };

@@ -1,7 +1,6 @@
 #include "symbolcollection.hpp"
 #include "astnodes.hpp"
 #include "scope.hpp"
-#include <iostream>
 #include <utility>
 
 SymbolCollector::SymbolCollector() {
@@ -283,10 +282,10 @@ ASTNode* SymbolCollector::getCurrentNode() {
     return nodeStack.empty() ? nullptr : nodeStack.top();
 }
 
-std::shared_ptr<Type> SymbolCollector::resolveTypeFromNode(Type& node) {
+std::shared_ptr<SemanticType> SymbolCollector::resolveTypeFromNode(Type& node) {
     return createSimpleType("unknown");
 }
 
-std::shared_ptr<Type> SymbolCollector::createSimpleType(const std::string& name) {
-    // return std::make_shared<SimpleType>(name);
+std::shared_ptr<SemanticType> SymbolCollector::createSimpleType(const std::string& name) {
+    return std::make_shared<SimpleType>(name);
 }

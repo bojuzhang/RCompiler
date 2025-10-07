@@ -6,7 +6,10 @@ include_directories(include)
 
 add_library(compiler_lib src/lexer.cpp
                          src/parser.cpp
-                         src/astnode.cpp)
+                         src/astnode.cpp
+                         src/symboltable.cpp
+                         src/symbolcollection.cpp
+                         src/typecheck.cpp)
 
 add_executable(code src/main.cpp)
 target_link_libraries(code compiler_lib)

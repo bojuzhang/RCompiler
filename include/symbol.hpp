@@ -5,7 +5,19 @@
 #include <vector>
 #include "astnodes.hpp"
 
-class Type;
+class SemanticType {
+public:
+    virtual ~SemanticType() = default;
+    virtual std::string tostring() const = 0;
+};
+
+class SimpleType : public SemanticType {
+private:
+    std::string typeName;
+public:
+    SimpleType(const std::string& name) : typeName(name) {}
+    std::string tostring() const override { return typeName; }
+};
 
 enum class SymbolKind {
     Variable,
@@ -28,12 +40,12 @@ class Symbol {
 public:
     std::string name;
     SymbolKind kind;
-    std::shared_ptr<Type> type;
+    std::shared_ptr<SemanticType> type;
     bool ismutable;
     ASTNode* node; 
     
     Symbol(const std::string& name, SymbolKind kind, 
-           std::shared_ptr<Type> type = nullptr, 
+           std::shared_ptr<SemanticType> type = nullptr, 
            bool ismutable = false, ASTNode* node = nullptr);
     
     virtual ~Symbol() = default;
@@ -42,12 +54,12 @@ public:
 class FunctionSymbol : public Symbol {
 public:
     std::vector<std::shared_ptr<Symbol>> parameters;
-    std::shared_ptr<Type> returntype;
+    std::shared_ptr<SemanticType> returntype;
     bool isMethod;
     
     FunctionSymbol(const std::string& name, 
                    const std::vector<std::shared_ptr<Symbol>>& parameters,
-                   std::shared_ptr<Type> returntype,
+                   std::shared_ptr<SemanticType> returntype,
                    bool isMethod = false);
 };
 
@@ -67,7 +79,7 @@ public:
 
 class ConstantSymbol : public Symbol {
 public:
-    ConstantSymbol(const std::string& name, std::shared_ptr<Type> type);
+    ConstantSymbol(const std::string& name, std::shared_ptr<SemanticType> type);
 };
 
 class TraitSymbol : public Symbol {

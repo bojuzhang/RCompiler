@@ -781,12 +781,12 @@ std::unique_ptr<Pattern> Parser::parsePattern() {
     } else if (match(Token::kMinus)) {
         return parseLiteralPattern();
     } else {
-        auto tmp = pos;
-        auto p = parseLiteralPattern();
-        if (p != nullptr) return p;
-        pos = tmp;
-        auto q = parsePathPattern();
-        if (q != nullptr) return q;
+        // auto tmp = pos;
+        // auto p = parseLiteralPattern();
+        // if (p != nullptr) return p;
+        // pos = tmp;
+        // auto q = parsePathPattern();
+        // if (q != nullptr) return q;
         return nullptr;
     }
 }
@@ -838,24 +838,24 @@ std::unique_ptr<IdentifierPattern> Parser::parseIdentifierPattern() {
     }
     auto identifier = getstring();
     advance();
-    if (match(Token::kAt)) {
-        advance();
-        auto pattern = parsePathPattern();
-        if (pattern == nullptr) {
-            return nullptr;
-        }
-        return std::make_unique<IdentifierPattern>(isref, ismut, identifier, std::move(pattern));
-    }
+    // if (match(Token::kAt)) {
+    //     advance();
+    //     auto pattern = parsePathPattern();
+    //     if (pattern == nullptr) {
+    //         return nullptr;
+    //     }
+    //     return std::make_unique<IdentifierPattern>(isref, ismut, identifier, std::move(pattern));
+    // }
     return std::make_unique<IdentifierPattern>(isref, ismut, identifier, nullptr);
 }
-std::unique_ptr<PathPattern> Parser::parsePathPattern() {
-    auto expression = parseExpression();
-    if (expression == nullptr) {
-        return nullptr;
-    }
-    auto p = dynamic_cast<PathExpression*>(expression.get());
-    if (p == nullptr) {
-        return nullptr;
-    }
-    return std::make_unique<PathPattern>(std::move(expression));
-}
+// std::unique_ptr<PathPattern> Parser::parsePathPattern() {
+//     auto expression = parseExpression();
+//     if (expression == nullptr) {
+//         return nullptr;
+//     }
+//     auto p = dynamic_cast<PathExpression*>(expression.get());
+//     if (p == nullptr) {
+//         return nullptr;
+//     }
+//     return std::make_unique<PathPattern>(std::move(expression));
+// }

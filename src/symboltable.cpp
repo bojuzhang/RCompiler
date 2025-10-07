@@ -1,9 +1,11 @@
 #include "symboltable.hpp"
+#include "scope.hpp"
 #include "symbol.hpp"
+#include <memory>
 #include <utility>
 
 Symbol::Symbol(const std::string& name, SymbolKind kind, 
-           std::shared_ptr<Type> type, 
+           std::shared_ptr<SemanticType> type, 
            bool ismutable, ASTNode* node)
     : name(name), kind(kind), type(type), ismutable(ismutable), node(std::move(node)) {}
 
@@ -32,7 +34,7 @@ std::shared_ptr<Symbol> Scope::lookup(const std::string& name, bool iscurrent) {
 }
 
 std::shared_ptr<Scope> Scope::addchild(bool isFunctionScope) {
-    auto child = std::make_shared<Scope>("", isFunctionScope);
+    auto child = std::make_shared<Scope>(std::make_shared<Scope>(*this), isFunctionScope);
     childrens.push_back(child);
     return child;
 }
@@ -81,7 +83,7 @@ void SymbolTable::initializeBuiltins() {
     
     for (const auto& typeName : builtinTypes) {
         auto typeSymbol = std::make_shared<Symbol>(
-            typeName, SymbolKind::BuiltinType, nullptr, false, 0
+            typeName, SymbolKind::BuiltinType, nullptr, false, nullptr
         );
         globalScope->insert(typeName, typeSymbol);
     }
