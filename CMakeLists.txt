@@ -9,7 +9,9 @@ add_library(compiler_lib src/lexer.cpp
                          src/astnode.cpp
                          src/symboltable.cpp
                          src/symbolcollection.cpp
-                         src/typecheck.cpp)
+                         src/typecheck.cpp
+                         src/constevaluator.cpp
+                         src/controlflow.cpp)
 
 add_executable(code src/main.cpp)
 target_link_libraries(code compiler_lib)
