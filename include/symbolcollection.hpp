@@ -79,6 +79,21 @@ public:
     
     void visit(SimplePath& node) override {}
     void visit(SimplePathSegment& node) override {}
+
+    void visit(FunctionParameters& node) override {}
+    void visit(FunctionParam& node) override {}
+    void visit(FunctionReturnType& node) override {}
+
+    void visit(StructFields& node) override {}
+    void visit(StructField& node) override {}
+
+    void visit(EnumVariants& node) override {}
+    void visit(EnumVariant& node) override {}
+
+    void visit(AssociatedItem& node) override {}
+    void visit(PathInExpression& node) override {}
+
+    std::shared_ptr<ScopeTree> getScopeTree() {return root;}
     
 private:
     void pushNode(ASTNode& node);
