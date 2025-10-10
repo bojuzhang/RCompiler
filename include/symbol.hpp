@@ -56,6 +56,7 @@ public:
     std::vector<std::shared_ptr<Symbol>> parameters;
     std::shared_ptr<SemanticType> returntype;
     bool isMethod;
+    std::vector<std::shared_ptr<SemanticType>> parameterTypes;
     
     FunctionSymbol(const std::string& name, 
                    const std::vector<std::shared_ptr<Symbol>>& parameters,
