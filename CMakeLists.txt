@@ -15,7 +15,7 @@ add_library(compiler_lib src/lexer.cpp
                          src/typeinference.cpp
                          src/semantic.cpp)
 
-add_executable(code src/main.cpp)
+add_executable(code src/semanticmain.cpp)
 target_link_libraries(code compiler_lib)
 
 enable_testing()

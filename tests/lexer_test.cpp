@@ -6,7 +6,7 @@
 
 class LexserTest : public ::testing::Test {
 protected:
-    lexser lexer;
+    Lexer lexer;
 };
 
 // 测试用例 1: 空输入

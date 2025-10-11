@@ -2,7 +2,7 @@
 #include <iostream>
 #include <sstream>
 
-std::vector<std::pair<Token, std::string>> lexser::lexString(std::string s) {
+std::vector<std::pair<Token, std::string>> Lexer::lexString(std::string s) {
     std::vector<std::pair<Token, std::string>> ans;
     size_t i = 0;
     while (i < s.size()) {
@@ -33,7 +33,7 @@ std::vector<std::pair<Token, std::string>> lexser::lexString(std::string s) {
     return ans;
 }
 
-std::string lexser::getString() {
+std::string Lexer::getString() {
     std::string ans;
 
     std::stringstream buffer;

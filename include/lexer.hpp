@@ -132,7 +132,7 @@ enum class Token {
     kEnd
 };
 
-class lexser {
+class Lexer {
 private:
     std::vector<std::pair<Token, std::regex>> patterns = {
         {Token::kas, std::regex("as")},

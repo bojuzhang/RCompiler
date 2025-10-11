@@ -146,6 +146,19 @@ public:
     void visit(LetStatement& node) override;
     void visit(ExpressionStatement& node) override;
 
+    void visit(FunctionParameters& node) override {}
+    void visit(FunctionParam& node) override {}
+    void visit(FunctionReturnType& node) override {}
+
+    void visit(StructFields& node) override {}
+    void visit(StructField& node) override {}
+
+    void visit(EnumVariants& node) override {}
+    void visit(EnumVariant& node) override {}
+
+    void visit(AssociatedItem& node) override {}
+    void visit(PathInExpression& node) override {}
+
 private:
     void pushNode(ASTNode& node);
     void popNode();
