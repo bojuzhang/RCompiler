@@ -43,6 +43,7 @@ private:
     std::shared_ptr<Scope> root;
     std::shared_ptr<Scope> currentNode;
     std::unordered_map<ASTNode*, std::shared_ptr<Scope>> nodeToScopeMap;
+    std::stack<std::shared_ptr<Scope>> scopeStack;
     
 public:
     ScopeTree();

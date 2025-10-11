@@ -92,19 +92,19 @@ public:
     void visit(Item& node) override;
     void visit(ConstantItem& node) override;
     void visit(Function& node) override;
-    void visit(StructStruct& node) override;
-    void visit(Enumeration& node) override;
-    void visit(InherentImpl& node) override;
+    void visit(StructStruct& node) override {}
+    void visit(Enumeration& node) override {}
+    void visit(InherentImpl& node) override {}
     
     // 表达式节点
-    void visit(Expression& node) override;
-    void visit(LiteralExpression& node) override;
-    void visit(PathExpression& node) override;
-    void visit(BinaryExpression& node) override;
-    void visit(UnaryExpression& node) override;
-    void visit(ArrayExpression& node) override;
-    void visit(BlockExpression& node) override;
-    void visit(IfExpression& node) override;
+    void visit(Expression& node) override {}
+    void visit(LiteralExpression& node) override {}
+    void visit(PathExpression& node) override {}
+    void visit(BinaryExpression& node) override {}
+    void visit(UnaryExpression& node) override {}
+    void visit(ArrayExpression& node) override {}
+    void visit(BlockExpression& node) override {}
+    void visit(IfExpression& node) override {}
     
     // 其他表达式节点（简化处理）
     void visit(GroupedExpression& node) override {}

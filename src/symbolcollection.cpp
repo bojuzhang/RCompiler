@@ -268,6 +268,158 @@ void SymbolCollector::collectFieldSymbols(StructStruct& node) {
     }
 }
 
+void SymbolCollector::collectEnumSymbol(Enumeration& node) {
+    std::string enumName = node.identifier;
+    
+    auto enumSymbol = std::make_shared<EnumSymbol>(enumName);
+    
+    if (!root->insertSymbol(enumName, enumSymbol)) {
+        // reportError("Enum '" + enumName + "' is already defined in this scope");
+        return;
+    }
+        
+    root->enterScope(Scope::ScopeType::Enum, &node);
+    
+    collectVariantSymbols(node);
+    
+    root->exitScope();
+}
+
+void SymbolCollector::collectVariantSymbols(Enumeration& node) {
+    auto variants = std::move(node.enumvariants);
+    if (!variants) {
+        return;
+    }
+    
+    std::string enumName = node.identifier;
+    
+    for (const auto& variant : variants->enumvariants) {
+        std::string variantName = variant->identifier;
+        
+        VariantSymbol::VariantKind variantKind = VariantSymbol::VariantKind::Unit;
+        
+        variantKind = VariantSymbol::VariantKind::Unit;
+        
+        auto variantSymbol = std::make_shared<VariantSymbol>(variantName, variantKind);
+        
+        if (!root->insertSymbol(variantName, variantSymbol)) {
+            // reportError("Variant '" + variantName + "' is already defined in enum '" + enumName + "'");
+            continue;
+        }
+        
+        auto enumSymbol = std::dynamic_pointer_cast<EnumSymbol>(root->lookupSymbol(enumName));
+        if (enumSymbol) {
+            enumSymbol->variants.push_back(variantSymbol);
+        }
+    }
+}
+
+void SymbolCollector::collectImplSymbol(InherentImpl& node) {
+    auto targetType = getImplTargetType(node);
+    
+    std::string targetTypeName = targetType->tostring();
+    
+    std::string implName = "impl_" + targetTypeName + "_" + 
+                          std::to_string(reinterpret_cast<uintptr_t>(&node));
+    
+    auto implSymbol = std::make_shared<ImplSymbol>(implName, targetType);
+    
+    std::string traitName = getTraitNameFromImpl(node);
+    if (!traitName.empty()) {
+        implSymbol->traitName = traitName;
+        implSymbol->isTraitImpl = true;
+    }
+    
+    root->insertSymbol(implName, implSymbol);
+    
+    root->enterScope(Scope::ScopeType::Impl, &node);
+    
+    auto selfTypeSymbol = std::make_shared<Symbol>(
+        "Self", SymbolKind::TypeAlias, targetType
+    );
+    root->insertSymbol("Self", selfTypeSymbol);
+    
+    auto items = std::move(node.associateditems);
+    for (const auto& item : items) {
+        if (item) {
+            collectAssociatedItem(*item, implSymbol);
+        }
+    }
+    
+    root->exitScope();
+}
+
+void SymbolCollector::collectAssociatedItem(AssociatedItem& item, 
+                                            std::shared_ptr<ImplSymbol> implSymbol) {
+    auto itemContent = std::move(item.consttantitem_or_function);
+    if (!itemContent) return;
+    
+    if (auto function = dynamic_cast<Function*>(itemContent.get())) {
+        collectAssociatedFunction(*function, implSymbol);
+    } else if (auto constant = dynamic_cast<ConstantItem*>(itemContent.get())) {
+        collectAssociatedConstant(*constant, implSymbol);
+    }
+}
+
+ void SymbolCollector::collectAssociatedFunction(Function& function, 
+                                                std::shared_ptr<ImplSymbol> implSymbol) {
+    std::string funcName = function.identifier_name;
+    
+    auto funcSymbol = std::make_shared<FunctionSymbol>(
+        funcName,
+        std::vector<std::shared_ptr<Symbol>>{},
+        createSimpleType("unknown"),
+        true
+    );
+    
+    if (!root->insertSymbol(funcName, funcSymbol)) {
+        // reportError("Method '" + funcName + "' is already defined in this impl");
+        return;
+    }
+    
+    implSymbol->items.push_back(funcSymbol);
+    root->enterScope(Scope::ScopeType::Function, &function);
+    auto params = std::move(function.functionparameters);
+    if (params) {
+        for (const auto& param : params->functionparams) {
+            param->accept(*this);
+        }
+    }
+    root->exitScope();
+}
+
+void SymbolCollector::collectAssociatedConstant(ConstantItem& constant, 
+                                                std::shared_ptr<ImplSymbol> implSymbol) {
+    std::string constName = constant.identifier;
+    
+    auto constSymbol = std::make_shared<ConstantSymbol>(
+        constName,
+        createSimpleType("unknown")  // 类型稍后处理
+    );
+    
+    if (!root->insertSymbol(constName, constSymbol)) {
+        // reportError("Associated constant '" + constName + "' is already defined in this impl");
+        return;
+    }
+    
+    implSymbol->items.push_back(constSymbol);
+    
+}
+
+std::shared_ptr<SemanticType> SymbolCollector::getImplTargetType(InherentImpl& node) {
+    // 从impl节点中提取目标类型
+    // 这里需要根据你的AST结构实现具体逻辑
+    // 简化实现：假设可以从node中获取类型信息
+    return createSimpleType("UnknownType");
+}
+
+std::string SymbolCollector::getTraitNameFromImpl(InherentImpl& node) {
+    // 从impl节点中提取trait名称
+    // 这里需要根据你的AST结构实现具体逻辑
+    // 简化实现：返回空字符串表示固有实现
+    return "";
+}
+
 void SymbolCollector::pushNode(ASTNode& node) {
     nodeStack.push(&node);
 }

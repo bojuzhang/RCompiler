@@ -54,34 +54,34 @@ public:
     
     // Visitor接口实现
     void visit(Crate& node) override;
-    void visit(Item& node) override;
+    void visit(Item& node) override {}
     void visit(Function& node) override;
     void visit(ConstantItem& node) override;
-    void visit(StructStruct& node) override;
-    void visit(Enumeration& node) override;
-    void visit(InherentImpl& node) override;
+    void visit(StructStruct& node) override {}
+    void visit(Enumeration& node) override {}
+    void visit(InherentImpl& node) override {}
     
     // 语句节点
-    void visit(Statement& node) override;
+    void visit(Statement& node) override {}
     void visit(LetStatement& node) override;
     void visit(ExpressionStatement& node) override;
     
     // 表达式节点
-    void visit(Expression& node) override;
-    void visit(LiteralExpression& node) override;
-    void visit(PathExpression& node) override;
-    void visit(BinaryExpression& node) override;
-    void visit(UnaryExpression& node) override;
+    void visit(Expression& node) override {}
+    void visit(LiteralExpression& node) override {}
+    void visit(PathExpression& node) override {}
+    void visit(BinaryExpression& node) override {}
+    void visit(UnaryExpression& node) override {}
     void visit(BlockExpression& node) override;
-    void visit(ConstBlockExpression& node) override;
+    void visit(ConstBlockExpression& node) override {}
     void visit(InfiniteLoopExpression& node) override;
     void visit(PredicateLoopExpression& node) override;
     void visit(IfExpression& node) override;
     void visit(BreakExpression& node) override;
     void visit(ContinueExpression& node) override;
     void visit(ReturnExpression& node) override;
-    void visit(CallExpression& node) override;
-    void visit(ArrayExpression& node) override;
+    void visit(CallExpression& node) override {}
+    void visit(ArrayExpression& node) override {}
     
     // 其他表达式节点（简化处理）
     void visit(GroupedExpression& node) override {}

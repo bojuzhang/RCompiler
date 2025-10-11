@@ -31,6 +31,7 @@ enum class SymbolKind {
     Trait,
     Impl,
     Method,
+    Variant,
     AssociatedConstant,
     SelfType,
     Loop
@@ -71,13 +72,6 @@ public:
     StructSymbol(const std::string& name);
 };
 
-class EnumSymbol : public Symbol {
-public:
-    std::vector<std::shared_ptr<Symbol>> variants;
-    
-    EnumSymbol(const std::string& name);
-};
-
 class ConstantSymbol : public Symbol {
 public:
     ConstantSymbol(const std::string& name, std::shared_ptr<SemanticType> type);
@@ -88,4 +82,40 @@ public:
     std::vector<std::shared_ptr<Symbol>> associatedItems;
     
     TraitSymbol(const std::string& name);
+};
+
+class EnumSymbol : public Symbol {
+public:
+    std::vector<std::shared_ptr<Symbol>> variants;
+    std::vector<std::shared_ptr<SemanticType>> genericParameters; // 泛型参数
+    
+    EnumSymbol(const std::string& name) 
+        : Symbol(name, SymbolKind::Enum, std::make_shared<SimpleType>(name)) {}
+};
+
+class VariantSymbol : public Symbol {
+public:
+    enum class VariantKind {
+        Unit,      // 无数据，如 None
+        Tuple,     // 元组变体，如 Some(T)
+        Struct     // 结构变体，如 Point { x: i32, y: i32 }
+    };
+    
+    VariantKind variantKind;
+    std::vector<std::shared_ptr<SemanticType>> tupleFields; // 元组变体的字段类型
+    std::vector<std::shared_ptr<Symbol>> structFields;      // 结构变体的字段
+    
+    VariantSymbol(const std::string& name, VariantKind kind) 
+        : Symbol(name, SymbolKind::Variant), variantKind(kind) {}
+};
+
+class ImplSymbol : public Symbol {
+public:
+    std::shared_ptr<SemanticType> targetType;    // 实现的目标类型
+    std::string traitName;                       // 实现的trait名称（如果是trait实现）
+    std::vector<std::shared_ptr<Symbol>> items;  // 关联项（方法、常量等）
+    bool isTraitImpl;                            // 是否是trait实现
+    
+    ImplSymbol(const std::string& name, std::shared_ptr<SemanticType> targetType)
+        : Symbol(name, SymbolKind::Impl), targetType(targetType), isTraitImpl(false) {}
 };

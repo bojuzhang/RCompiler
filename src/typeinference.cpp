@@ -1,5 +1,6 @@
 #include "typeinference.hpp"
 #include "astnodes.hpp"
+#include "symbol.hpp"
 #include "typewrapper.hpp"
 #include <iostream>
 
@@ -927,6 +928,22 @@ std::shared_ptr<SemanticType> TypeInferenceChecker::getStructFieldType(const std
     for (const auto& field : structSymbol->fields) {
         if (field->name == fieldName) {
             return field->type;
+        }
+    }
+    
+    return nullptr;
+}
+
+std::shared_ptr<SemanticType> TypeInferenceChecker::getEnumVariantType(const std::string& enumName,
+                                            const std::string& variantName) {
+    auto enumSymbol = std::dynamic_pointer_cast<EnumSymbol>(resolveSymbol(enumName));
+    if (!enumSymbol) {
+        return nullptr;
+    }
+    
+    for (const auto& variant : enumSymbol->variants) {
+        if (variant->name == variantName) {
+            return variant->type;
         }
     }
     

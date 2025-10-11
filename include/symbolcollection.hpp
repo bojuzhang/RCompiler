@@ -33,16 +33,16 @@ public:
     void visit(Enumeration& node) override;
     void visit(InherentImpl& node) override;
     
-    void visit(Statement& node) override;
-    void visit(LetStatement& node) override;
-    void visit(ExpressionStatement& node) override;
+    void visit(Statement& node) override {}
+    void visit(LetStatement& node) override {}
+    void visit(ExpressionStatement& node) override {}
     
-    void visit(Expression& node) override;
+    void visit(Expression& node) override {}
     void visit(BlockExpression& node) override;
-    void visit(ConstBlockExpression& node) override;
+    void visit(ConstBlockExpression& node) override {}
     void visit(InfiniteLoopExpression& node) override;
     void visit(PredicateLoopExpression& node) override;
-    void visit(IfExpression& node) override;
+    void visit(IfExpression& node) override {}
     void visit(LiteralExpression& node) override {}
     void visit(PathExpression& node) override {}
     void visit(GroupedExpression& node) override {}
@@ -66,7 +66,7 @@ public:
     
     void visit(Pattern& node) override {}
     void visit(LiteralPattern& node) override {}
-    void visit(IdentifierPattern& node) override;
+    void visit(IdentifierPattern& node) override {}
     void visit(WildcardPattern& node) override {}
     void visit(PathPattern& node) override {}
     
@@ -111,4 +111,11 @@ private:
     
     std::shared_ptr<SemanticType> resolveTypeFromNode(Type& node);
     std::shared_ptr<SemanticType> createSimpleType(const std::string& name);
+
+    std::shared_ptr<SemanticType> getImplTargetType(InherentImpl& node);
+    std::string getTraitNameFromImpl(InherentImpl& node);
+
+    void collectAssociatedItem(AssociatedItem& item, std::shared_ptr<ImplSymbol> implSymbol);
+    void collectAssociatedFunction(Function& function, std::shared_ptr<ImplSymbol> implSymbol);
+    void collectAssociatedConstant(ConstantItem& constant, std::shared_ptr<ImplSymbol> implSymbol);
 };

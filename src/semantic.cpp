@@ -7,7 +7,7 @@ CompleteSemanticAnalyzer::CompleteSemanticAnalyzer(std::unique_ptr<Crate> ast)
 bool CompleteSemanticAnalyzer::analyze() {
     hasErrors = false;
     
-    std::cout << "=== Starting Complete Semantic Analysis ===" << std::endl;
+    std::cerr << "=== Starting Complete Semantic Analysis ===" << std::endl;
     
     // 第一步：符号收集
     if (!runSymbolCollection()) {
@@ -39,7 +39,7 @@ bool CompleteSemanticAnalyzer::analyze() {
         return false;
     }
     
-    std::cout << "=== Complete Semantic Analysis Completed ===" << std::endl;
+    std::cerr << "=== Complete Semantic Analysis Completed ===" << std::endl;
     return !hasErrors;
 }
 
@@ -48,19 +48,19 @@ bool CompleteSemanticAnalyzer::hasAnalysisErrors() const {
 }
 
 bool CompleteSemanticAnalyzer::runSymbolCollection() {
-    std::cout << "Step 1: Symbol Collection" << std::endl;
+    std::cerr << "Step 1: Symbol Collection" << std::endl;
     
     SymbolCollector collector;
     collector.beginCollection();
     ast->accept(collector);
-    collector.endCollection();
+    // collector.endCollection();
     
     scopeTree = collector.getScopeTree();
     return true;
 }
 
 bool CompleteSemanticAnalyzer::runConstantEvaluation() {
-    std::cout << "Step 2: Constant Evaluation" << std::endl;
+    std::cerr << "Step 2: Constant Evaluation" << std::endl;
     
     constantEvaluator = std::make_shared<ConstantEvaluator>(scopeTree);
     ast->accept(*constantEvaluator);
@@ -69,7 +69,7 @@ bool CompleteSemanticAnalyzer::runConstantEvaluation() {
 }
 
 bool CompleteSemanticAnalyzer::runControlFlowAnalysis() {
-    std::cout << "Step 3: Control Flow Analysis" << std::endl;
+    std::cerr << "Step 3: Control Flow Analysis" << std::endl;
     
     controlFlowAnalyzer = std::make_shared<ControlFlowAnalyzer>(scopeTree, constantEvaluator);
     ast->accept(*controlFlowAnalyzer);
@@ -78,7 +78,7 @@ bool CompleteSemanticAnalyzer::runControlFlowAnalysis() {
 }
 
 bool CompleteSemanticAnalyzer::runTypeChecking() {
-    std::cout << "Step 4: Type Checking" << std::endl;
+    std::cerr << "Step 4: Type Checking" << std::endl;
     
     typeChecker = std::make_shared<TypeChecker>(scopeTree);
     ast->accept(*typeChecker);
@@ -87,7 +87,7 @@ bool CompleteSemanticAnalyzer::runTypeChecking() {
 }
 
 bool CompleteSemanticAnalyzer::runTypeInference() {
-    std::cout << "Step 5: Type Inference" << std::endl;
+    std::cerr << "Step 5: Type Inference" << std::endl;
     
     typeInferenceChecker = std::make_shared<TypeInferenceChecker>(
         scopeTree, controlFlowAnalyzer, constantEvaluator);
