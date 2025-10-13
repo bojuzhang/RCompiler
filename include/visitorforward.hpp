@@ -80,6 +80,7 @@ class LiteralPattern;
 class IdentifierPattern;
 class WildcardPattern;
 class PathPattern;
+class ReferencePattern;
 class ReferenceType;
 
 // TYPE Syntax

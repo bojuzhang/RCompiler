@@ -79,7 +79,6 @@ public:
     void visit(IdentifierPattern& node) override {}
     void visit(WildcardPattern& node) override {}
     void visit(PathPattern& node) override {}
-    // void visit(ReferencePattern& node) override;
     
     void visit(Type& node) override {}
     void visit(TypePath& node) override {}

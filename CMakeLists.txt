@@ -21,3 +21,4 @@ target_link_libraries(code compiler_lib)
 enable_testing()
 
 add_subdirectory(tests)
+add_subdirectory(visualization)
