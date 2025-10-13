@@ -2,3 +2,4 @@ build
 .cache
 testcases
 RCompiler-Testcases
+__pycache__
