@@ -170,8 +170,9 @@ ReturnExpression::ReturnExpression(std::unique_ptr<Expression> expression)
 
 UnderscoreExpression::UnderscoreExpression() = default;
 
-BlockExpression::BlockExpression(std::unique_ptr<Statement> statement)
-    : statement(std::move(statement)) {}
+BlockExpression::BlockExpression(std::vector<std::unique_ptr<Statement>> statements,
+                    std::unique_ptr<Expression> expressionwithoutblock)
+    : statements(std::move(statements)), expressionwithoutblock(std::move(expressionwithoutblock)) {}
 
 ConstBlockExpression::ConstBlockExpression(std::unique_ptr<BlockExpression> blockexpression)
     : blockexpression(std::move(blockexpression)) {}

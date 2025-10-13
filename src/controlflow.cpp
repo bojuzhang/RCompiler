@@ -92,6 +92,18 @@ void ControlFlowAnalyzer::visit(BlockExpression& node) {
     // 进入块作用域
     scopeTree->enterScope(Scope::ScopeType::Block, &node);
     
+    // 分析所有语句
+    for (const auto& stmt : node.statements) {
+        if (stmt) {
+            stmt->accept(*this);
+        }
+    }
+    
+    // 分析尾表达式（如果有）
+    if (node.expressionwithoutblock) {
+        node.expressionwithoutblock->accept(*this);
+    }
+    
     // 分析块的控制流
     ControlFlow flow = analyzeBlockControlFlow(node);
     nodeControlFlow[&node] = flow;
@@ -284,14 +296,30 @@ void ControlFlowAnalyzer::visit(ExpressionStatement& node) {
 
 // 控制流分析方法
 ControlFlow ControlFlowAnalyzer::analyzeBlockControlFlow(BlockExpression& block) {
-    auto stmt = std::move(block.statement);
-    if (!stmt) {
-        return ControlFlow::Continues;
+    ControlFlow resultFlow = ControlFlow::Continues;
+    
+    // 分析所有语句
+    for (const auto& stmt : block.statements) {
+        if (stmt) {
+            stmt->accept(*this);
+            resultFlow = getControlFlow(stmt.get());
+            // 如果遇到发散语句，可以提前退出
+            if (resultFlow == ControlFlow::Diverges ||
+                resultFlow == ControlFlow::Returns ||
+                resultFlow == ControlFlow::Breaks ||
+                resultFlow == ControlFlow::ContinuesLoop) {
+                break;
+            }
+        }
     }
     
-    // 块的控制流由其最后一个语句/表达式决定
-    stmt->accept(*this);
-    return getControlFlow(stmt.get());
+    // 如果有尾表达式，分析它
+    if (block.expressionwithoutblock) {
+        block.expressionwithoutblock->accept(*this);
+        resultFlow = getControlFlow(block.expressionwithoutblock.get());
+    }
+    
+    return resultFlow;
 }
 
 ControlFlow ControlFlowAnalyzer::analyzeIfControlFlow(IfExpression& ifExpr) {
@@ -334,18 +362,32 @@ ControlFlow ControlFlowAnalyzer::analyzeLoopControlFlow(InfiniteLoopExpression& 
 
 // 类型推断方法
 std::shared_ptr<SemanticType> ControlFlowAnalyzer::inferBlockType(BlockExpression& block) {
-    auto stmt = std::move(block.statement);
-    if (!stmt) {
-        return std::make_shared<SimpleType>("()");
+    std::shared_ptr<SemanticType> resultType = std::make_shared<SimpleType>("()");
+    
+    // 分析所有语句
+    for (const auto& stmt : block.statements) {
+        if (stmt) {
+            stmt->accept(*this);
+            // 如果语句发散，则块发散
+            if (alwaysDivergesAt(stmt.get())) {
+                return std::make_shared<NeverType>();
+            }
+        }
     }
     
-    // 块的类型由其最后一个表达式决定
-    // 如果块发散，则类型为!
-    if (alwaysDivergesAt(stmt.get())) {
-        return std::make_shared<NeverType>();
+    // 如果有尾表达式，块的类型由尾表达式决定
+    if (block.expressionwithoutblock) {
+        block.expressionwithoutblock->accept(*this);
+        // 如果尾表达式发散，则块发散
+        if (alwaysDivergesAt(block.expressionwithoutblock.get())) {
+            return std::make_shared<NeverType>();
+        }
+        // 否则，块的类型是尾表达式的类型
+        return getNodeType(block.expressionwithoutblock.get());
     }
     
-    return getNodeType(stmt.get());
+    // 如果没有尾表达式，返回unit类型
+    return resultType;
 }
 
 std::shared_ptr<SemanticType> ControlFlowAnalyzer::inferIfType(IfExpression& ifExpr) {

@@ -103,7 +103,26 @@ public:
     void visit(BinaryExpression& node) override {}
     void visit(UnaryExpression& node) override {}
     void visit(ArrayExpression& node) override {}
-    void visit(BlockExpression& node) override {}
+    void visit(BlockExpression& node) override {
+        pushNode(node);
+        
+        // 在常量上下文中，处理块中的所有语句
+        if (inConstContext) {
+            // 处理所有语句
+            for (const auto& stmt : node.statements) {
+                if (stmt) {
+                    stmt->accept(*this);
+                }
+            }
+            
+            // 处理尾表达式（如果有）
+            if (node.expressionwithoutblock) {
+                node.expressionwithoutblock->accept(*this);
+            }
+        }
+        
+        popNode();
+    }
     void visit(IfExpression& node) override {}
     
     // 其他表达式节点（简化处理）
@@ -118,7 +137,22 @@ public:
     void visit(BreakExpression& node) override {}
     void visit(ReturnExpression& node) override {}
     void visit(UnderscoreExpression& node) override {}
-    void visit(ConstBlockExpression& node) override {}
+    void visit(ConstBlockExpression& node) override {
+        pushNode(node);
+        
+        // 设置常量上下文
+        bool previousConstContext = inConstContext;
+        inConstContext = true;
+        
+        // 处理常量块表达式
+        auto block = std::move(node.blockexpression);
+        if (block) {
+            block->accept(*this);
+        }
+        
+        inConstContext = previousConstContext;
+        popNode();
+    }
     void visit(InfiniteLoopExpression& node) override {}
     void visit(PredicateLoopExpression& node) override {}
     void visit(MatchExpression& node) override {}

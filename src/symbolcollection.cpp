@@ -189,9 +189,8 @@ void SymbolCollector::visit(BlockExpression& node) {
     pushNode(node);
     
     root->enterScope(Scope::ScopeType::Block, &node);
-    
-    auto stmt = std::move(node.statement);
-    if (stmt) {
+
+    for (const auto &stmt : std::move(node.statements)) {
         stmt->accept(*this);
     }
     

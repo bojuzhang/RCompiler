@@ -327,10 +327,29 @@ void TypeInferenceChecker::visit(IfExpression& node) {
 void TypeInferenceChecker::visit(BlockExpression& node) {
     pushNode(node);
     
+    // 进入块作用域
+    scopeTree->enterScope(Scope::ScopeType::Block, &node);
+    
+    // 处理所有语句
+    for (const auto& stmt : node.statements) {
+        if (stmt) {
+            stmt->accept(*this);
+        }
+    }
+    
+    // 处理尾表达式（如果有）
+    if (node.expressionwithoutblock) {
+        node.expressionwithoutblock->accept(*this);
+    }
+    
+    // 推断块的类型
     auto type = inferBlockExpressionType(node);
     if (type) {
         inferredTypes[&node] = type;
     }
+    
+    // 退出块作用域
+    scopeTree->exitScope();
     
     popNode();
 }
@@ -563,21 +582,37 @@ std::shared_ptr<SemanticType> TypeInferenceChecker::inferIfExpressionType(IfExpr
 }
 
 std::shared_ptr<SemanticType> TypeInferenceChecker::inferBlockExpressionType(BlockExpression& block) {
-    auto stmt = std::move(block.statement);
-    if (!stmt) {
-        return std::make_shared<SimpleType>("()");
+    std::shared_ptr<SemanticType> lastType = std::make_shared<SimpleType>("()");
+    
+    // 推断所有语句的类型
+    for (const auto& stmt : block.statements) {
+        if (stmt) {
+            stmt->accept(*this);
+            // 对于表达式语句，获取其类型
+            if (auto exprStmt = dynamic_cast<ExpressionStatement*>(stmt.get())) {
+                auto exprType = getInferredType(exprStmt);
+                if (exprType) {
+                    lastType = exprType;
+                }
+            }
+        }
     }
     
-    // 推断块中最后一个语句/表达式的类型
-    stmt->accept(*this);
-    auto stmtType = getInferredType(stmt.get());
+    // 如果有尾表达式，块的类型由尾表达式决定
+    if (block.expressionwithoutblock) {
+        block.expressionwithoutblock->accept(*this);
+        auto tailType = getInferredType(block.expressionwithoutblock.get());
+        if (tailType) {
+            lastType = tailType;
+        }
+    }
     
     // 如果块发散，则类型为never
     if (controlFlowAnalyzer->alwaysDivergesAt(&block)) {
         return std::make_shared<NeverType>();
     }
     
-    return stmtType ? stmtType : std::make_shared<SimpleType>("()");
+    return lastType;
 }
 
 std::shared_ptr<SemanticType> TypeInferenceChecker::inferAssignmentType(AssignmentExpression& expr) {

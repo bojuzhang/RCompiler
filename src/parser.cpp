@@ -1,6 +1,7 @@
 #include "parser.hpp"
 #include "astnodes.hpp"
 #include "lexer.hpp"
+#include <cstddef>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
@@ -125,13 +126,25 @@ std::unique_ptr<BlockExpression> Parser::parseBlockExpression() {
     if (match(Token::kleftCurly)) {
         advance();
     }
-    if (match(Token::krightCurly)) {
-        advance();
-        return std::make_unique<BlockExpression>(nullptr);
+    std::vector<std::unique_ptr<Statement>> statements;
+    while (!match(Token::krightCurly)) {
+        auto tmp = pos;
+        auto statement = parseStatement();
+        if (statement != nullptr) {
+            statements.push_back(std::move(statement));
+            continue;
+        } 
+        pos = tmp;
+        auto expression = parseExpression();
+        if (dynamic_cast<IfExpression*>(expression.get()) != nullptr
+         && dynamic_cast<BlockExpression*>(expression.get()) != nullptr
+         && dynamic_cast<InfiniteLoopExpression*>(expression.get()) != nullptr
+         && dynamic_cast<PredicateLoopExpression*>(expression.get()) != nullptr) {
+            return std::make_unique<BlockExpression>(std::move(statements), std::move(expression));
+        }
     }
-    auto statement = parseStatement();
     advance();
-    return std::make_unique<BlockExpression>(std::move(statement));
+    return std::make_unique<BlockExpression>(std::move(statements), nullptr);
 }
 std::unique_ptr<ConstBlockExpression> Parser::parseConstBlockExpression() {
     if (!match(Token::kconst)) {

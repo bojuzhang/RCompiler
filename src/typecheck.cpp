@@ -906,8 +906,8 @@ void TypeChecker::visit(BlockExpression& node) {
     // 进入新的作用域
     scopeTree->enterScope(Scope::ScopeType::Block, &node);
     
-    if (node.statement) {
-        node.statement->accept(*this);
+    for (const auto &stmt : std::move(node.statements)) {
+        stmt->accept(*this);
     }
     
     // 退出作用域

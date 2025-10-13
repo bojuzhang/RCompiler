@@ -122,6 +122,7 @@ void ConstantEvaluator::visit(ExpressionStatement& node) {
     popNode();
 }
 
+
 // 表达式求值
 std::shared_ptr<ConstantValue> ConstantEvaluator::evaluateExpression(Expression& expr) {
     // 检查是否已经是编译时常量
@@ -371,18 +372,28 @@ std::shared_ptr<ConstantValue> ConstantEvaluator::evaluatePathExpression(PathExp
 }
 
 std::shared_ptr<ConstantValue> ConstantEvaluator::evaluateBlockExpression(BlockExpression& expr) {
-    // 块表达式在常量上下文中：只包含常量表达式语句
-    auto stmt = std::move(expr.statement);
-    if (!stmt) {
-        return nullptr;
+    // 块表达式在常量上下文中：遍历所有语句
+    std::shared_ptr<ConstantValue> lastValue = nullptr;
+    
+    // 处理所有语句
+    for (const auto& stmt : expr.statements) {
+        if (stmt) {
+            stmt->accept(*this);
+            // 对于表达式语句，尝试获取其值
+            if (auto exprStmt = dynamic_cast<ExpressionStatement*>(stmt.get())) {
+                if (exprStmt->astnode) {
+                    lastValue = evaluateExpression(*exprStmt->astnode);
+                }
+            }
+        }
     }
     
-    // 处理块中的语句
-    stmt->accept(*this);
+    // 如果有尾表达式，块的值由尾表达式决定
+    if (expr.expressionwithoutblock) {
+        lastValue = evaluateExpression(*expr.expressionwithoutblock);
+    }
     
-    // 块表达式的值是其最后一个表达式的值
-    // 这里简化处理，实际需要分析块中的控制流
-    return nullptr;
+    return lastValue;
 }
 
 std::shared_ptr<ConstantValue> ConstantEvaluator::evaluateIfExpression(IfExpression& expr) {

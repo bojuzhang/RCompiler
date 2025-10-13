@@ -465,9 +465,11 @@ public:
 };
 class BlockExpression : public Expression {
 public:
-    std::unique_ptr<Statement> statement;
+    std::vector<std::unique_ptr<Statement>> statements;
+    std::unique_ptr<Expression> expressionwithoutblock;
 public:
-    explicit BlockExpression(std::unique_ptr<Statement> statement);
+    BlockExpression(std::vector<std::unique_ptr<Statement>> statements,
+                    std::unique_ptr<Expression> expressionwithoutblock);
     
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
