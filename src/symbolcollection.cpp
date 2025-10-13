@@ -2,6 +2,7 @@
 #include "astnodes.hpp"
 #include "scope.hpp"
 #include <utility>
+#include <iostream>
 
 SymbolCollector::SymbolCollector() {
     root = std::make_shared<ScopeTree>();
@@ -135,6 +136,52 @@ void SymbolCollector::visit(InherentImpl& node) {
     root->exitScope();
     
     inImpl = wasInImpl;
+    popNode();
+}
+
+void SymbolCollector::visit(Statement& node) {
+    pushNode(node);
+    
+    if (node.astnode) {
+        node.astnode->accept(*this);
+    }
+    
+    popNode();
+}
+
+void SymbolCollector::visit(LetStatement& node) {
+    pushNode(node);
+    
+    // 收集变量符号
+    if (node.patternnotopalt) {
+        if (auto identPattern = dynamic_cast<IdentifierPattern*>(node.patternnotopalt.get())) {
+            std::string varName = identPattern->identifier;
+            
+            // 获取变量类型
+            std::shared_ptr<SemanticType> varType;
+            if (node.type) {
+                varType = resolveTypeFromNode(*node.type);
+            } else {
+                varType = createSimpleType("inferred");
+            }
+            
+            auto varSymbol = std::make_shared<Symbol>(
+                varName,
+                SymbolKind::Variable,
+                varType,
+                identPattern->hasmut,  // 使用模式中的可变性标志
+                &node
+            );
+            
+            root->insertSymbol(varName, varSymbol);
+        }
+    }
+    
+    // 访问初始化表达式
+    if (node.expression) {
+        node.expression->accept(*this);
+    }
+    
     popNode();
 }
 

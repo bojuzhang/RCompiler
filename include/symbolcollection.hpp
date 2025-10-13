@@ -33,8 +33,8 @@ public:
     void visit(Enumeration& node) override;
     void visit(InherentImpl& node) override;
     
-    void visit(Statement& node) override {}
-    void visit(LetStatement& node) override {}
+    void visit(Statement& node) override;
+    void visit(LetStatement& node) override;
     void visit(ExpressionStatement& node) override {}
     
     void visit(Expression& node) override {}

@@ -10,6 +10,10 @@ TypeChecker::TypeChecker(std::shared_ptr<ScopeTree> scopeTree)
 
 bool TypeChecker::checkTypes() {
     hasErrors = false;
+    
+    // 这里可以添加全局的类型检查逻辑
+    // 但主要的检查在各个visit方法中进行
+    
     return !hasErrors;
 }
 
@@ -729,3 +733,187 @@ void TypeChecker::checkPattern(ReferencePattern& pattern, std::shared_ptr<Semant
     auto innerType = std::make_shared<SimpleType>(expectedType->tostring().substr(1));
     checkPattern(*pattern.pattern, innerType);
 }
+
+// 可变性检查实现
+void TypeChecker::checkAssignmentMutability(Expression& lhs) {
+    if (auto pathExpr = dynamic_cast<PathExpression*>(&lhs)) {
+        checkVariableMutability(*pathExpr);
+    } else if (auto fieldExpr = dynamic_cast<FieldExpression*>(&lhs)) {
+        checkFieldMutability(*fieldExpr);
+    } else if (auto indexExpr = dynamic_cast<IndexExpression*>(&lhs)) {
+        checkIndexMutability(*indexExpr);
+    }
+    // 其他类型的左值表达式可以在这里添加
+}
+
+void TypeChecker::checkVariableMutability(PathExpression& pathExpr) {
+    if (!pathExpr.simplepath) return;
+    
+    // 获取变量名
+    std::string varName;
+    auto segments = std::move(pathExpr.simplepath->simplepathsegements);
+    if (!segments.empty()) {
+        varName = segments[0]->identifier;
+    }
+    
+    if (varName.empty()) return;
+    
+    // 查找符号
+    auto symbol = findSymbol(varName);
+    if (!symbol) {
+        reportError("Undefined variable: " + varName);
+        return;
+    }
+    
+    // 检查可变性
+    if (!symbol->ismutable) {
+        reportMutabilityError(varName, "variable", &pathExpr);
+    }
+}
+
+void TypeChecker::checkFieldMutability(FieldExpression& fieldExpr) {
+    // 首先检查基础表达式的可变性
+    checkAssignmentMutability(*fieldExpr.expression);
+    
+    // 对于结构体字段，我们需要检查结构体实例是否可变
+    // 这里简化处理，主要检查基础表达式的可变性
+}
+
+void TypeChecker::checkIndexMutability(IndexExpression& indexExpr) {
+    // 首先检查数组/切片表达式的可变性
+    checkAssignmentMutability(*indexExpr.expressionout);
+    
+    // 对于数组索引，我们需要检查数组本身是否可变
+    // 这里简化处理，主要检查基础表达式的可变性
+}
+
+void TypeChecker::reportMutabilityError(const std::string& name, const std::string& errorType, ASTNode* context) {
+    std::cerr << "Mutability Error: Cannot modify " << errorType << " '" << name
+              << "' as it is not declared as mutable" << std::endl;
+    hasErrors = true;
+}
+
+// 实现关键的表达式 visit 方法
+void TypeChecker::visit(AssignmentExpression& node) {
+    pushNode(node);
+    
+    // 检查左值的可变性
+    if (node.leftexpression) {
+        checkAssignmentMutability(*node.leftexpression);
+    }
+    
+    // 检查右值的类型
+    if (node.rightexpression) {
+        auto rightType = inferExpressionType(*node.rightexpression);
+        // 这里可以添加类型兼容性检查
+    }
+    
+    popNode();
+}
+
+void TypeChecker::visit(CompoundAssignmentExpression& node) {
+    pushNode(node);
+    
+    // 检查左值的可变性
+    if (node.leftexpression) {
+        checkAssignmentMutability(*node.leftexpression);
+    }
+    
+    // 检查右值的类型
+    if (node.rightexpression) {
+        auto rightType = inferExpressionType(*node.rightexpression);
+        // 这里可以添加类型兼容性检查
+    }
+    
+    popNode();
+}
+
+void TypeChecker::visit(IndexExpression& node) {
+    pushNode(node);
+    
+    // 检查数组表达式
+    if (node.expressionout) {
+        node.expressionout->accept(*this);
+    }
+    
+    // 检查索引表达式
+    if (node.expressionin) {
+        node.expressionin->accept(*this);
+    }
+    
+    popNode();
+}
+
+void TypeChecker::visit(FieldExpression& node) {
+    pushNode(node);
+    
+    // 检查基础表达式
+    if (node.expression) {
+        node.expression->accept(*this);
+    }
+    
+    popNode();
+}
+
+void TypeChecker::visit(PathExpression& node) {
+    pushNode(node);
+    
+    // 路径表达式通常不需要特殊处理，主要是符号查找
+    // 实际的类型推断在使用时进行
+    
+    popNode();
+}
+
+void TypeChecker::visit(ExpressionStatement& node) {
+    pushNode(node);
+    
+    if (node.astnode) {
+        node.astnode->accept(*this);
+    }
+    
+    popNode();
+}
+
+void TypeChecker::visit(LetStatement& node) {
+    pushNode(node);
+    
+    // 检查类型（如果有）
+    std::shared_ptr<SemanticType> declaredType;
+    if (node.type) {
+        declaredType = checkType(*node.type);
+    }
+    
+    // 检查初始化表达式
+    std::shared_ptr<SemanticType> initType;
+    if (node.expression) {
+        initType = inferExpressionType(*node.expression);
+    }
+    
+    // 检查模式并注册变量
+    if (node.patternnotopalt) {
+        std::shared_ptr<SemanticType> varType = declaredType ? declaredType : initType;
+        if (varType) {
+            checkPattern(*node.patternnotopalt, varType);
+        }
+    }
+    
+    popNode();
+}
+
+void TypeChecker::visit(BlockExpression& node) {
+    pushNode(node);
+    
+    // 进入新的作用域
+    scopeTree->enterScope(Scope::ScopeType::Block, &node);
+    
+    if (node.statement) {
+        node.statement->accept(*this);
+    }
+    
+    // 退出作用域
+    scopeTree->exitScope();
+    
+    popNode();
+}
+
+

@@ -44,33 +44,33 @@ public:
     void visit(InherentImpl& node) override;
     
     void visit(Statement& node) override {}
-    void visit(LetStatement& node) override {}
-    void visit(ExpressionStatement& node) override {}
+    void visit(LetStatement& node) override;
+    void visit(ExpressionStatement& node) override;
     
     void visit(Expression& node) override {}
     void visit(LiteralExpression& node) override {}
-    void visit(PathExpression& node) override {}
+    void visit(PathExpression& node) override;
     void visit(GroupedExpression& node) override {}
     void visit(ArrayExpression& node) override {}
-    void visit(IndexExpression& node) override {}
+    void visit(IndexExpression& node) override;
     void visit(TupleExpression& node) override {}
     void visit(StructExpression& node) override {}
     void visit(CallExpression& node) override {}
     void visit(MethodCallExpression& node) override {}
-    void visit(FieldExpression& node) override {}
+    void visit(FieldExpression& node) override;
     void visit(ContinueExpression& node) override {}
     void visit(BreakExpression& node) override {}
     void visit(ReturnExpression& node) override {}
     void visit(UnderscoreExpression& node) override {}
-    void visit(BlockExpression& node) override {}
+    void visit(BlockExpression& node) override;
     void visit(ConstBlockExpression& node) override {}
     void visit(InfiniteLoopExpression& node) override {}
     void visit(PredicateLoopExpression& node) override {}
     void visit(IfExpression& node) override {}
     void visit(MatchExpression& node) override {}
     void visit(TypeCastExpression& node) override {}
-    void visit(AssignmentExpression& node) override {}
-    void visit(CompoundAssignmentExpression& node) override {}
+    void visit(AssignmentExpression& node) override;
+    void visit(CompoundAssignmentExpression& node) override;
     void visit(UnaryExpression& node) override {}
     void visit(BinaryExpression& node) override {}
     
@@ -166,4 +166,11 @@ private:
     void checkPattern(Pattern& pattern, std::shared_ptr<SemanticType> expectedType);
     void checkPattern(IdentifierPattern& pattern, std::shared_ptr<SemanticType> expectedType);
     void checkPattern(ReferencePattern& pattern, std::shared_ptr<SemanticType> expectedType);
+    
+    // 可变性检查方法
+    void checkAssignmentMutability(Expression& lhs);
+    void checkVariableMutability(PathExpression& pathExpr);
+    void checkFieldMutability(FieldExpression& fieldExpr);
+    void checkIndexMutability(IndexExpression& indexExpr);
+    void reportMutabilityError(const std::string& name, const std::string& errorType, ASTNode* context);
 };
