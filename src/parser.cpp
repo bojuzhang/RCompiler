@@ -12,6 +12,7 @@ Parser::Parser(std::vector<std::pair<Token, std::string>> tokens) : tokens(token
 
 Token Parser::peek() {
     if (pos >= tokens.size()) return Token::kEnd;
+    while (pos < tokens.size() && tokens[pos].first == Token::kCOMMENT) ++pos;
     return tokens[pos].first;
 }
 bool Parser::match(Token token) {
@@ -49,10 +50,13 @@ std::unique_ptr<Expression> Parser::parseExpression() {
     }
 }
 std::unique_ptr<Expression> Parser::parseExpressionPratt(int minbp) {
-    return parseInfixPratt(parsePrefixPratt(), minbp);
+    auto lhs = parsePrefixPratt();
+    if (lhs == nullptr) {
+        return nullptr;
+    }
+    return parseInfixPratt(std::move(lhs), minbp);
 }
 std::unique_ptr<Expression> Parser::parsePrefixPratt() {
-    // std::cerr << pos << " " << (int)peek() << " " << to_string(peek()) << "\n";
     auto type = peek();
     advance();
     switch (type) {
@@ -83,8 +87,8 @@ std::unique_ptr<Expression> Parser::parsePrefixPratt() {
             return std::make_unique<UnderscoreExpression>();
         
         case Token::kPathSep:
-        case Token::kIDENTIFIER:
-            return parsePathExpression();
+        case Token::kIDENTIFIER: 
+            return parsePathExpression();            
 
         case Token::kEnd:
             return nullptr;
@@ -96,28 +100,29 @@ std::unique_ptr<Expression> Parser::parsePrefixPratt() {
 std::unique_ptr<Expression> Parser::parseInfixPratt(std::unique_ptr<Expression> lhs, int minbp) {
     while (true) {
         auto type = peek();
-        // std::cerr << "hdfjhfjd: " << pos << " " << to_string(type) << " " << getLeftTokenBP(type) << "\n";
-        if (type == Token::kEnd) break;
+        if (type == Token::kEnd || type == Token::krightParenthe || type == Token::krightCurly || type == Token::kRightSquare) break;
 
         int leftbp = getLeftTokenBP(type);
-        if (leftbp < minbp) break;
+        if (leftbp < minbp) {
+            break;
+        }
         advance();
 
         if (type == Token::kleftParenthe) {
-            lhs = parseCallExpression();
+            lhs = parseCallExpressionFromInfix(std::move(lhs));
         } else if (type == Token::kleftSquare) {
             lhs = parseIndexExpression();
-        } 
+        }
         // else if (type == Token::kDot) {
         //     lhs = parseMethodCallExpression();
-        // } 
+        // }
         else if (type == Token::kas) {
             lhs = parseTypeCastExpression();
+        } else {
+            int rightbp = getRightTokenBP(type);
+            auto rhs = parseExpressionPratt(rightbp);
+            lhs = std::make_unique<BinaryExpression>(std::move(lhs), std::move(rhs), type);
         }
-
-        int rightbp = getRightTokenBP(type);
-        auto rhs = parseExpressionPratt(rightbp);
-        lhs = std::make_unique<BinaryExpression>(std::move(lhs), std::move(rhs), type);
     }
     return lhs;
 }
@@ -262,6 +267,17 @@ std::unique_ptr<CallExpression> Parser::parseCallExpression() {
     advance();
     return std::make_unique<CallExpression>(std::move(expression), std::move(callparams));
 }
+
+// 新增：用于中缀解析的函数调用解析，接收已解析的函数表达式
+std::unique_ptr<CallExpression> Parser::parseCallExpressionFromInfix(std::unique_ptr<Expression> callee) {
+    // 此时左括号已经被 advance() 消费了
+    auto callparams = parseCallParams();
+    if (!match(Token::krightParenthe)) {
+        return nullptr;
+    }
+    advance();
+    return std::make_unique<CallExpression>(std::move(callee), std::move(callparams));
+}
 std::unique_ptr<IndexExpression> Parser::parseIndexExpression() {
     auto expressionout = parseExpression();
     if (!match(Token::kleftSquare)) {
@@ -307,6 +323,7 @@ std::unique_ptr<Statement> Parser::parseStatement() {
     if (item != nullptr) {
         return std::make_unique<Statement>(std::move(item));
     }
+    pos = tmp;
     auto expressionstatement = parseExpressionStatement();
     if (expressionstatement != nullptr) {
         return std::make_unique<Statement>(std::move(expressionstatement));
@@ -367,25 +384,32 @@ std::unique_ptr<ArrayElements> Parser::parseArrayElements() {
 // }
 
 std::unique_ptr<CallParams> Parser::parseCallParams() {
-    auto expression = parseExpression();
     std::vector<std::unique_ptr<Expression>> vec;
-    vec.push_back(std::move(expression));
-    if (!match(Token::kleftParenthe)) {
-        return nullptr;
+    
+    // 检查是否为空的参数列表
+    if (match(Token::krightParenthe)) {
+        return std::make_unique<CallParams>(std::move(vec));
     }
-    advance();
+    
+    // 解析第一个参数
+    auto expression = parseExpression();
+    if (expression != nullptr) {
+        vec.push_back(std::move(expression));
+    }
+    
+    // 解析后续参数
     while (match(Token::kComma)) {
         advance();
-        auto expression2 = parseExpression();
-        vec.push_back(std::move(expression2));
+        // 检查是否是末尾的逗号（如 exit(0,)）
+        if (match(Token::krightParenthe)) {
+            break;
+        }
+        auto nextExpression = parseExpression();
+        if (nextExpression != nullptr) {
+            vec.push_back(std::move(nextExpression));
+        }
     }
-    if (!match(Token::krightParenthe)) {
-        return nullptr;
-    }
-    advance();
-    if (match(Token::kComma)) {
-        advance();
-    }
+    
     return std::make_unique<CallParams>(std::move(vec));
 }
 
@@ -400,15 +424,16 @@ std::unique_ptr<Type> Parser::parseType() {
         case Token::kleftSquare: {
             advance();
             auto tp = parseType();
-            if (match(Token::kSemi)) {
-                auto expression = parseExpression();
-                return std::make_unique<ArrayType>(std::move(tp), std::move(expression));
-            } else if (match(Token::kRightSquare)) {
-                advance();
-                return std::make_unique<SliceType>(std::move(tp));
-            } else {
+            if (!match(Token::kSemi)) {
                 return nullptr;
             }
+            advance();
+            auto expression = parseExpression();
+            if (!match(Token::kRightSquare)) {
+                return nullptr;
+            }
+            advance();
+            return std::make_unique<ArrayType>(std::move(tp), std::move(expression));
         }
         
         case Token::kAnd:
@@ -738,7 +763,11 @@ std::unique_ptr<LetStatement> Parser::parseLetStatement() {
 
 std::unique_ptr<ExpressionStatement> Parser::parseExpressionStatement() {
     auto expression = parseExpression();
+    if (expression == nullptr) {
+        return nullptr;
+    }
     if (match(Token::kSemi)) {
+        advance();
         return std::make_unique<ExpressionStatement>(std::move(expression), true);
     }
     auto ptr = expression.get();

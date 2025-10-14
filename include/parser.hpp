@@ -149,6 +149,7 @@ public:
     // std::unique_ptr<TupleExpression> parseTupleExpression();
 
     std::unique_ptr<CallExpression> parseCallExpression();
+    std::unique_ptr<CallExpression> parseCallExpressionFromInfix(std::unique_ptr<Expression> callee);
     std::unique_ptr<IndexExpression> parseIndexExpression();
     std::unique_ptr<TypeCastExpression> parseTypeCastExpression();
     std::unique_ptr<MethodCallExpression> parseMethodCallExpression();
