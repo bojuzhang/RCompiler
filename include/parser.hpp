@@ -128,78 +128,78 @@ public:
 
 
     // Pratt parser
-    std::unique_ptr<Expression> parseExpression();
-    std::unique_ptr<Expression> parseExpressionPratt(int minbp = 0);
-    std::unique_ptr<Expression> parsePrefixPratt();
-    std::unique_ptr<Expression> parseInfixPratt(std::unique_ptr<Expression> lhs, int minbp);
+    std::shared_ptr<Expression> parseExpression();
+    std::shared_ptr<Expression> parseExpressionPratt(int minbp = 0);
+    std::shared_ptr<Expression> parsePrefixPratt();
+    std::shared_ptr<Expression> parseInfixPratt(std::shared_ptr<Expression> lhs, int minbp);
 
-    std::unique_ptr<BlockExpression> parseBlockExpression();
-    std::unique_ptr<ConstBlockExpression> parseConstBlockExpression();
-    std::unique_ptr<InfiniteLoopExpression> parseInfiniteLoopExpression();
-    std::unique_ptr<PredicateLoopExpression> parsePredicateLoopExpression();
-    std::unique_ptr<IfExpression> parseIfExpression();
-    std::unique_ptr<MatchExpression> parseMatchExpression();
+    std::shared_ptr<BlockExpression> parseBlockExpression();
+    std::shared_ptr<ConstBlockExpression> parseConstBlockExpression();
+    std::shared_ptr<InfiniteLoopExpression> parseInfiniteLoopExpression();
+    std::shared_ptr<PredicateLoopExpression> parsePredicateLoopExpression();
+    std::shared_ptr<IfExpression> parseIfExpression();
+    std::shared_ptr<MatchExpression> parseMatchExpression();
 
-    std::unique_ptr<PathExpression> parsePathExpression();
-    std::unique_ptr<GroupedExpression> parseGroupedExpression();
-    std::unique_ptr<ArrayExpression> parseArrayExpression();
-    std::unique_ptr<UnaryExpression> parseUnaryExpression();
-    std::unique_ptr<BreakExpression> parseBreakExpression();
-    std::unique_ptr<ReturnExpression> parseReturnExpression();
-    // std::unique_ptr<TupleExpression> parseTupleExpression();
+    std::shared_ptr<PathExpression> parsePathExpression();
+    std::shared_ptr<GroupedExpression> parseGroupedExpression();
+    std::shared_ptr<ArrayExpression> parseArrayExpression();
+    std::shared_ptr<UnaryExpression> parseUnaryExpression();
+    std::shared_ptr<BreakExpression> parseBreakExpression();
+    std::shared_ptr<ReturnExpression> parseReturnExpression();
+    // std::shared_ptr<TupleExpression> parseTupleExpression();
 
-    std::unique_ptr<CallExpression> parseCallExpression();
-    std::unique_ptr<CallExpression> parseCallExpressionFromInfix(std::unique_ptr<Expression> callee);
-    std::unique_ptr<IndexExpression> parseIndexExpression();
-    std::unique_ptr<TypeCastExpression> parseTypeCastExpression();
-    std::unique_ptr<MethodCallExpression> parseMethodCallExpression();
+    std::shared_ptr<CallExpression> parseCallExpression();
+    std::shared_ptr<CallExpression> parseCallExpressionFromInfix(std::shared_ptr<Expression> callee);
+    std::shared_ptr<IndexExpression> parseIndexExpression();
+    std::shared_ptr<TypeCastExpression> parseTypeCastExpression();
+    std::shared_ptr<MethodCallExpression> parseMethodCallExpression();
     
     
-    std::unique_ptr<Crate> parseCrate();
-    std::unique_ptr<Item> parseItem();
+    std::shared_ptr<Crate> parseCrate();
+    std::shared_ptr<Item> parseItem();
 
-    std::unique_ptr<Function> parseFunction();
-    std::unique_ptr<ConstantItem> parseConstantItem();
-    // std::unique_ptr<Module> parseModule();
-    std::unique_ptr<StructStruct> parseStruct();
-    std::unique_ptr<Enumeration> parseEnumeration();
-    std::unique_ptr<InherentImpl> parseInherentImpl();
+    std::shared_ptr<Function> parseFunction();
+    std::shared_ptr<ConstantItem> parseConstantItem();
+    // std::shared_ptr<Module> parseModule();
+    std::shared_ptr<StructStruct> parseStruct();
+    std::shared_ptr<Enumeration> parseEnumeration();
+    std::shared_ptr<InherentImpl> parseInherentImpl();
 
-    std::unique_ptr<FunctionParameters> parseFunctionParameters();
-    std::unique_ptr<FunctionReturnType> parseFunctionReturnType();
-    std::unique_ptr<FunctionParam> parseFunctionParam();
+    std::shared_ptr<FunctionParameters> parseFunctionParameters();
+    std::shared_ptr<FunctionReturnType> parseFunctionReturnType();
+    std::shared_ptr<FunctionParam> parseFunctionParam();
 
-    std::unique_ptr<StructFields> parseStructFields();
-    std::unique_ptr<StructField> parseStructField();
+    std::shared_ptr<StructFields> parseStructFields();
+    std::shared_ptr<StructField> parseStructField();
 
-    std::unique_ptr<EnumVariants> parseEnumVariants();
-    std::unique_ptr<EnumVariant> parseEnumVariant();
+    std::shared_ptr<EnumVariants> parseEnumVariants();
+    std::shared_ptr<EnumVariant> parseEnumVariant();
 
-    std::unique_ptr<AssociatedItem> parseAssociatedItem();
+    std::shared_ptr<AssociatedItem> parseAssociatedItem();
 
 
-    std::unique_ptr<Statement> parseStatement();
-    std::unique_ptr<Conditions> parseConditions();
+    std::shared_ptr<Statement> parseStatement();
+    std::shared_ptr<Conditions> parseConditions();
 
-    std::unique_ptr<SimplePath> parseSimplePath();
+    std::shared_ptr<SimplePath> parseSimplePath();
 
-    std::unique_ptr<ArrayElements> parseArrayElements();
-    // std::unique_ptr<TupleElements> parseTupleElements();
+    std::shared_ptr<ArrayElements> parseArrayElements();
+    // std::shared_ptr<TupleElements> parseTupleElements();
 
-    std::unique_ptr<CallParams> parseCallParams();
+    std::shared_ptr<CallParams> parseCallParams();
 
-    std::unique_ptr<Type> parseType();
+    std::shared_ptr<Type> parseType();
 
-    std::unique_ptr<LetStatement> parseLetStatement();
+    std::shared_ptr<LetStatement> parseLetStatement();
 
-    std::unique_ptr<ExpressionStatement> parseExpressionStatement();
-    std::unique_ptr<SimplePathSegment> parseSimplePathSegment();
-    std::unique_ptr<TypePath> parseTypePath();
-    std::unique_ptr<ReferenceType> parseReferenceType();
+    std::shared_ptr<ExpressionStatement> parseExpressionStatement();
+    std::shared_ptr<SimplePathSegment> parseSimplePathSegment();
+    std::shared_ptr<TypePath> parseTypePath();
+    std::shared_ptr<ReferenceType> parseReferenceType();
 
-    std::unique_ptr<Pattern> parsePattern();
-    std::unique_ptr<ReferencePattern> parseReferencePattern();
-    std::unique_ptr<LiteralPattern> parseLiteralPattern();
-    std::unique_ptr<IdentifierPattern> parseIdentifierPattern();
-    std::unique_ptr<PathPattern> parsePathPattern();
+    std::shared_ptr<Pattern> parsePattern();
+    std::shared_ptr<ReferencePattern> parseReferencePattern();
+    std::shared_ptr<LiteralPattern> parseLiteralPattern();
+    std::shared_ptr<IdentifierPattern> parseIdentifierPattern();
+    std::shared_ptr<PathPattern> parsePathPattern();
 };

@@ -50,9 +50,8 @@ void TypeChecker::visit(Crate& node) {
 void TypeChecker::visit(Item& node) {
     pushNode(node);
     
-    auto itemContent = std::move(node.item);
-    if (itemContent) {
-        itemContent->accept(*this);
+    if (node.item) {
+        node.item->accept(*this);
     }
     
     popNode();
@@ -131,9 +130,8 @@ void TypeChecker::visit(Enumeration& node) {
     }
     
     // 检查variants（如果有类型信息）
-    auto variants = std::move(node.enumvariants);
-    if (variants) {
-        for (const auto& variant : variants->enumvariants) {
+    if (node.enumvariants) {
+        for (const auto& variant : node.enumvariants->enumvariants) {
             // 检查variant类型（如果有）
             // 这里简化处理，实际需要根据enum variant的具体类型检查
         }
@@ -168,8 +166,7 @@ void TypeChecker::visit(InherentImpl& node) {
     }
     
     // 检查关联项
-    auto items = std::move(node.associateditems);
-    for (const auto& item : items) {
+    for (const auto& item : node.associateditems) {
         if (item) {
             checkAssociatedItem(*item);
         }
@@ -186,10 +183,9 @@ void TypeChecker::visit(InherentImpl& node) {
 
 // Struct字段检查
 void TypeChecker::checkStructFields(StructStruct& node) {
-    auto fields = std::move(node.structfileds);
-    if (!fields) return;
+    if (!node.structfileds) return;
     
-    for (const auto& field : fields->structfields) {
+    for (const auto& field : node.structfileds->structfields) {
         checkStructFieldType(*field);
     }
 }
@@ -228,8 +224,7 @@ void TypeChecker::checkInherentImpl(InherentImpl& node) {
     }
     
     // 记录固有实现的方法
-    auto items = std::move(node.associateditems);
-    for (const auto& item : items) {
+    for (const auto& item : node.associateditems) {
         if (auto function = dynamic_cast<Function*>(item.get())) {
             std::string methodName = function->identifier_name;
             structMethods[targetTypeName].insert(methodName);
@@ -312,15 +307,14 @@ void TypeChecker::checkTraitRequirementsSatisfied(const std::string& traitName, 
 
 
 void TypeChecker::checkAssociatedItem(AssociatedItem& item) {
-    auto itemContent = std::move(item.consttantitem_or_function);
-    if (!itemContent) return;
+    if (!item.consttantitem_or_function) return;
     
     std::string itemName;
     
-    if (auto function = dynamic_cast<Function*>(itemContent.get())) {
+    if (auto function = dynamic_cast<Function*>(item.consttantitem_or_function.get())) {
         checkAssociatedFunction(*function);
         itemName = function->identifier_name;
-    } else if (auto constant = dynamic_cast<ConstantItem*>(itemContent.get())) {
+    } else if (auto constant = dynamic_cast<ConstantItem*>(item.consttantitem_or_function.get())) {
         checkAssociatedConstant(*constant);
         itemName = constant->identifier;
     }
@@ -399,11 +393,10 @@ void TypeChecker::checkFunctionReturnType(FunctionReturnType& returnType) {
 }
 
 void TypeChecker::checkFunctionBody(Function& function) {
-    auto body = std::move(function.blockexpression);
-    if (body) {
+    if (function.blockexpression) {
         // 设置期望的返回类型
         pushExpectedType(checkType(*function.functionreturntype->type));
-        body->accept(*this);
+        function.blockexpression->accept(*this);
         popExpectedType();
     }
 }
@@ -426,10 +419,9 @@ std::shared_ptr<SemanticType> TypeChecker::checkType(Type& typeNode) {
 }
 
 std::shared_ptr<SemanticType> TypeChecker::checkType(TypePath& typePath) {
-    auto segment = std::move(typePath.simplepathsegement);
-    if (!segment) return nullptr;
+    if (!typePath.simplepathsegement) return nullptr;
     
-    std::string typeName = segment->identifier;
+    std::string typeName = typePath.simplepathsegement->identifier;
     return resolveType(typeName);
 }
 
@@ -440,17 +432,16 @@ std::shared_ptr<SemanticType> TypeChecker::checkType(ArrayType& arrayType) {
     }
     
     // 检查数组大小表达式
-    auto sizeExpr = std::move(arrayType.expression);
-    if (sizeExpr) {
-        auto sizeType = inferExpressionType(*sizeExpr);
+    if (arrayType.expression) {
+        auto sizeType = inferExpressionType(*arrayType.expression);
         // 应该是一个整数类型
-        if (sizeType && sizeType->tostring() != "usize" && 
+        if (sizeType && sizeType->tostring() != "usize" &&
             sizeType->tostring() != "u32" && sizeType->tostring() != "i32") {
             reportError("Array size must be an integer");
         }
     }
     
-    return std::make_shared<ArrayTypeWrapper>(elementType, sizeExpr.get());
+    return std::make_shared<ArrayTypeWrapper>(elementType, arrayType.expression.get());
 }
 
 std::shared_ptr<SemanticType> TypeChecker::checkType(SliceType& sliceType) {
@@ -751,10 +742,10 @@ void TypeChecker::checkVariableMutability(PathExpression& pathExpr) {
     
     // 获取变量名
     std::string varName;
-    auto segments = std::move(pathExpr.simplepath->simplepathsegements);
-    if (!segments.empty()) {
-        varName = segments[0]->identifier;
+    if (!pathExpr.simplepath || pathExpr.simplepath->simplepathsegements.empty()) {
+        return;
     }
+    varName = pathExpr.simplepath->simplepathsegements[0]->identifier;
     
     if (varName.empty()) return;
     
@@ -906,7 +897,7 @@ void TypeChecker::visit(BlockExpression& node) {
     // 进入新的作用域
     scopeTree->enterScope(Scope::ScopeType::Block, &node);
     
-    for (const auto &stmt : std::move(node.statements)) {
+    for (const auto &stmt : node.statements) {
         stmt->accept(*this);
     }
     

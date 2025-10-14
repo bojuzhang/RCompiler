@@ -8,6 +8,9 @@
 #include "visitorforward.hpp"
 #include "visitor.hpp"
 
+// 使用shared_ptr替代unique_ptr以解决语义检查阶段的指针失效问题
+// 这样可以安全地在多个分析器之间共享AST节点，而不会导致指针失效
+
 
 class ASTNode {
 public:
@@ -20,9 +23,9 @@ public:
 // ITEM Syntax
 class Crate : public ASTNode {
 public:
-    std::vector<std::unique_ptr<Item>> items;
+    std::vector<std::shared_ptr<Item>> items;
 public:
-    Crate(std::vector<std::unique_ptr<Item>>&& items);
+    Crate(std::vector<std::shared_ptr<Item>>&& items);
     
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
@@ -30,9 +33,9 @@ public:
 };
 class Item : public ASTNode {
 public:
-    std::unique_ptr<ASTNode> item;
+    std::shared_ptr<ASTNode> item;
 public:
-    Item(std::unique_ptr<ASTNode> item);
+    Item(std::shared_ptr<ASTNode> item);
     
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
@@ -43,15 +46,15 @@ public:
     // std::unique_ptr<FunctionQualifiers> functionqualifiers;
     bool isconst;
     std::string identifier_name;
-    std::unique_ptr<FunctionParameters> functionparameters;
-    std::unique_ptr<FunctionReturnType> functionreturntype;
-    std::unique_ptr<BlockExpression> blockexpression;
+    std::shared_ptr<FunctionParameters> functionparameters;
+    std::shared_ptr<FunctionReturnType> functionreturntype;
+    std::shared_ptr<BlockExpression> blockexpression;
 public:
     Function(bool isconst,
              std::string identifier_name,
-             std::unique_ptr<FunctionParameters> functionparameters,
-             std::unique_ptr<FunctionReturnType> functionreturntype,
-             std::unique_ptr<BlockExpression> blockexpression);
+             std::shared_ptr<FunctionParameters> functionparameters,
+             std::shared_ptr<FunctionReturnType> functionreturntype,
+             std::shared_ptr<BlockExpression> blockexpression);
              
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
@@ -60,12 +63,12 @@ public:
 class ConstantItem : public ASTNode {
 public:
     std::string identifier;
-    std::unique_ptr<Type> type;
-    std::unique_ptr<Expression> expression;
+    std::shared_ptr<Type> type;
+    std::shared_ptr<Expression> expression;
 public:
     ConstantItem(std::string identifier,
-                 std::unique_ptr<Type> type,
-                 std::unique_ptr<Expression> expression);
+                 std::shared_ptr<Type> type,
+                 std::shared_ptr<Expression> expression);
                  
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
@@ -86,11 +89,11 @@ public:
 class StructStruct : public ASTNode {
 public:
     std::string identifier;
-    std::unique_ptr<StructFields> structfileds;
+    std::shared_ptr<StructFields> structfileds;
     bool issemi;
 public:
     StructStruct(std::string identifier,
-                 std::unique_ptr<StructFields> structfileds,
+                 std::shared_ptr<StructFields> structfileds,
                  bool issemi);
                  
     void accept(ASTVisitor& visitor) override {
@@ -112,10 +115,10 @@ public:
 class Enumeration : public ASTNode {
 public:
     std::string identifier;
-    std::unique_ptr<EnumVariants> enumvariants;
+    std::shared_ptr<EnumVariants> enumvariants;
 public:
     Enumeration(std::string identifier,
-                std::unique_ptr<EnumVariants> enumvariants);
+                std::shared_ptr<EnumVariants> enumvariants);
                 
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
@@ -123,11 +126,11 @@ public:
 };
 class InherentImpl : public ASTNode {
 public:
-    std::unique_ptr<Type> type;
-    std::vector<std::unique_ptr<AssociatedItem>> associateditems;
+    std::shared_ptr<Type> type;
+    std::vector<std::shared_ptr<AssociatedItem>> associateditems;
 public:
-    InherentImpl(std::unique_ptr<Type> type,
-                 std::vector<std::unique_ptr<AssociatedItem>>&& associateditems);
+    InherentImpl(std::shared_ptr<Type> type,
+                 std::vector<std::shared_ptr<AssociatedItem>>&& associateditems);
                  
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
@@ -141,9 +144,9 @@ public:
 // };
 class FunctionParameters : public ASTNode {
 public:
-    std::vector<std::unique_ptr<FunctionParam>> functionparams;
+    std::vector<std::shared_ptr<FunctionParam>> functionparams;
 public:
-    explicit FunctionParameters(std::vector<std::unique_ptr<FunctionParam>>&& functionparams);
+    explicit FunctionParameters(std::vector<std::shared_ptr<FunctionParam>>&& functionparams);
     
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
@@ -151,11 +154,11 @@ public:
 };
 class FunctionParam : public ASTNode {
 public:
-    std::unique_ptr<Pattern> patternnotopalt;
-    std::unique_ptr<Type> type;
+    std::shared_ptr<Pattern> patternnotopalt;
+    std::shared_ptr<Type> type;
 public:
-    FunctionParam(std::unique_ptr<Pattern> patternnotopalt,
-                  std::unique_ptr<Type> type);
+    FunctionParam(std::shared_ptr<Pattern> patternnotopalt,
+                  std::shared_ptr<Type> type);
                   
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
@@ -163,9 +166,9 @@ public:
 };
 class FunctionReturnType : public ASTNode {
 public:
-    std::unique_ptr<Type> type;
+    std::shared_ptr<Type> type;
 public:
-    explicit FunctionReturnType(std::unique_ptr<Type> type);
+    explicit FunctionReturnType(std::shared_ptr<Type> type);
     
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
@@ -173,9 +176,9 @@ public:
 };
 class StructFields : public ASTNode {
 public:
-    std::vector<std::unique_ptr<StructField>> structfields; 
+    std::vector<std::shared_ptr<StructField>> structfields;
 public:
-    explicit StructFields(std::vector<std::unique_ptr<StructField>>&& structfields);
+    explicit StructFields(std::vector<std::shared_ptr<StructField>>&& structfields);
     
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
@@ -184,10 +187,10 @@ public:
 class StructField : public ASTNode {
 public:
     std::string identifier;
-    std::unique_ptr<Type> type;
+    std::shared_ptr<Type> type;
 public:
     StructField(std::string identifier,
-                std::unique_ptr<Type> type);
+                std::shared_ptr<Type> type);
                 
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
@@ -217,9 +220,9 @@ public:
 // };
 class EnumVariants : public ASTNode {
 public:
-    std::vector<std::unique_ptr<EnumVariant>> enumvariants; 
+    std::vector<std::shared_ptr<EnumVariant>> enumvariants;
 public:
-    explicit EnumVariants(std::vector<std::unique_ptr<EnumVariant>>&& enumvariants);
+    explicit EnumVariants(std::vector<std::shared_ptr<EnumVariant>>&& enumvariants);
     
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
@@ -255,9 +258,9 @@ public:
 // };
 class AssociatedItem : public ASTNode {
 public:
-    std::unique_ptr<ASTNode> consttantitem_or_function;
+    std::shared_ptr<ASTNode> consttantitem_or_function;
 public:
-    explicit AssociatedItem(std::unique_ptr<ASTNode> consttantitem_or_function);
+    explicit AssociatedItem(std::shared_ptr<ASTNode> consttantitem_or_function);
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
     }
@@ -266,9 +269,9 @@ public:
 // STATEMENT Syntax
 class Statement : public ASTNode{
 public:
-    std::unique_ptr<ASTNode> astnode; // item or letstatement or expressionstatement
+    std::shared_ptr<ASTNode> astnode; // item or letstatement or expressionstatement
 public:
-    explicit Statement(std::unique_ptr<ASTNode> astnode);
+    explicit Statement(std::shared_ptr<ASTNode> astnode);
     
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
@@ -276,13 +279,13 @@ public:
 };
 class LetStatement : public ASTNode {
 public:
-    std::unique_ptr<Pattern> patternnotopalt;
-    std::unique_ptr<Type> type;
-    std::unique_ptr<Expression> expression;
+    std::shared_ptr<Pattern> patternnotopalt;
+    std::shared_ptr<Type> type;
+    std::shared_ptr<Expression> expression;
 public:
-    LetStatement(std::unique_ptr<Pattern> patternnotopalt,
-                 std::unique_ptr<Type> type,
-                 std::unique_ptr<Expression> expression);
+    LetStatement(std::shared_ptr<Pattern> patternnotopalt,
+                 std::shared_ptr<Type> type,
+                 std::shared_ptr<Expression> expression);
                  
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
@@ -290,10 +293,10 @@ public:
 };
 class ExpressionStatement : public ASTNode {
 public:
-    std::unique_ptr<Expression> astnode;
+    std::shared_ptr<Expression> astnode;
     bool hassemi;
 public:
-    explicit ExpressionStatement(std::unique_ptr<Expression> astnode, bool hassemi);
+    explicit ExpressionStatement(std::shared_ptr<Expression> astnode, bool hassemi);
     
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
@@ -320,9 +323,9 @@ public:
 };
 class PathExpression : public Expression {
 public:
-    std::unique_ptr<SimplePath> simplepath;
+    std::shared_ptr<SimplePath> simplepath;
 public:
-    explicit PathExpression(std::unique_ptr<SimplePath> simplepath);
+    explicit PathExpression(std::shared_ptr<SimplePath> simplepath);
     
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
@@ -330,9 +333,9 @@ public:
 };
 class GroupedExpression : public Expression {
 public:
-    std::unique_ptr<Expression> expression;
+    std::shared_ptr<Expression> expression;
 public:
-    explicit GroupedExpression(std::unique_ptr<Expression> expression);
+    explicit GroupedExpression(std::shared_ptr<Expression> expression);
     
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
@@ -340,9 +343,9 @@ public:
 };
 class ArrayExpression : public Expression {
 public:
-    std::unique_ptr<ArrayElements> arrayelements;
+    std::shared_ptr<ArrayElements> arrayelements;
 public:
-    explicit ArrayExpression(std::unique_ptr<ArrayElements> arrayelements);
+    explicit ArrayExpression(std::shared_ptr<ArrayElements> arrayelements);
     
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
@@ -350,11 +353,11 @@ public:
 };
 class IndexExpression : public Expression {
 public:
-    std::unique_ptr<Expression> expressionout;
-    std::unique_ptr<Expression> expressionin;
+    std::shared_ptr<Expression> expressionout;
+    std::shared_ptr<Expression> expressionin;
 public:
-    IndexExpression(std::unique_ptr<Expression> expressionout,
-                    std::unique_ptr<Expression> expressionin);
+    IndexExpression(std::shared_ptr<Expression> expressionout,
+                    std::shared_ptr<Expression> expressionin);
                     
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
@@ -362,9 +365,9 @@ public:
 };
 class TupleExpression : public Expression {
 public:
-    std::unique_ptr<TupleElements> tupleelements;
+    std::shared_ptr<TupleElements> tupleelements;
 public:
-    explicit TupleExpression(std::unique_ptr<TupleElements> tupleelements);
+    explicit TupleExpression(std::shared_ptr<TupleElements> tupleelements);
     
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
@@ -372,10 +375,10 @@ public:
 };
 class TupleIndexingExpression : public Expression {
 public:
-    std::unique_ptr<Expression> expression;
+    std::shared_ptr<Expression> expression;
     int tupleindex;
 public:
-    TupleIndexingExpression(std::unique_ptr<Expression> expression, int tupleindex);
+    TupleIndexingExpression(std::shared_ptr<Expression> expression, int tupleindex);
     
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
@@ -383,11 +386,11 @@ public:
 };
 class StructExpression : public Expression {
 public:
-    std::unique_ptr<PathInExpression> pathinexpression;
-    std::unique_ptr<ASTNode> structinfo; // exprfields or base
+    std::shared_ptr<PathInExpression> pathinexpression;
+    std::shared_ptr<ASTNode> structinfo; // exprfields or base
 public:
-    StructExpression(std::unique_ptr<PathInExpression> pathinexpression,
-                     std::unique_ptr<ASTNode> structinfo);
+    StructExpression(std::shared_ptr<PathInExpression> pathinexpression,
+                     std::shared_ptr<ASTNode> structinfo);
                      
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
@@ -395,11 +398,11 @@ public:
 };
 class CallExpression : public Expression {
 public:
-    std::unique_ptr<Expression> expression;
-    std::unique_ptr<CallParams> callparams;
+    std::shared_ptr<Expression> expression;
+    std::shared_ptr<CallParams> callparams;
 public:
-    CallExpression(std::unique_ptr<Expression> expression,
-                   std::unique_ptr<CallParams> callparams);
+    CallExpression(std::shared_ptr<Expression> expression,
+                   std::shared_ptr<CallParams> callparams);
                    
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
@@ -414,10 +417,10 @@ public:
 // };
 class FieldExpression : public Expression {
 public:
-    std::unique_ptr<Expression> expression;
+    std::shared_ptr<Expression> expression;
     std::string identifier;
 public:
-    FieldExpression(std::unique_ptr<Expression> expression, std::string identifier);
+    FieldExpression(std::shared_ptr<Expression> expression, std::string identifier);
     
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
@@ -435,9 +438,9 @@ public:
 };
 class BreakExpression : public Expression {
 public:
-    std::unique_ptr<Expression> expression;
+    std::shared_ptr<Expression> expression;
 public:
-    explicit BreakExpression(std::unique_ptr<Expression> expression);
+    explicit BreakExpression(std::shared_ptr<Expression> expression);
     
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
@@ -445,9 +448,9 @@ public:
 };
 class ReturnExpression : public Expression {
 public:
-    std::unique_ptr<Expression> expression;
+    std::shared_ptr<Expression> expression;
 public:
-    explicit ReturnExpression(std::unique_ptr<Expression> expression);
+    explicit ReturnExpression(std::shared_ptr<Expression> expression);
     
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
@@ -465,11 +468,11 @@ public:
 };
 class BlockExpression : public Expression {
 public:
-    std::vector<std::unique_ptr<Statement>> statements;
-    std::unique_ptr<Expression> expressionwithoutblock;
+    std::vector<std::shared_ptr<Statement>> statements;
+    std::shared_ptr<Expression> expressionwithoutblock;
 public:
-    BlockExpression(std::vector<std::unique_ptr<Statement>> statements,
-                    std::unique_ptr<Expression> expressionwithoutblock);
+    BlockExpression(std::vector<std::shared_ptr<Statement>> statements,
+                    std::shared_ptr<Expression> expressionwithoutblock);
     
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
@@ -477,9 +480,9 @@ public:
 };
 class ConstBlockExpression : public Expression {
 public:
-    std::unique_ptr<BlockExpression> blockexpression;
+    std::shared_ptr<BlockExpression> blockexpression;
 public:
-    explicit ConstBlockExpression(std::unique_ptr<BlockExpression> blockexpression);
+    explicit ConstBlockExpression(std::shared_ptr<BlockExpression> blockexpression);
     
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
@@ -487,9 +490,9 @@ public:
 };
 class InfiniteLoopExpression : public Expression {
 public:
-    std::unique_ptr<BlockExpression> blockexpression;
+    std::shared_ptr<BlockExpression> blockexpression;
 public:
-    explicit InfiniteLoopExpression(std::unique_ptr<BlockExpression> blockexpression);
+    explicit InfiniteLoopExpression(std::shared_ptr<BlockExpression> blockexpression);
     
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
@@ -497,11 +500,11 @@ public:
 };
 class PredicateLoopExpression : public Expression {
 public:
-    std::unique_ptr<Conditions> conditions;
-    std::unique_ptr<BlockExpression> blockexpression;
+    std::shared_ptr<Conditions> conditions;
+    std::shared_ptr<BlockExpression> blockexpression;
 public:
-    PredicateLoopExpression(std::unique_ptr<Conditions> conditions,
-                            std::unique_ptr<BlockExpression> blockexpression);
+    PredicateLoopExpression(std::shared_ptr<Conditions> conditions,
+                            std::shared_ptr<BlockExpression> blockexpression);
                             
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
@@ -509,13 +512,13 @@ public:
 };
 class IfExpression : public Expression {
 public:
-    std::unique_ptr<Conditions> conditions;
-    std::unique_ptr<BlockExpression> ifblockexpression;
-    std::unique_ptr<Expression> elseexpression; // block or if
+    std::shared_ptr<Conditions> conditions;
+    std::shared_ptr<BlockExpression> ifblockexpression;
+    std::shared_ptr<Expression> elseexpression; // block or if
 public:
-    IfExpression(std::unique_ptr<Conditions> conditions,
-                 std::unique_ptr<BlockExpression> ifblockexpression,
-                 std::unique_ptr<Expression> elseexpression);
+    IfExpression(std::shared_ptr<Conditions> conditions,
+                 std::shared_ptr<BlockExpression> ifblockexpression,
+                 std::shared_ptr<Expression> elseexpression);
                  
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
@@ -526,11 +529,11 @@ public:
 // };
 class TypeCastExpression : public Expression {
 public:
-    std::unique_ptr<Expression> expression;
-    std::unique_ptr<Type> typenobounds;
+    std::shared_ptr<Expression> expression;
+    std::shared_ptr<Type> typenobounds;
 public:
-    TypeCastExpression(std::unique_ptr<Expression> expression,
-                       std::unique_ptr<Type> typenobounds);
+    TypeCastExpression(std::shared_ptr<Expression> expression,
+                       std::shared_ptr<Type> typenobounds);
                        
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
@@ -538,11 +541,11 @@ public:
 };  
 class AssignmentExpression : public Expression {
 public:
-    std::unique_ptr<Expression> leftexpression;
-    std::unique_ptr<Expression> rightexpression;
+    std::shared_ptr<Expression> leftexpression;
+    std::shared_ptr<Expression> rightexpression;
 public:
-    AssignmentExpression(std::unique_ptr<Expression> leftexpression,
-                         std::unique_ptr<Expression> rightexpression);
+    AssignmentExpression(std::shared_ptr<Expression> leftexpression,
+                         std::shared_ptr<Expression> rightexpression);
                          
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
@@ -550,11 +553,11 @@ public:
 };
 class CompoundAssignmentExpression : public Expression {
 public:
-    std::unique_ptr<Expression> leftexpression;
-    std::unique_ptr<Expression> rightexpression;
+    std::shared_ptr<Expression> leftexpression;
+    std::shared_ptr<Expression> rightexpression;
 public:
-    CompoundAssignmentExpression(std::unique_ptr<Expression> leftexpression,
-                                 std::unique_ptr<Expression> rightexpression);
+    CompoundAssignmentExpression(std::shared_ptr<Expression> leftexpression,
+                                 std::shared_ptr<Expression> rightexpression);
                                  
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
@@ -562,10 +565,10 @@ public:
 };
 class ArrayElements : public Expression {
 public:
-    std::vector<std::unique_ptr<Expression>> expressions;
-    bool istwo; 
+    std::vector<std::shared_ptr<Expression>> expressions;
+    bool istwo;
 public:
-    ArrayElements(std::vector<std::unique_ptr<Expression>>&& expressions, bool istwo);
+    ArrayElements(std::vector<std::shared_ptr<Expression>>&& expressions, bool istwo);
     
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
@@ -573,9 +576,9 @@ public:
 };
 class TupleElements : public Expression {
 public:
-    std::vector<std::unique_ptr<Expression>> expressions;
+    std::vector<std::shared_ptr<Expression>> expressions;
 public:
-    explicit TupleElements(std::vector<std::unique_ptr<Expression>>&& expressions);
+    explicit TupleElements(std::vector<std::shared_ptr<Expression>>&& expressions);
     
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
@@ -583,11 +586,11 @@ public:
 };
 class StructExprFields : public Expression {
 public:
-    std::vector<std::unique_ptr<StructExprField>> structexprfields;
-    std::unique_ptr<StructBase> structbase;
+    std::vector<std::shared_ptr<StructExprField>> structexprfields;
+    std::shared_ptr<StructBase> structbase;
 public:
-    StructExprFields(std::vector<std::unique_ptr<StructExprField>>&& structexprfields,
-                     std::unique_ptr<StructBase> structbase);
+    StructExprFields(std::vector<std::shared_ptr<StructExprField>>&& structexprfields,
+                     std::shared_ptr<StructBase> structbase);
                      
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
@@ -597,9 +600,9 @@ class StructExprField : public Expression {
 public:
     std::string identifier;
     int tupleindex;
-    std::unique_ptr<Expression> expression;
+    std::shared_ptr<Expression> expression;
 public:
-    StructExprField(std::string identifier, int tupleindex, std::unique_ptr<Expression> expression);
+    StructExprField(std::string identifier, int tupleindex, std::shared_ptr<Expression> expression);
     
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
@@ -607,9 +610,9 @@ public:
 };
 class StructBase : public Expression {
 public:
-    std::unique_ptr<Expression> expression;
+    std::shared_ptr<Expression> expression;
 public:
-    explicit StructBase(std::unique_ptr<Expression> expression);
+    explicit StructBase(std::shared_ptr<Expression> expression);
     
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
@@ -617,9 +620,9 @@ public:
 };
 class CallParams : public Expression {
 public:
-    std::vector<std::unique_ptr<Expression>> expressions;
+    std::vector<std::shared_ptr<Expression>> expressions;
 public:
-    explicit CallParams(std::vector<std::unique_ptr<Expression>>&& expressions);
+    explicit CallParams(std::vector<std::shared_ptr<Expression>>&& expressions);
     
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
@@ -627,9 +630,9 @@ public:
 };
 class Conditions : public Expression {
 public:
-    std::unique_ptr<Expression> expression; // except structexpression
+    std::shared_ptr<Expression> expression; // except structexpression
 public:
-    explicit Conditions(std::unique_ptr<Expression> expression);
+    explicit Conditions(std::shared_ptr<Expression> expression);
     
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
@@ -641,10 +644,10 @@ public:
 
 class UnaryExpression : public Expression {
 public:
-    std::unique_ptr<Expression> expression;
+    std::shared_ptr<Expression> expression;
     Token unarytype;
 public:
-    UnaryExpression(std::unique_ptr<Expression> expression, Token unarytype);
+    UnaryExpression(std::shared_ptr<Expression> expression, Token unarytype);
     
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
@@ -652,12 +655,12 @@ public:
 };
 class BinaryExpression : public Expression {
 public:
-    std::unique_ptr<Expression> leftexpression;
-    std::unique_ptr<Expression> rightexpression;
+    std::shared_ptr<Expression> leftexpression;
+    std::shared_ptr<Expression> rightexpression;
     Token binarytype;
 public:
-    BinaryExpression(std::unique_ptr<Expression> leftexpression,
-                     std::unique_ptr<Expression> rightexpression,
+    BinaryExpression(std::shared_ptr<Expression> leftexpression,
+                     std::shared_ptr<Expression> rightexpression,
                      Token binarytype);
                      
     void accept(ASTVisitor& visitor) override {
@@ -674,9 +677,9 @@ public:
 class LiteralPattern : public Pattern {
 public:
     bool isnegative;
-    std::unique_ptr<Expression> literalexprerssion;
+    std::shared_ptr<Expression> literalexprerssion;
 public:
-    LiteralPattern(bool isnegative, std::unique_ptr<Expression> literalexprerssion);
+    LiteralPattern(bool isnegative, std::shared_ptr<Expression> literalexprerssion);
     
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
@@ -687,9 +690,9 @@ public:
     bool hasref;
     bool hasmut;
     std::string identifier;
-    std::unique_ptr<Pattern> patternnotopalt;
+    std::shared_ptr<Pattern> patternnotopalt;
 public:
-    IdentifierPattern(bool hasref, bool hasmut, std::string identifier, std::unique_ptr<Pattern> patternnotopalt);
+    IdentifierPattern(bool hasref, bool hasmut, std::string identifier, std::shared_ptr<Pattern> patternnotopalt);
     
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
@@ -707,17 +710,17 @@ public:
 };
 class PathPattern : public Pattern {
 public:
-    std::unique_ptr<Expression> pathexpression;
+    std::shared_ptr<Expression> pathexpression;
 public:
-    explicit PathPattern(std::unique_ptr<Expression> pathexpression);
+    explicit PathPattern(std::shared_ptr<Expression> pathexpression);
 };
 class ReferencePattern : public Pattern {
 public:
     bool singleordouble;
     bool hasmut;
-    std::unique_ptr<Pattern> pattern;
+    std::shared_ptr<Pattern> pattern;
 public:
-    ReferencePattern(bool singleordouble, bool hasmut, std::unique_ptr<Pattern> pattern);
+    ReferencePattern(bool singleordouble, bool hasmut, std::shared_ptr<Pattern> pattern);
     
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
@@ -751,9 +754,9 @@ public:
 // };
 class TypePath : public Type {
 public:
-    std::unique_ptr<SimplePathSegment> simplepathsegement;
+    std::shared_ptr<SimplePathSegment> simplepathsegement;
 public:
-    explicit TypePath(std::unique_ptr<SimplePathSegment> simplepathsegement);
+    explicit TypePath(std::shared_ptr<SimplePathSegment> simplepathsegement);
     
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
@@ -773,10 +776,10 @@ public:
 // };
 class ArrayType : public Type {
 public:
-    std::unique_ptr<Type> type;
-    std::unique_ptr<Expression> expression;
+    std::shared_ptr<Type> type;
+    std::shared_ptr<Expression> expression;
 public:
-    ArrayType(std::unique_ptr<Type> type, std::unique_ptr<Expression> expression);
+    ArrayType(std::shared_ptr<Type> type, std::shared_ptr<Expression> expression);
     
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
@@ -784,9 +787,9 @@ public:
 };
 class SliceType : public Type {
 public:
-    std::unique_ptr<Type> type;
+    std::shared_ptr<Type> type;
 public:
-    explicit SliceType(std::unique_ptr<Type> type);
+    explicit SliceType(std::shared_ptr<Type> type);
     
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
@@ -804,10 +807,10 @@ public:
 };
 class ReferenceType : public Type {
 public:
-    std::unique_ptr<Type> type;
+    std::shared_ptr<Type> type;
     bool ismut;
 public:
-    ReferenceType(std::unique_ptr<Type> type, bool ismut);
+    ReferenceType(std::shared_ptr<Type> type, bool ismut);
     
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
@@ -817,9 +820,9 @@ public:
 // PATH Syntax
 class SimplePath : public ASTNode {
 public:
-    std::vector<std::unique_ptr<SimplePathSegment>> simplepathsegements;
+    std::vector<std::shared_ptr<SimplePathSegment>> simplepathsegements;
 public:
-    explicit SimplePath(std::vector<std::unique_ptr<SimplePathSegment>>&& simplepathsegements);
+    explicit SimplePath(std::vector<std::shared_ptr<SimplePathSegment>>&& simplepathsegements);
     
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);

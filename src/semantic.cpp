@@ -1,8 +1,8 @@
 #include "semantic.hpp"
 #include <iostream>
 
-CompleteSemanticAnalyzer::CompleteSemanticAnalyzer(std::unique_ptr<Crate> ast) 
-    : ast(std::move(ast)) {}
+CompleteSemanticAnalyzer::CompleteSemanticAnalyzer(std::shared_ptr<Crate> ast)
+    : ast(ast) {}
 
 bool CompleteSemanticAnalyzer::analyze() {
     hasErrors = false;

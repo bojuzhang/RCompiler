@@ -37,9 +37,8 @@ void ConstantEvaluator::visit(Crate& node) {
 void ConstantEvaluator::visit(Item& node) {
     pushNode(node);
     
-    auto itemContent = std::move(node.item);
-    if (itemContent) {
-        itemContent->accept(*this);
+    if (node.item) {
+        node.item->accept(*this);
     }
     
     popNode();
@@ -72,9 +71,8 @@ void ConstantEvaluator::visit(Function& node) {
     pushNode(node);
     
     // 不处理函数体中的常量，只处理函数签名中的常量表达式
-    auto params = std::move(node.functionparameters);
-    if (params) {
-        for (const auto& param : params->functionparams) {
+    if (node.functionparameters) {
+        for (const auto& param : node.functionparameters->functionparams) {
             // 检查参数默认值（如果有）
         }
     }
@@ -85,9 +83,8 @@ void ConstantEvaluator::visit(Function& node) {
 void ConstantEvaluator::visit(Statement& node) {
     pushNode(node);
     
-    auto stmtContent = std::move(node.astnode);
-    if (stmtContent) {
-        stmtContent->accept(*this);
+    if (node.astnode) {
+        node.astnode->accept(*this);
     }
     
     popNode();
@@ -328,14 +325,13 @@ std::shared_ptr<ConstantValue> ConstantEvaluator::evaluateUnaryExpression(UnaryE
 }
 
 std::shared_ptr<ConstantValue> ConstantEvaluator::evaluateArrayExpression(ArrayExpression& expr) {
-    auto elements = std::move(expr.arrayelements);
-    if (!elements) {
+    if (!expr.arrayelements) {
         return nullptr;
     }
     
     std::vector<std::shared_ptr<ConstantValue>> evaluatedElements;
     
-    for (const auto& element : elements->expressions) {
+    for (const auto& element : expr.arrayelements->expressions) {
         auto elementValue = evaluateExpression(*element);
         if (!elementValue) {
             return nullptr;
@@ -347,8 +343,7 @@ std::shared_ptr<ConstantValue> ConstantEvaluator::evaluateArrayExpression(ArrayE
 }
 
 std::shared_ptr<ConstantValue> ConstantEvaluator::evaluatePathExpression(PathExpression& expr) {
-    auto path = std::move(expr.simplepath);
-    if (!path) {
+    if (!expr.simplepath) {
         return nullptr;
     }
     
@@ -415,9 +410,8 @@ std::shared_ptr<ConstantValue> ConstantEvaluator::evaluateIfExpression(IfExpress
         return evaluateExpression(*expr.ifblockexpression);
     } else {
         // 求值else分支（如果有）
-        auto elseExpr = std::move(expr.elseexpression);
-        if (elseExpr) {
-            return evaluateExpression(*elseExpr);
+        if (expr.elseexpression) {
+            return evaluateExpression(*expr.elseexpression);
         } else {
             // 没有else分支，返回unit类型（这里用nullptr表示）
             return nullptr;
@@ -432,9 +426,8 @@ bool ConstantEvaluator::isCompileTimeConstant(Expression& expr) {
         return true;
     } else if (auto path = dynamic_cast<PathExpression*>(&expr)) {
         // 路径表达式必须是常量
-        auto pathNode = std::move(path->simplepath);
-        if (pathNode) {
-            auto segments = std::move(pathNode->simplepathsegements);
+        if (path->simplepath) {
+            auto segments = path->simplepath->simplepathsegements;
             if (segments.size() == 1) {
                 std::string name = segments[0]->identifier;
                 return constantValues.find(name) != constantValues.end();
@@ -453,9 +446,8 @@ bool ConstantEvaluator::isCompileTimeConstant(Expression& expr) {
     } else if (dynamic_cast<ArrayExpression*>(&expr)) {
         // 数组表达式：检查所有元素
         auto array = dynamic_cast<ArrayExpression*>(&expr);
-        auto elements = std::move(array->arrayelements);
-        if (elements) {
-            for (const auto& element : elements->expressions) {
+        if (array && array->arrayelements) {
+            for (const auto& element : array->arrayelements->expressions) {
                 if (!isCompileTimeConstant(*element)) {
                     return false;
                 }

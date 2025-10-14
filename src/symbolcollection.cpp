@@ -40,9 +40,8 @@ void SymbolCollector::visit(Item& node) {
     pushNode(node);
     
     // 根据item的具体类型分发处理
-    auto itemContent = std::move(node.item);
-    if (itemContent) {
-        itemContent->accept(*this);
+    if (node.item) {
+        node.item->accept(*this);
     }
     
     popNode();
@@ -63,9 +62,8 @@ void SymbolCollector::visit(Function& node) {
     
     collectParameterSymbols(node);
     
-    auto body = std::move(node.blockexpression);
-    if (body) {
-        body->accept(*this);
+    if (node.blockexpression) {
+        node.blockexpression->accept(*this);
     }
     
     root->exitScope();
@@ -80,9 +78,8 @@ void SymbolCollector::visit(ConstantItem& node) {
     
     collectConstantSymbol(node);
     
-    auto expr = std::move(node.expression);
-    if (expr) {
-        expr->accept(*this);
+    if (node.expression) {
+        node.expression->accept(*this);
     }
     
     popNode();
@@ -126,8 +123,7 @@ void SymbolCollector::visit(InherentImpl& node) {
     
     collectImplSymbol(node);
     
-    auto items = std::move(node.associateditems);
-    for (const auto& item : items) {
+    for (const auto& item : node.associateditems) {
         if (item) {
             item->accept(*this);
         }
@@ -190,7 +186,7 @@ void SymbolCollector::visit(BlockExpression& node) {
     
     root->enterScope(Scope::ScopeType::Block, &node);
 
-    for (const auto &stmt : std::move(node.statements)) {
+    for (const auto &stmt : node.statements) {
         stmt->accept(*this);
     }
     
@@ -207,9 +203,8 @@ void SymbolCollector::visit(InfiniteLoopExpression& node) {
     
     root->enterScope(Scope::ScopeType::Loop, &node);
     
-    auto body = std::move(node.blockexpression);
-    if (body) {
-        body->accept(*this);
+    if (node.blockexpression) {
+        node.blockexpression->accept(*this);
     }
     
     root->exitScope();
@@ -226,14 +221,12 @@ void SymbolCollector::visit(PredicateLoopExpression& node) {
     
     root->enterScope(Scope::ScopeType::Loop, &node);
     
-    auto conditions = std::move(node.conditions);
-    if (conditions) {
-        conditions->accept(*this);
+    if (node.conditions) {
+        node.conditions->accept(*this);
     }
     
-    auto body = std::move(node.blockexpression);
-    if (body) {
-        body->accept(*this);
+    if (node.blockexpression) {
+        node.blockexpression->accept(*this);
     }
     
     root->exitScope();
@@ -332,14 +325,13 @@ void SymbolCollector::collectEnumSymbol(Enumeration& node) {
 }
 
 void SymbolCollector::collectVariantSymbols(Enumeration& node) {
-    auto variants = std::move(node.enumvariants);
-    if (!variants) {
+    if (!node.enumvariants) {
         return;
     }
     
     std::string enumName = node.identifier;
     
-    for (const auto& variant : variants->enumvariants) {
+    for (const auto& variant : node.enumvariants->enumvariants) {
         std::string variantName = variant->identifier;
         
         VariantSymbol::VariantKind variantKind = VariantSymbol::VariantKind::Unit;
@@ -397,12 +389,11 @@ void SymbolCollector::collectImplSymbol(InherentImpl& node) {
 
 void SymbolCollector::collectAssociatedItem(AssociatedItem& item, 
                                             std::shared_ptr<ImplSymbol> implSymbol) {
-    auto itemContent = std::move(item.consttantitem_or_function);
-    if (!itemContent) return;
+    if (!item.consttantitem_or_function) return;
     
-    if (auto function = dynamic_cast<Function*>(itemContent.get())) {
+    if (auto function = dynamic_cast<Function*>(item.consttantitem_or_function.get())) {
         collectAssociatedFunction(*function, implSymbol);
-    } else if (auto constant = dynamic_cast<ConstantItem*>(itemContent.get())) {
+    } else if (auto constant = dynamic_cast<ConstantItem*>(item.consttantitem_or_function.get())) {
         collectAssociatedConstant(*constant, implSymbol);
     }
 }
@@ -425,9 +416,8 @@ void SymbolCollector::collectAssociatedItem(AssociatedItem& item,
     
     implSymbol->items.push_back(funcSymbol);
     root->enterScope(Scope::ScopeType::Function, &function);
-    auto params = std::move(function.functionparameters);
-    if (params) {
-        for (const auto& param : params->functionparams) {
+    if (function.functionparameters) {
+        for (const auto& param : function.functionparameters->functionparams) {
             param->accept(*this);
         }
     }

@@ -18,7 +18,7 @@ int main() {
         std::cout << "-1\n";
         return 0;
     }
-    CompleteSemanticAnalyzer semantic(std::move(crate));
+    CompleteSemanticAnalyzer semantic(crate);
     bool success = semantic.analyze();
     std::cout << (success ? "0\n" : "-1\n");
 }

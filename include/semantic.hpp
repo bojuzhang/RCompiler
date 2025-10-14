@@ -9,7 +9,7 @@
 
 class CompleteSemanticAnalyzer {
 private:
-    std::unique_ptr<Crate> ast;
+    std::shared_ptr<Crate> ast;
     std::shared_ptr<ScopeTree> scopeTree;
     std::shared_ptr<ConstantEvaluator> constantEvaluator;
     std::shared_ptr<ControlFlowAnalyzer> controlFlowAnalyzer;
@@ -19,7 +19,7 @@ private:
     bool hasErrors = false;
 
 public:
-    CompleteSemanticAnalyzer(std::unique_ptr<Crate> ast);
+    CompleteSemanticAnalyzer(std::shared_ptr<Crate> ast);
     
     bool analyze();
     bool hasAnalysisErrors() const;

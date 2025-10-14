@@ -47,16 +47,15 @@ void ControlFlowAnalyzer::visit(Function& node) {
     pushNode(node);
     
     // 分析函数体控制流
-    auto body = std::move(node.blockexpression);
-    if (body) {
-        body->accept(*this);
+    if (node.blockexpression) {
+        node.blockexpression->accept(*this);
         
         // 检查函数返回类型
-        auto returnType = std::move(node.functionreturntype->type);
-        auto bodyType = getNodeType(body.get());
+        auto returnType = node.functionreturntype->type;
+        auto bodyType = getNodeType(node.blockexpression.get());
         
         // 如果函数体发散，则不需要返回语句
-        if (bodyType && bodyType->tostring() != "!" && getControlFlow(body.get()) == ControlFlow::Diverges) {
+        if (bodyType && bodyType->tostring() != "!" && getControlFlow(node.blockexpression.get()) == ControlFlow::Diverges) {
             // 需要检查是否有return语句或发散表达式
         }
     }
@@ -72,9 +71,8 @@ void ControlFlowAnalyzer::visit(ConstantItem& node) {
     inConstContext = true;
     
     // 分析常量表达式
-    auto expr = std::move(node.expression);
-    if (expr) {
-        expr->accept(*this);
+    if (node.expression) {
+        node.expression->accept(*this);
         
         // 检查是否可以在编译时求值
         if (!constantEvaluator->getConstantValue(node.identifier)) {
@@ -127,13 +125,12 @@ void ControlFlowAnalyzer::visit(InfiniteLoopExpression& node) {
     enterLoop();
     
     // 分析循环体
-    auto body = std::move(node.blockexpression);
-    if (body) {
-        body->accept(*this);
+    if (node.blockexpression) {
+        node.blockexpression->accept(*this);
     }
     
     // 无限循环本身发散（除非有break）
-    ControlFlow bodyFlow = getControlFlow(body.get());
+    ControlFlow bodyFlow = getControlFlow(node.blockexpression.get());
     if (bodyFlow != ControlFlow::Breaks) {
         // 循环体没有break，整个循环发散
         nodeControlFlow[&node] = ControlFlow::Diverges;
@@ -157,15 +154,13 @@ void ControlFlowAnalyzer::visit(PredicateLoopExpression& node) {
     enterLoop();
     
     // 分析条件
-    auto conditions = std::move(node.conditions);
-    if (conditions) {
-        conditions->accept(*this);
+    if (node.conditions) {
+        node.conditions->accept(*this);
     }
     
     // 分析循环体
-    auto body = std::move(node.blockexpression);
-    if (body) {
-        body->accept(*this);
+    if (node.blockexpression) {
+        node.blockexpression->accept(*this);
     }
     
     // 谓词循环：条件为false时退出
@@ -182,19 +177,16 @@ void ControlFlowAnalyzer::visit(IfExpression& node) {
     pushNode(node);
     
     // 分析条件
-    auto conditions = std::move(node.conditions);
-    if (conditions) {
-        conditions->accept(*this);
+    if (node.conditions) {
+        node.conditions->accept(*this);
     }
     
     // 分析if分支
-    auto ifBlock = std::move(node.ifblockexpression);
-    ifBlock->accept(*this);
+    node.ifblockexpression->accept(*this);
     
     // 分析else分支（如果有）
-    auto elseExpr = std::move(node.elseexpression);
-    if (elseExpr) {
-        elseExpr->accept(*this);
+    if (node.elseexpression) {
+        node.elseexpression->accept(*this);
     }
     
     // 分析控制流
@@ -223,9 +215,8 @@ void ControlFlowAnalyzer::visit(BreakExpression& node) {
     alwaysDiverges[&node] = true;
     
     // 分析break值（如果有）
-    auto expr = std::move(node.expression);
-    if (expr) {
-        expr->accept(*this);
+    if (node.expression) {
+        node.expression->accept(*this);
     }
     
     popNode();
@@ -254,9 +245,8 @@ void ControlFlowAnalyzer::visit(ReturnExpression& node) {
     alwaysDiverges[&node] = true;
     
     // 分析返回值
-    auto expr = std::move(node.expression);
-    if (expr) {
-        expr->accept(*this);
+    if (node.expression) {
+        node.expression->accept(*this);
     }
     
     popNode();
@@ -266,9 +256,8 @@ void ControlFlowAnalyzer::visit(LetStatement& node) {
     pushNode(node);
     
     // 分析初始值表达式
-    auto expr = std::move(node.expression);
-    if (expr) {
-        expr->accept(*this);
+    if (node.expression) {
+        node.expression->accept(*this);
     }
     
     // let语句不影响控制流
@@ -281,14 +270,13 @@ void ControlFlowAnalyzer::visit(ExpressionStatement& node) {
     pushNode(node);
     
     // 分析表达式
-    auto expr = std::move(node.astnode);
-    if (expr) {
-        expr->accept(*this);
+    if (node.astnode) {
+        node.astnode->accept(*this);
         
         // 表达式语句的控制流由表达式决定
-        nodeControlFlow[&node] = getControlFlow(expr.get());
-        nodeTypes[&node] = getNodeType(expr.get());
-        alwaysDiverges[&node] = alwaysDivergesAt(expr.get());
+        nodeControlFlow[&node] = getControlFlow(node.astnode.get());
+        nodeTypes[&node] = getNodeType(node.astnode.get());
+        alwaysDiverges[&node] = alwaysDivergesAt(node.astnode.get());
     }
     
     popNode();
@@ -324,14 +312,13 @@ ControlFlow ControlFlowAnalyzer::analyzeBlockControlFlow(BlockExpression& block)
 
 ControlFlow ControlFlowAnalyzer::analyzeIfControlFlow(IfExpression& ifExpr) {
     auto ifFlow = getControlFlow(ifExpr.ifblockexpression.get());
-    auto elseExpr = std::move(ifExpr.elseexpression);
     
-    if (!elseExpr) {
+    if (!ifExpr.elseexpression) {
         // 没有else分支，if表达式不影响控制流
         return ControlFlow::Continues;
     }
     
-    auto elseFlow = getControlFlow(elseExpr.get());
+    auto elseFlow = getControlFlow(ifExpr.elseexpression.get());
     
     // 如果两个分支都发散，则整个if表达式发散
     if ((ifFlow == ControlFlow::Diverges || ifFlow == ControlFlow::Returns || 
@@ -345,12 +332,11 @@ ControlFlow ControlFlowAnalyzer::analyzeIfControlFlow(IfExpression& ifExpr) {
 }
 
 ControlFlow ControlFlowAnalyzer::analyzeLoopControlFlow(InfiniteLoopExpression& loop) {
-    auto body = std::move(loop.blockexpression);
-    if (!body) {
+    if (!loop.blockexpression) {
         return ControlFlow::Continues;
     }
     
-    auto bodyFlow = getControlFlow(body.get());
+    auto bodyFlow = getControlFlow(loop.blockexpression.get());
     
     // 如果循环体没有break，则循环发散
     if (bodyFlow != ControlFlow::Breaks) {
@@ -392,14 +378,13 @@ std::shared_ptr<SemanticType> ControlFlowAnalyzer::inferBlockType(BlockExpressio
 
 std::shared_ptr<SemanticType> ControlFlowAnalyzer::inferIfType(IfExpression& ifExpr) {
     auto ifType = getNodeType(ifExpr.ifblockexpression.get());
-    auto elseExpr = std::move(ifExpr.elseexpression);
     
-    if (!elseExpr) {
+    if (!ifExpr.elseexpression) {
         // 没有else分支，返回unit类型
         return std::make_shared<SimpleType>("()");
     }
     
-    auto elseType = getNodeType(elseExpr.get());
+    auto elseType = getNodeType(ifExpr.elseexpression.get());
     
     // 如果两个分支都发散，则类型为!
     if (ifType && ifType->tostring() == "!" && elseType && elseType->tostring() == "!") {
@@ -411,8 +396,7 @@ std::shared_ptr<SemanticType> ControlFlowAnalyzer::inferIfType(IfExpression& ifE
 }
 
 std::shared_ptr<SemanticType> ControlFlowAnalyzer::inferLoopType(InfiniteLoopExpression& loop) {
-    auto body = std::move(loop.blockexpression);
-    if (!body) {
+    if (!loop.blockexpression) {
         return std::make_shared<SimpleType>("()");
     }
     

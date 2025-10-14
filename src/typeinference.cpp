@@ -162,8 +162,7 @@ void TypeInferenceChecker::visit(Function& node) {
     
     // 设置函数返回类型上下文
     std::string previousReturnType = currentFunctionReturnType;
-    auto returnTypeNode = std::move(node.functionreturntype->type);
-    currentFunctionReturnType = returnTypeNode ? dynamic_cast<TypePath*>(returnTypeNode.get())->simplepathsegement->identifier : "()";
+    currentFunctionReturnType = node.functionreturntype->type ? dynamic_cast<TypePath*>(node.functionreturntype->type.get())->simplepathsegement->identifier : "()";
     
     enterFunctionContext(currentFunctionReturnType);
     
@@ -171,25 +170,23 @@ void TypeInferenceChecker::visit(Function& node) {
     scopeTree->enterScope(Scope::ScopeType::Function, &node);
     
     // 处理函数参数类型
-    auto params = std::move(node.functionparameters);
-    if (params) {
-        for (const auto& param : params->functionparams) {
+    if (node.functionparameters) {
+        for (const auto& param : node.functionparameters->functionparams) {
             param->accept(*this);
         }
     }
     
     // 处理函数体类型
-    auto body = std::move(node.blockexpression);
-    if (body) {
+    if (node.blockexpression) {
         // 设置期望的返回类型
         pushExpectedType(std::make_shared<SimpleType>(currentFunctionReturnType));
-        body->accept(*this);
+        node.blockexpression->accept(*this);
         popExpectedType();
         
         // 检查函数体类型与返回类型是否兼容
-        auto bodyType = getInferredType(body.get());
+        auto bodyType = getInferredType(node.blockexpression.get());
         if (bodyType && !areTypesCompatible(std::make_shared<SimpleType>(currentFunctionReturnType), bodyType)) {
-            reportTypeError(currentFunctionReturnType, bodyType->tostring(), body.get());
+            reportTypeError(currentFunctionReturnType, bodyType->tostring(), node.blockexpression.get());
         }
     }
     
@@ -205,44 +202,41 @@ void TypeInferenceChecker::visit(LetStatement& node) {
     pushNode(node);
     
     // 获取声明的类型
-    auto declaredType = std::move(node.type);
     std::shared_ptr<SemanticType> type;
     
-    if (declaredType) {
+    if (node.type) {
         // 有显式类型注解
-        declaredType->accept(*this);
-        type = getInferredType(declaredType.get());
+        node.type->accept(*this);
+        type = getInferredType(node.type.get());
     } else {
         // 类型推断：创建新的类型变量
         type = typeEnv->freshTypeVariable();
     }
     
     // 检查模式
-    auto pattern = std::move(node.patternnotopalt);
-    if (pattern) {
+    if (node.patternnotopalt) {
         // 设置期望的类型用于模式检查
         pushExpectedType(type);
-        pattern->accept(*this);
+        node.patternnotopalt->accept(*this);
         popExpectedType();
     }
     
     // 检查初始化表达式
-    auto initExpr = std::move(node.expression);
-    if (initExpr) {
+    if (node.expression) {
         // 设置期望的类型
         pushExpectedType(type);
-        initExpr->accept(*this);
+        node.expression->accept(*this);
         popExpectedType();
         
         // 检查初始化表达式类型与声明类型是否兼容
-        auto initType = getInferredType(initExpr.get());
+        auto initType = getInferredType(node.expression.get());
         if (initType && type) {
             addTypeConstraint(initType, type);
         }
     }
     
     // 记录变量类型
-    if (auto identPattern = dynamic_cast<IdentifierPattern*>(pattern.get())) {
+    if (auto identPattern = dynamic_cast<IdentifierPattern*>(node.patternnotopalt.get())) {
         std::string varName = identPattern->identifier;
         setVariableType(varName, type);
     }
@@ -253,9 +247,8 @@ void TypeInferenceChecker::visit(LetStatement& node) {
 void TypeInferenceChecker::visit(ExpressionStatement& node) {
     pushNode(node);
     
-    auto expr = std::move(node.astnode);
-    if (expr) {
-        expr->accept(*this);
+    if (node.astnode) {
+        node.astnode->accept(*this);
         
         // 表达式语句的类型是unit，但表达式的类型用于检查
         inferredTypes[&node] = std::make_shared<SimpleType>("()");
@@ -267,8 +260,7 @@ void TypeInferenceChecker::visit(ExpressionStatement& node) {
 void TypeInferenceChecker::visit(PathExpression& node) {
     pushNode(node);
     
-    auto path = std::move(node.simplepath);
-    if (path) {
+    if (node.simplepath) {
         std::shared_ptr<SemanticType> type = inferPathType(node);
         if (type) {
             inferredTypes[&node] = type;
@@ -358,14 +350,13 @@ void TypeInferenceChecker::visit(ReturnExpression& node) {
     pushNode(node);
     
     // 检查返回表达式类型与函数返回类型是否兼容
-    auto expr = std::move(node.expression);
-    if (expr) {
+    if (node.expression) {
         // 设置期望的返回类型
         pushExpectedType(std::make_shared<SimpleType>(currentFunctionReturnType));
-        expr->accept(*this);
+        node.expression->accept(*this);
         popExpectedType();
         
-        auto exprType = getInferredType(expr.get());
+        auto exprType = getInferredType(node.expression.get());
         if (exprType) {
             addTypeConstraint(exprType, std::make_shared<SimpleType>(currentFunctionReturnType));
         }
@@ -422,8 +413,8 @@ std::shared_ptr<SemanticType> TypeInferenceChecker::inferPathType(PathExpression
 }
 
 std::shared_ptr<SemanticType> TypeInferenceChecker::inferCallType(CallExpression& expr) {
-    auto callee = std::move(expr.expression);
-    auto params = std::move(expr.callparams);
+    auto callee = expr.expression;
+    auto params = expr.callparams;
     
     if (!callee) return nullptr;
     
@@ -441,9 +432,8 @@ std::shared_ptr<SemanticType> TypeInferenceChecker::inferCallType(CallExpression
     // 这里需要根据callee的类型信息来解析
     // 简化处理：假设callee是路径表达式
     if (auto pathExpr = dynamic_cast<PathExpression*>(callee.get())) {
-        auto path = std::move(pathExpr->simplepath);
-        if (path) {
-            auto segments = std::move(path->simplepathsegements);
+        if (pathExpr->simplepath) {
+            auto segments = pathExpr->simplepath->simplepathsegements;
             if (!segments.empty()) {
                 std::string functionName = segments.back()->identifier;
                 return resolveFunctionType(functionName, argTypes);
@@ -457,8 +447,7 @@ std::shared_ptr<SemanticType> TypeInferenceChecker::inferCallType(CallExpression
 }
 
 std::shared_ptr<SemanticType> TypeInferenceChecker::inferFieldAccessType(FieldExpression& expr) {
-    auto baseExpr = std::move(expr.expression);
-    std::string fieldName = expr.identifier;
+    auto baseExpr = expr.expression;
     
     if (!baseExpr) return nullptr;
     
@@ -473,24 +462,24 @@ std::shared_ptr<SemanticType> TypeInferenceChecker::inferFieldAccessType(FieldEx
     std::string baseTypeName = baseType->tostring();
     
     // 查找结构体字段
-    auto fieldType = getStructFieldType(baseTypeName, fieldName);
+    auto fieldType = getStructFieldType(baseTypeName, expr.identifier);
     if (fieldType) {
         return fieldType;
     }
     
     // 查找枚举variant
-    auto variantType = getEnumVariantType(baseTypeName, fieldName);
+    auto variantType = getEnumVariantType(baseTypeName, expr.identifier);
     if (variantType) {
         return variantType;
     }
     
-    reportUndefinedError(fieldName, "field", &expr);
+    reportUndefinedError(expr.identifier, "field", &expr);
     return nullptr;
 }
 
 std::shared_ptr<SemanticType> TypeInferenceChecker::inferBinaryExpressionType(BinaryExpression& expr) {
-    auto left = std::move(expr.leftexpression);
-    auto right = std::move(expr.rightexpression);
+    auto left = expr.leftexpression;
+    auto right = expr.rightexpression;
     Token op = expr.binarytype;
     
     if (!left || !right) return nullptr;
@@ -548,9 +537,9 @@ std::shared_ptr<SemanticType> TypeInferenceChecker::inferBinaryExpressionType(Bi
 }
 
 std::shared_ptr<SemanticType> TypeInferenceChecker::inferIfExpressionType(IfExpression& expr) {
-    auto condition = std::move(expr.conditions);
-    auto ifBlock = std::move(expr.ifblockexpression);
-    auto elseExpr = std::move(expr.elseexpression);
+    auto condition = expr.conditions;
+    auto ifBlock = expr.ifblockexpression;
+    auto elseExpr = expr.elseexpression;
     
     if (!condition || !ifBlock) return nullptr;
     
@@ -616,8 +605,8 @@ std::shared_ptr<SemanticType> TypeInferenceChecker::inferBlockExpressionType(Blo
 }
 
 std::shared_ptr<SemanticType> TypeInferenceChecker::inferAssignmentType(AssignmentExpression& expr) {
-    auto lhs = std::move(expr.leftexpression);
-    auto rhs = std::move(expr.rightexpression);
+    auto lhs = expr.leftexpression;
+    auto rhs = expr.rightexpression;
     
     if (!lhs || !rhs) return nullptr;
     
@@ -649,7 +638,7 @@ std::shared_ptr<SemanticType> TypeInferenceChecker::inferAssignmentType(Assignme
 
 // 路径解析
 std::shared_ptr<SemanticType> TypeInferenceChecker::resolvePathType(SimplePath& path) {
-    auto segments = std::move(path.simplepathsegements);
+    auto segments = path.simplepathsegements;
     if (segments.empty()) {
         return nullptr;
     }
@@ -836,9 +825,8 @@ void TypeInferenceChecker::checkMutability(const std::string& varName, ASTNode* 
 void TypeInferenceChecker::checkAssignmentMutability(Expression& lhs) {
     // 检查左侧表达式是否可赋值
     if (auto pathExpr = dynamic_cast<PathExpression*>(&lhs)) {
-        auto path = std::move(pathExpr->simplepath);
-        if (path) {
-            auto segments = std::move(path->simplepathsegements);
+        if (pathExpr->simplepath) {
+            auto segments = pathExpr->simplepath->simplepathsegements;
             if (segments.size() == 1) {
                 std::string varName = segments[0]->identifier;
                 checkMutability(varName, &lhs);
