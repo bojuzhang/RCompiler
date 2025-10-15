@@ -3,6 +3,7 @@
 #include "symbol.hpp"
 #include "visitor.hpp"
 #include "scope.hpp"
+#include "typewrapper.hpp"
 #include <memory>
 #include <stack>
 #include <unordered_map>
@@ -176,4 +177,8 @@ private:
     void checkFieldMutability(FieldExpression& fieldExpr);
     void checkIndexMutability(IndexExpression& indexExpr);
     void reportMutabilityError(const std::string& name, const std::string& errorType, ASTNode* context);
+    
+    // 数组大小验证方法
+    void checkArraySizeMatch(ArrayTypeWrapper& declaredType, ArrayExpression& arrayExpr);
+    int64_t evaluateArraySize(Expression& sizeExpr);
 };

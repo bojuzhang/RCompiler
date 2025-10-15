@@ -650,9 +650,12 @@ std::shared_ptr<SemanticType> TypeChecker::inferLiteralExpressionType(LiteralExp
 }
 
 std::shared_ptr<SemanticType> TypeChecker::inferArrayExpressionType(ArrayExpression& expr) {
+    std::cerr << "DEBUG: inferArrayExpressionType called" << std::endl;
+    
     // 检查循环依赖
     auto nodeIt = nodeTypeMap.find(&expr);
     if (nodeIt != nodeTypeMap.end()) {
+        std::cerr << "DEBUG: Found cached result for array expression" << std::endl;
         return nodeIt->second;
     }
     
@@ -661,13 +664,10 @@ std::shared_ptr<SemanticType> TypeChecker::inferArrayExpressionType(ArrayExpress
     nodeTypeMap[&expr] = placeholder;
     
     if (!expr.arrayelements) {
+        std::cerr << "DEBUG: Array expression has no elements" << std::endl;
         nodeTypeMap.erase(&expr);
         return nullptr;
     }
-    
-    // 对于数组表达式，我们需要特别小心处理嵌套数组
-    // 如果是二维数组 [[u32; 3]; 2]，那么外层数组的元素是内层数组
-    // 我们需要避免在推断内层数组类型时再次递归调用 inferExpressionType
     
     std::shared_ptr<SemanticType> elementType = nullptr;
     
@@ -676,26 +676,22 @@ std::shared_ptr<SemanticType> TypeChecker::inferArrayExpressionType(ArrayExpress
         if (element) {
             std::shared_ptr<SemanticType> elemType;
             
-            // 如果元素是数组表达式，我们需要特殊处理
-            if (auto innerArrayExpr = dynamic_cast<ArrayExpression*>(element.get())) {
-                // 对于嵌套数组，我们直接创建一个数组类型而不递归推断
-                // 这样可以避免无限递归
-                if (innerArrayExpr->arrayelements && !innerArrayExpr->arrayelements->expressions.empty()) {
-                    // 假设内层数组的元素类型都是相同的，取第一个元素
-                    auto firstInnerElement = innerArrayExpr->arrayelements->expressions[0];
-                    if (firstInnerElement) {
-                        auto innerElementType = inferExpressionType(*firstInnerElement);
-                        if (innerElementType) {
-                            elemType = std::make_shared<ArrayTypeWrapper>(innerElementType, nullptr);
-                        }
-                    }
-                }
+            // 对于字面量，直接推断类型
+            if (auto literal = dynamic_cast<LiteralExpression*>(element.get())) {
+                elemType = inferLiteralExpressionType(*literal);
             } else {
-                // 非数组元素，正常推断类型
-                elemType = inferExpressionType(*element);
+                // 对于其他类型的表达式，递归推断（但要避免对数组表达式递归）
+                if (dynamic_cast<ArrayExpression*>(element.get())) {
+                    // 嵌套数组表达式，暂时跳过处理以避免无限递归
+                    std::cerr << "DEBUG: Skipping nested array expression to avoid infinite recursion" << std::endl;
+                    elemType = std::make_shared<SimpleType>("nested_array");
+                } else {
+                    elemType = inferExpressionType(*element);
+                }
             }
             
             if (!elemType) {
+                std::cerr << "DEBUG: Failed to infer element type" << std::endl;
                 nodeTypeMap.erase(&expr);
                 return nullptr;
             }
@@ -712,12 +708,14 @@ std::shared_ptr<SemanticType> TypeChecker::inferArrayExpressionType(ArrayExpress
     
     if (!elementType) {
         // 空数组，无法推断类型
+        std::cerr << "DEBUG: Empty array, cannot infer type" << std::endl;
         nodeTypeMap.erase(&expr);
         return nullptr;
     }
     
     auto result = std::make_shared<ArrayTypeWrapper>(elementType, nullptr);
     nodeTypeMap[&expr] = result; // 替换占位符
+    std::cerr << "DEBUG: Array expression type inferred successfully" << std::endl;
     return result;
 }
 
@@ -1149,9 +1147,31 @@ void TypeChecker::visit(LetStatement& node) {
     // 检查初始化表达式
     if (node.expression) {
         if (declaredType) {
-            // 对于有明确类型声明的let语句，我们简化处理
-            std::cerr << "DEBUG: Let statement expression type checking temporarily skipped for stability" << std::endl;
-            // 在实际实现中，这里应该进行更精确的类型检查，包括数组长度验证
+            // 对于有明确类型声明的let语句，进行完整的类型检查，包括数组长度验证
+            std::cerr << "DEBUG: Performing full type checking for let statement with declared type" << std::endl;
+            
+            // 推断初始化表达式的类型
+            auto initType = inferExpressionType(*node.expression);
+            if (!initType) {
+                reportError("Unable to infer type for let statement initializer");
+                popNode();
+                return;
+            }
+            
+            // 检查类型兼容性
+            if (!areTypesCompatible(declaredType, initType)) {
+                reportError("Type mismatch in let statement: expected '" + declaredType->tostring() +
+                           "', found '" + initType->tostring() + "'");
+                popNode();
+                return;
+            }
+            
+            // 特殊处理数组类型：进行大小验证
+            if (auto arrayType = dynamic_cast<ArrayTypeWrapper*>(declaredType.get())) {
+                if (auto arrayExpr = dynamic_cast<ArrayExpression*>(node.expression.get())) {
+                    checkArraySizeMatch(*arrayType, *arrayExpr);
+                }
+            }
         } else {
             // 没有声明类型，使用普通推断
             auto initType = inferExpressionType(*node.expression);
@@ -1168,9 +1188,82 @@ void TypeChecker::visit(LetStatement& node) {
         std::shared_ptr<SemanticType> varType = declaredType ? declaredType : std::make_shared<SimpleType>("inferred");
         checkPattern(*node.patternnotopalt, varType);
     }
-    
     popNode();
 }
+
+// 数组大小验证实现
+void TypeChecker::checkArraySizeMatch(ArrayTypeWrapper& declaredType, ArrayExpression& arrayExpr) {
+    std::cerr << "DEBUG: Checking array size match" << std::endl;
+    
+    // 获取声明的数组大小
+    auto sizeExpr = declaredType.getSizeExpression();
+    if (!sizeExpr) {
+        std::cerr << "DEBUG: No size expression found in declared array type" << std::endl;
+        return;
+    }
+    
+    int64_t declaredSize = evaluateArraySize(*sizeExpr);
+    if (declaredSize < 0) {
+        reportError("Invalid array size expression");
+        return;
+    }
+    
+    // 获取初始化数组的实际大小
+    if (!arrayExpr.arrayelements) {
+        reportError("Array expression has no elements");
+        return;
+    }
+    
+    int64_t actualSize = arrayExpr.arrayelements->expressions.size();
+    
+    std::cerr << "DEBUG: Declared size: " << declaredSize << ", Actual size: " << actualSize << std::endl;
+    
+    // 比较大小
+    if (declaredSize != actualSize) {
+        reportError("Array size mismatch: declared size " + std::to_string(declaredSize) +
+                   ", but initializer has " + std::to_string(actualSize) + " elements");
+    }
+}
+
+int64_t TypeChecker::evaluateArraySize(Expression& sizeExpr) {
+    std::cerr << "DEBUG: Evaluating array size expression" << std::endl;
+    
+    // 如果是字面量表达式，直接求值
+    if (auto literal = dynamic_cast<LiteralExpression*>(&sizeExpr)) {
+        if (literal->tokentype == Token::kINTEGER_LITERAL) {
+            try {
+                return std::stoll(literal->literal);
+            } catch (const std::exception& e) {
+                reportError("Invalid integer literal in array size: " + literal->literal);
+                return -1;
+            }
+        } else {
+            reportError("Array size must be an integer literal");
+            return -1;
+        }
+    }
+    
+    // 如果是路径表达式，尝试查找常量值
+    if (auto pathExpr = dynamic_cast<PathExpression*>(&sizeExpr)) {
+        if (pathExpr->simplepath && !pathExpr->simplepath->simplepathsegements.empty()) {
+            std::string constName = pathExpr->simplepath->simplepathsegements[0]->identifier;
+            
+            // 查找常量符号
+            auto symbol = findSymbol(constName);
+            if (symbol && symbol->kind == SymbolKind::Constant) {
+                // 这里应该获取常量的值，但当前实现简化处理
+                // 在完整的实现中，需要从常量求值器获取值
+                std::cerr << "DEBUG: Found constant reference: " << constName << " (value evaluation not implemented)" << std::endl;
+                reportError("Constant array size evaluation not fully implemented: " + constName);
+                return -1;
+            }
+        }
+    }
+    
+    reportError("Complex array size expressions not supported");
+    return -1;
+}
+
 
 void TypeChecker::visit(BlockExpression& node) {
     std::cerr << "DEBUG: TypeChecker visiting BlockExpression with " << node.statements.size() << " statements" << std::endl;
