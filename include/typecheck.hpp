@@ -145,6 +145,10 @@ private:
     std::shared_ptr<SemanticType> inferBinaryExpressionType(BinaryExpression& expr);
     std::shared_ptr<SemanticType> inferCallExpressionType(CallExpression& expr);
     std::shared_ptr<SemanticType> inferMethodCallExpressionType(MethodCallExpression& expr);
+    std::shared_ptr<SemanticType> inferArrayExpressionType(ArrayExpression& expr);
+    std::shared_ptr<SemanticType> inferConstantExpressionType(Expression& expr, std::shared_ptr<SemanticType> expectedType);
+    std::shared_ptr<SemanticType> inferArrayExpressionTypeWithExpected(ArrayExpression& expr, std::shared_ptr<SemanticType> expectedType);
+    std::shared_ptr<SemanticType> inferLiteralExpressionType(LiteralExpression& expr);
     
     void reportError(const std::string& message);
     void reportUndefinedType(const std::string& typeName, ASTNode* context);
