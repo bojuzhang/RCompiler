@@ -15,7 +15,7 @@ from typing import Dict, List, Tuple, Optional
 from collections import defaultdict
 
 class TestEvaluator:
-    def __init__(self, test_dir: str = "RCompiler-Testcases/semantic-1", compiler_path: str = "build/code", timeout: int = 15):
+    def __init__(self, test_dir: str = "../RCompiler-Testcases/semantic-1", compiler_path: str = "../build/code", timeout: int = 15):
         self.test_dir = Path(test_dir)
         self.compiler_path = Path(compiler_path)
         self.timeout = timeout
@@ -399,14 +399,14 @@ def main():
     print("="*50)
     
     # 检查编译器是否存在
-    compiler_path = Path("build/code")
+    compiler_path = Path("../build/code")
     if not compiler_path.exists():
         print(f"错误: 编译器不存在于 {compiler_path}")
         print("请先编译项目: cd build && make")
         sys.exit(1)
     
     # 检查测试目录是否存在
-    test_dir = Path("RCompiler-Testcases/semantic-1")
+    test_dir = Path("../RCompiler-Testcases/semantic-1")
     if not test_dir.exists():
         print(f"错误: 测试目录不存在于 {test_dir}")
         sys.exit(1)

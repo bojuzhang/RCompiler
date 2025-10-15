@@ -238,10 +238,17 @@ void SymbolCollector::visit(PredicateLoopExpression& node) {
 void SymbolCollector::collectFunctionSymbol(Function& node) {
     std::string funcName = node.identifier_name;
     
+    std::shared_ptr<SemanticType> returnType;
+    if (node.functionreturntype != nullptr && node.functionreturntype->type != nullptr) {
+        returnType = resolveTypeFromNode(*node.functionreturntype->type);
+    } else {
+        returnType = createSimpleType("unit");
+    }
+    
     auto funcSymbol = std::make_shared<FunctionSymbol>(
         funcName,
         std::vector<std::shared_ptr<Symbol>>{},  // 参数稍后添加
-        resolveTypeFromNode(*node.functionreturntype->type),
+        returnType,
         false
     );
     

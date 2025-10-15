@@ -58,7 +58,8 @@ std::shared_ptr<Expression> Parser::parseExpressionPratt(int minbp) {
 }
 std::shared_ptr<Expression> Parser::parsePrefixPratt() {
     auto type = peek();
-    advance();
+    // std::cerr << "prefix: " << to_string(type) << " " << pos << "\n";
+    // advance();
     switch (type) {
         case Token::kINTEGER_LITERAL:
         case Token::kCHAR_LITERAL:
@@ -67,8 +68,12 @@ std::shared_ptr<Expression> Parser::parsePrefixPratt() {
         case Token::kRAW_STRING_LITERAL:
         case Token::kRAW_C_STRING_LITERAL:
         case Token::ktrue:
-        case Token::kfalse:
-            return std::make_shared<LiteralExpression>(getstring(), type);
+        case Token::kfalse: {
+            auto string = getstring();
+            advance();
+            return std::make_shared<LiteralExpression>(string, type);
+        }
+            
         case Token::kleftParenthe:
             return parseGroupedExpression();
 
@@ -79,39 +84,53 @@ std::shared_ptr<Expression> Parser::parsePrefixPratt() {
             return parseUnaryExpression();
         case Token::kbreak:
             return parseBreakExpression();
-        case Token::kcontinue:
+        case Token::kcontinue: {
+            advance();
             return std::make_shared<ContinueExpression>();
+        }
         case Token::kreturn:
             return parseReturnExpression();
-        case Token::kUnderscore:
+        case Token::kUnderscore:  {
+            advance();
             return std::make_shared<UnderscoreExpression>();
+        }
         
         case Token::kPathSep:
         case Token::kIDENTIFIER: 
             return parsePathExpression();            
 
-        case Token::kEnd:
+        case Token::kEnd: {
+            advance();
             return nullptr;
+        }
         
         default:
-            throw std::runtime_error("invalid Prefix");
+            return nullptr;
     }
 }
 std::shared_ptr<Expression> Parser::parseInfixPratt(std::shared_ptr<Expression> lhs, int minbp) {
     while (true) {
         auto type = peek();
-        if (type == Token::kEnd || type == Token::krightParenthe || type == Token::krightCurly || type == Token::kRightSquare) break;
+        // std::cerr << "INFIX: " << to_string(type) << " at position " << pos << " minbp=" << minbp << std::endl;
+        if (type == Token::kEnd || type == Token::krightParenthe || type == Token::krightCurly || type == Token::kRightSquare) {
+            // std::cerr << "INFIX: Breaking due to terminator: " << to_string(type) << std::endl;
+            break;
+        }
 
         int leftbp = getLeftTokenBP(type);
+        // std::cerr << "INFIX: leftbp for " << to_string(type) << " is " << leftbp << std::endl;
         if (leftbp < minbp) {
+            // std::cerr << "INFIX: Breaking due to precedence: leftbp " << leftbp << " < minbp " << minbp << std::endl;
             break;
         }
         advance();
 
         if (type == Token::kleftParenthe) {
+            // std::cerr << "INFIX: Parsing call expression" << std::endl;
             lhs = parseCallExpressionFromInfix(std::move(lhs));
         } else if (type == Token::kleftSquare) {
-            lhs = parseIndexExpression();
+            // std::cerr << "INFIX: Parsing index expression" << std::endl;
+            lhs = parseIndexExpressionFromInfix(std::move(lhs));
         }
         // else if (type == Token::kDot) {
         //     lhs = parseMethodCallExpression();
@@ -119,6 +138,7 @@ std::shared_ptr<Expression> Parser::parseInfixPratt(std::shared_ptr<Expression> 
         else if (type == Token::kas) {
             lhs = parseTypeCastExpression();
         } else {
+            // std::cerr << "INFIX: Parsing binary expression with rightbp=" << getRightTokenBP(type) << std::endl;
             int rightbp = getRightTokenBP(type);
             auto rhs = parseExpressionPratt(rightbp);
             lhs = std::make_shared<BinaryExpression>(std::move(lhs), std::move(rhs), type);
@@ -211,14 +231,20 @@ std::shared_ptr<GroupedExpression> Parser::parseGroupedExpression() {
     return std::make_shared<GroupedExpression>(std::move(expression));
 }
 std::shared_ptr<ArrayExpression> Parser::parseArrayExpression() {
+    // std::cerr << "ARRAY: Starting array expression at position " << pos << std::endl;
     if (match(Token::kleftSquare)) {
+        // std::cerr << "ARRAY: Consuming leftSquare at position " << pos << std::endl;
         advance();
     }
     auto arrayelements = parseArrayElements();
+    // std::cerr << "ARRAY: Looking for RightSquare at position " << pos << ", current token: " << to_string(peek()) << std::endl;
     if (!match(Token::kRightSquare)) {
+        // std::cerr << "ARRAY: ERROR - Expected RightSquare but found: " << to_string(peek()) << std::endl;
         return nullptr;
     }
+    // std::cerr << "ARRAY: Consuming RightSquare at position " << pos << std::endl;
     advance();
+    // std::cerr << "ARRAY: Successfully parsed array expression" << std::endl;
     return std::make_shared<ArrayExpression>(std::move(arrayelements));
 }
 std::shared_ptr<UnaryExpression> Parser::parseUnaryExpression() {
@@ -279,17 +305,35 @@ std::shared_ptr<CallExpression> Parser::parseCallExpressionFromInfix(std::shared
     return std::make_shared<CallExpression>(std::move(callee), std::move(callparams));
 }
 std::shared_ptr<IndexExpression> Parser::parseIndexExpression() {
+    // std::cerr << "parseIndexExpression called, pos=" << pos << std::endl;
     auto expressionout = parseExpression();
     if (!match(Token::kleftSquare)) {
+        // std::cerr << "parseIndexExpression: expected leftSquare" << std::endl;
         return nullptr;
     }
     advance();
     auto expressionin = parseExpression();
     if (!match(Token::kRightSquare)) {
+        // std::cerr << "parseIndexExpression: expected RightSquare" << std::endl;
         return nullptr;
     }
     advance();
+    // std::cerr << "parseIndexExpression: success" << std::endl;
     return std::make_shared<IndexExpression>(std::move(expressionout), std::move(expressionin));
+}
+
+// 新增：用于中缀解析的索引表达式解析，接收已解析的左侧表达式
+std::shared_ptr<IndexExpression> Parser::parseIndexExpressionFromInfix(std::shared_ptr<Expression> lhs) {
+    // std::cerr << "parseIndexExpressionFromInfix called, pos=" << pos << std::endl;
+    // 此时左方括号已经被 advance() 消费了
+    auto expressionin = parseExpression();
+    if (!match(Token::kRightSquare)) {
+        // std::cerr << "parseIndexExpressionFromInfix: expected RightSquare" << std::endl;
+        return nullptr;
+    }
+    advance();
+    // std::cerr << "parseIndexExpressionFromInfix: success" << std::endl;
+    return std::make_shared<IndexExpression>(std::move(lhs), std::move(expressionin));
 }
 std::shared_ptr<TypeCastExpression> Parser::parseTypeCastExpression() {
     auto expression = parseExpression();
@@ -361,22 +405,28 @@ std::shared_ptr<SimplePath> Parser::parseSimplePath() {
 }
 
 std::shared_ptr<ArrayElements> Parser::parseArrayElements() {
+    // std::cerr << "ARRAY_ELEMENTS: Starting at position " << pos << std::endl;
     auto expression = parseExpression();
     std::vector<std::shared_ptr<Expression>> vec;
     vec.push_back(std::move(expression));
     if (match(Token::kSemi)) {
+        // std::cerr << "ARRAY_ELEMENTS: Found semi-colon, parsing repeated array" << std::endl;
         advance();
         auto expression2 = parseExpression();
         vec.push_back(std::move(expression2));
         return std::make_shared<ArrayElements>(std::move(vec), true);
     }
     while (match(Token::kComma)) {
+        // std::cerr << "ARRAY_ELEMENTS: Found comma at position " << pos << ", parsing next element" << std::endl;
         advance();
         auto expression2 = parseExpression();
         if (expression2 != nullptr) {
             vec.push_back(std::move(expression2));
+        } else {
+            break;
         }
     }
+    // std::cerr << "ARRAY_ELEMENTS: Finished parsing " << vec.size() << " elements" << std::endl;
     return std::make_shared<ArrayElements>(std::move(vec), false);
 }
 // std::unique_ptr<TupleElements> Parser::parseTupleElements() {

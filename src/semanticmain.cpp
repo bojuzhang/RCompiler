@@ -6,12 +6,8 @@
 #include <utility>
 
 int main() {
-    std::string code, s;
-    while (std::getline(std::cin, s)) {
-        code += s;
-    }
     Lexer lex;
-    auto tokens = lex.lexString(code);
+    auto tokens = lex.lexString(lex.getString());
     Parser parser(tokens);
     auto crate = parser.parseCrate();
     if (crate == nullptr) {

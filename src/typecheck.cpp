@@ -23,14 +23,14 @@ bool TypeChecker::hasTypeErrors() const {
 
 void TypeChecker::visit(Crate& node) {
     pushNode(node);
-    
+        
     // 检查crate中的所有item
     for (const auto& item : node.items) {
         if (item) {
             item->accept(*this);
         }
     }
-    
+
     for (const auto& [traitName, implementations] : traitImplementations) {
         auto requirementsIt = traitRequirements.find(traitName);
         if (requirementsIt != traitRequirements.end()) {
@@ -67,10 +67,14 @@ void TypeChecker::visit(Function& node) {
     scopeTree->enterScope(Scope::ScopeType::Function, &node);
     
     // 检查参数类型
-    checkFunctionParameters(*node.functionparameters);
+    if (node.functionparameters) {
+        checkFunctionParameters(*node.functionparameters);
+    }
     
     // 检查返回类型
-    checkFunctionReturnType(*node.functionreturntype);
+    if (node.functionreturntype) {
+        checkFunctionReturnType(*node.functionreturntype);
+    }
     
     // 检查函数体
     checkFunctionBody(node);
@@ -386,16 +390,26 @@ void TypeChecker::checkFunctionParameters(FunctionParameters& params) {
 }
 
 void TypeChecker::checkFunctionReturnType(FunctionReturnType& returnType) {
-    auto type = checkType(*returnType.type);
-    if (!type) {
-        reportError("Invalid return type in function");
+    // 修复：检查type是否为空指针
+    if (returnType.type != nullptr) {
+        auto type = checkType(*returnType.type);
+        if (!type) {
+            reportError("Invalid return type in function");
+        }
     }
 }
 
 void TypeChecker::checkFunctionBody(Function& function) {
     if (function.blockexpression) {
-        // 设置期望的返回类型
-        pushExpectedType(checkType(*function.functionreturntype->type));
+        // 修复：检查functionreturntype是否为空指针
+        if (function.functionreturntype != nullptr && function.functionreturntype->type != nullptr) {
+            // 设置期望的返回类型
+            pushExpectedType(checkType(*function.functionreturntype->type));
+        } else {
+            // 如果没有显式返回类型，设置默认的unit类型
+            pushExpectedType(std::make_shared<SimpleType>("unit"));
+        }
+        
         function.blockexpression->accept(*this);
         popExpectedType();
     }

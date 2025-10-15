@@ -3,6 +3,7 @@
 #include <sstream>
 
 std::vector<std::pair<Token, std::string>> Lexer::lexString(std::string s) {
+    // std::cerr << s << "\n";
     std::vector<std::pair<Token, std::string>> ans;
     size_t i = 0;
     while (i < s.size()) {
@@ -24,11 +25,18 @@ std::vector<std::pair<Token, std::string>> Lexer::lexString(std::string s) {
         }
         
         if (bestlen > 0) {
-            ans.push_back(bestmatch);
+            if (bestmatch.first != Token::kCOMMENT) {
+                ans.push_back(bestmatch);
+            }
             i += bestlen - 1;
         }
         i++;
     }
+
+    // for (size_t i = 0; i < ans.size(); i++) {
+    //     auto p = ans[i];
+    //     std::cerr << i << " " << to_string(p.first) << " " << p.second << "\n";
+    // }
 
     return ans;
 }

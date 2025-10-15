@@ -92,7 +92,7 @@ private:
                 
             case Token::kreturn:
             case Token::kbreak:
-                return FLOW_CONTROL; 
+                return FLOW_CONTROL;
                 
             default:
                 return -1; // 非运算符
@@ -151,6 +151,7 @@ public:
     std::shared_ptr<CallExpression> parseCallExpression();
     std::shared_ptr<CallExpression> parseCallExpressionFromInfix(std::shared_ptr<Expression> callee);
     std::shared_ptr<IndexExpression> parseIndexExpression();
+    std::shared_ptr<IndexExpression> parseIndexExpressionFromInfix(std::shared_ptr<Expression> lhs);
     std::shared_ptr<TypeCastExpression> parseTypeCastExpression();
     std::shared_ptr<MethodCallExpression> parseMethodCallExpression();
     
