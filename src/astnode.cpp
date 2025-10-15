@@ -203,9 +203,11 @@ AssignmentExpression::AssignmentExpression(std::shared_ptr<Expression> leftexpre
       rightexpression(std::move(rightexpression)) {}
 
 CompoundAssignmentExpression::CompoundAssignmentExpression(std::shared_ptr<Expression> leftexpression,
-                                                          std::shared_ptr<Expression> rightexpression)
+                                                           std::shared_ptr<Expression> rightexpression,
+                                                           Token type)
     : leftexpression(std::move(leftexpression)),
-      rightexpression(std::move(rightexpression)) {}
+      rightexpression(std::move(rightexpression)),
+      type(type) {}
 
 ArrayElements::ArrayElements(std::vector<std::shared_ptr<Expression>>&& expressions, bool istwo)
     : expressions(std::move(expressions)), istwo(istwo) {}

@@ -832,6 +832,17 @@ void TypeInferenceChecker::checkAssignmentMutability(Expression& lhs) {
                 checkMutability(varName, &lhs);
             }
         }
+    } else if (auto indexExpr = dynamic_cast<IndexExpression*>(&lhs)) {
+        // 对于索引表达式，需要检查基础表达式的可变性
+        if (auto pathExpr = dynamic_cast<PathExpression*>(indexExpr->expressionout.get())) {
+            if (pathExpr->simplepath) {
+                auto segments = pathExpr->simplepath->simplepathsegements;
+                if (segments.size() == 1) {
+                    std::string varName = segments[0]->identifier;
+                    checkMutability(varName, &lhs);
+                }
+            }
+        }
     } else if (auto fieldExpr = dynamic_cast<FieldExpression*>(&lhs)) {
         // 字段赋值：需要检查字段的可变性
         // 这里简化处理

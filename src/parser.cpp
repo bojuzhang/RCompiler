@@ -141,7 +141,30 @@ std::shared_ptr<Expression> Parser::parseInfixPratt(std::shared_ptr<Expression> 
             // std::cerr << "INFIX: Parsing binary expression with rightbp=" << getRightTokenBP(type) << std::endl;
             int rightbp = getRightTokenBP(type);
             auto rhs = parseExpressionPratt(rightbp);
-            lhs = std::make_shared<BinaryExpression>(std::move(lhs), std::move(rhs), type);
+            switch (type) {
+                case Token::kEq: {
+                    lhs = std::make_shared<AssignmentExpression>(std::move(lhs), std::move(rhs));
+                    break;
+                }
+                case Token::kPlusEq:
+                case Token::kMinusEq:
+                case Token::kStarEq:
+                case Token::kSlashEq:
+                case Token::kPercentEq:
+                case Token::kCaretEq:
+                case Token::kAndEq:
+                case Token::kOrEq:
+                case Token::kShlEq:
+                case Token::kShrEq: {
+                    lhs = std::make_shared<CompoundAssignmentExpression>(std::move(lhs), std::move(rhs), type);
+                    break;
+                }
+
+                default: {
+                    lhs = std::make_shared<BinaryExpression>(std::move(lhs), std::move(rhs), type);
+                }
+            }
+            
         }
     }
     return lhs;
@@ -520,7 +543,7 @@ std::shared_ptr<Item> Parser::parseItem() {
     } else if (match(Token::kfn)) {
         return std::make_shared<Item>(std::move(parseFunction()));
     } else if (match(Token::kconst)) {
-        if (tokens[pos + 1].first == Token::kfn) {
+        if (pos + 1 < tokens.size() && tokens[pos + 1].first == Token::kfn) {
             return std::make_shared<Item>(std::move(parseFunction()));
         } else {
             return std::make_shared<Item>(std::move(parseConstantItem()));

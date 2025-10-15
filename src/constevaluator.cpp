@@ -57,7 +57,7 @@ void ConstantEvaluator::visit(ConstantItem& node) {
     auto value = evaluateExpression(*node.expression);
     if (value) {
         constantValues[constName] = value;
-        std::cout << "Constant '" << constName << "' = " << value->toString() << std::endl;
+        std::cerr << "Constant '" << constName << "' = " << value->toString() << std::endl;
     } else {
         reportError("Cannot evaluate constant '" + constName + "' at compile time");
     }
@@ -98,7 +98,7 @@ void ConstantEvaluator::visit(LetStatement& node) {
         auto initValue = evaluateExpression(*node.expression);
         if (initValue) {
             // 记录常量初始值（用于后续分析）
-            std::cout << "Let statement initializer evaluated to: " << initValue->toString() << std::endl;
+            std::cerr << "Let statement initializer evaluated to: " << initValue->toString() << std::endl;
         }
     }
     
@@ -112,7 +112,7 @@ void ConstantEvaluator::visit(ExpressionStatement& node) {
     if (inConstContext) {
         auto value = evaluateExpression(*node.astnode);
         if (value) {
-            std::cout << "Expression statement evaluated to: " << value->toString() << std::endl;
+            std::cerr << "Expression statement evaluated to: " << value->toString() << std::endl;
         }
     }
     

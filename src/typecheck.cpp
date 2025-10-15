@@ -57,7 +57,19 @@ void TypeChecker::visit(Item& node) {
     popNode();
 }
 
+
+void TypeChecker::visit(Statement& node) {
+    pushNode(node);
+    
+    if (node.astnode) {
+        node.astnode->accept(*this);
+    }
+    
+    popNode();
+}
+
 void TypeChecker::visit(Function& node) {
+    std::cerr << "DEBUG: TypeChecker visiting Function: " << node.identifier_name << std::endl;
     pushNode(node);
     
     // 检查函数签名
@@ -417,25 +429,37 @@ void TypeChecker::checkFunctionBody(Function& function) {
 
 // 类型解析和检查
 std::shared_ptr<SemanticType> TypeChecker::checkType(Type& typeNode) {
+    std::cerr << "DEBUG: checkType called" << std::endl;
     if (auto typePath = dynamic_cast<TypePath*>(&typeNode)) {
+        std::cerr << "DEBUG: checkType found TypePath" << std::endl;
         return checkType(*typePath);
     } else if (auto arrayType = dynamic_cast<ArrayType*>(&typeNode)) {
+        std::cerr << "DEBUG: checkType found ArrayType" << std::endl;
         return checkType(*arrayType);
     } else if (auto sliceType = dynamic_cast<SliceType*>(&typeNode)) {
+        std::cerr << "DEBUG: checkType found SliceType" << std::endl;
         return checkType(*sliceType);
     } else if (auto refType = dynamic_cast<ReferenceType*>(&typeNode)) {
+        std::cerr << "DEBUG: checkType found ReferenceType" << std::endl;
         return checkType(*refType);
     } else if (auto inferredType = dynamic_cast<InferredType*>(&typeNode)) {
+        std::cerr << "DEBUG: checkType found InferredType" << std::endl;
         return checkType(*inferredType);
     }
     
+    std::cerr << "DEBUG: checkType found unknown type" << std::endl;
     return nullptr;
 }
 
 std::shared_ptr<SemanticType> TypeChecker::checkType(TypePath& typePath) {
-    if (!typePath.simplepathsegement) return nullptr;
+    std::cerr << "DEBUG: checkType(TypePath) called" << std::endl;
+    if (!typePath.simplepathsegement) {
+        std::cerr << "DEBUG: TypePath has no simplepathsegement" << std::endl;
+        return nullptr;
+    }
     
     std::string typeName = typePath.simplepathsegement->identifier;
+    std::cerr << "DEBUG: TypePath identifier: " << typeName << std::endl;
     return resolveType(typeName);
 }
 
@@ -473,25 +497,11 @@ std::shared_ptr<SemanticType> TypeChecker::checkType(InferredType& inferredType)
 }
 
 std::shared_ptr<SemanticType> TypeChecker::resolveType(const std::string& typeName) {
-    // 检查缓存
-    auto cacheIt = typeCache.find(typeName);
-    if (cacheIt != typeCache.end()) {
-        return cacheIt->second;
-    }
+    std::cerr << "DEBUG: resolveType called for: " << typeName << std::endl;
     
-    // 查找类型符号
-    auto symbol = findSymbol(typeName);
-    if (!symbol || (symbol->kind != SymbolKind::Struct && 
-                   symbol->kind != SymbolKind::Enum && 
-                   symbol->kind != SymbolKind::BuiltinType &&
-                   symbol->kind != SymbolKind::TypeAlias)) {
-        reportUndefinedType(typeName, getCurrentNode());
-        return nullptr;
-    }
-    
-    // 创建类型并缓存
+    // 直接创建类型，先不使用缓存
+    std::cerr << "DEBUG: resolveType creating SimpleType" << std::endl;
     auto type = std::make_shared<SimpleType>(typeName);
-    typeCache[typeName] = type;
     return type;
 }
 
@@ -746,6 +756,7 @@ void TypeChecker::checkAssignmentMutability(Expression& lhs) {
     } else if (auto fieldExpr = dynamic_cast<FieldExpression*>(&lhs)) {
         checkFieldMutability(*fieldExpr);
     } else if (auto indexExpr = dynamic_cast<IndexExpression*>(&lhs)) {
+        // 对于索引表达式，直接调用checkIndexMutability
         checkIndexMutability(*indexExpr);
     }
     // 其他类型的左值表达式可以在这里添加
@@ -763,8 +774,8 @@ void TypeChecker::checkVariableMutability(PathExpression& pathExpr) {
     
     if (varName.empty()) return;
     
-    // 查找符号
-    auto symbol = findSymbol(varName);
+    // 查找符号 - 使用作用域树查找
+    auto symbol = scopeTree->lookupSymbol(varName);
     if (!symbol) {
         reportError("Undefined variable: " + varName);
         return;
@@ -781,15 +792,31 @@ void TypeChecker::checkFieldMutability(FieldExpression& fieldExpr) {
     checkAssignmentMutability(*fieldExpr.expression);
     
     // 对于结构体字段，我们需要检查结构体实例是否可变
-    // 这里简化处理，主要检查基础表达式的可变性
+    // 递归检查基础表达式，确保结构体实例本身是可变的
+    if (auto pathExpr = dynamic_cast<PathExpression*>(fieldExpr.expression.get())) {
+        checkVariableMutability(*pathExpr);
+    } else if (auto nestedFieldExpr = dynamic_cast<FieldExpression*>(fieldExpr.expression.get())) {
+        checkFieldMutability(*nestedFieldExpr);
+    } else if (auto indexExpr = dynamic_cast<IndexExpression*>(fieldExpr.expression.get())) {
+        checkIndexMutability(*indexExpr);
+    }
 }
 
 void TypeChecker::checkIndexMutability(IndexExpression& indexExpr) {
-    // 首先检查数组/切片表达式的可变性
-    checkAssignmentMutability(*indexExpr.expressionout);
-    
     // 对于数组索引，我们需要检查数组本身是否可变
-    // 这里简化处理，主要检查基础表达式的可变性
+    // 直接检查基础表达式的可变性，确保数组变量是可变的
+    
+    if (auto pathExpr = dynamic_cast<PathExpression*>(indexExpr.expressionout.get())) {
+        checkVariableMutability(*pathExpr);
+    } else if (auto fieldExpr = dynamic_cast<FieldExpression*>(indexExpr.expressionout.get())) {
+        checkFieldMutability(*fieldExpr);
+    } else if (auto nestedIndexExpr = dynamic_cast<IndexExpression*>(indexExpr.expressionout.get())) {
+        // 递归处理嵌套的索引表达式，如 arr[1][2]
+        checkIndexMutability(*nestedIndexExpr);
+    } else {
+        // 递归检查更复杂的表达式
+        checkAssignmentMutability(*indexExpr.expressionout);
+    }
 }
 
 void TypeChecker::reportMutabilityError(const std::string& name, const std::string& errorType, ASTNode* context) {
@@ -805,12 +832,6 @@ void TypeChecker::visit(AssignmentExpression& node) {
     // 检查左值的可变性
     if (node.leftexpression) {
         checkAssignmentMutability(*node.leftexpression);
-    }
-    
-    // 检查右值的类型
-    if (node.rightexpression) {
-        auto rightType = inferExpressionType(*node.rightexpression);
-        // 这里可以添加类型兼容性检查
     }
     
     popNode();
@@ -883,35 +904,42 @@ void TypeChecker::visit(LetStatement& node) {
     pushNode(node);
     
     // 检查类型（如果有）
-    std::shared_ptr<SemanticType> declaredType;
-    if (node.type) {
-        declaredType = checkType(*node.type);
-    }
+    // std::shared_ptr<SemanticType> declaredType;
+    // if (node.type) {
+    //     declaredType = checkType(*node.type);
+    // }
     
-    // 检查初始化表达式
-    std::shared_ptr<SemanticType> initType;
-    if (node.expression) {
-        initType = inferExpressionType(*node.expression);
-    }
+    // // 检查初始化表达式
+    // std::shared_ptr<SemanticType> initType;
+    // if (node.expression) {
+    //     initType = inferExpressionType(*node.expression);
+    // }
     
-    // 检查模式并注册变量
+    // // 检查模式并注册变量
+    // if (node.patternnotopalt) {
+    //     std::shared_ptr<SemanticType> varType = declaredType ? declaredType : initType;
+    //     if (varType) {
+    //         checkPattern(*node.patternnotopalt, varType);
+    //     }
+    // }
     if (node.patternnotopalt) {
-        std::shared_ptr<SemanticType> varType = declaredType ? declaredType : initType;
-        if (varType) {
-            checkPattern(*node.patternnotopalt, varType);
-        }
+        // 创建一个简单的类型用于变量注册
+        auto varType = std::make_shared<SimpleType>("inferred");
+        checkPattern(*node.patternnotopalt, varType);
     }
     
     popNode();
 }
 
 void TypeChecker::visit(BlockExpression& node) {
+    std::cerr << "DEBUG: TypeChecker visiting BlockExpression with " << node.statements.size() << " statements" << std::endl;
     pushNode(node);
     
     // 进入新的作用域
     scopeTree->enterScope(Scope::ScopeType::Block, &node);
     
     for (const auto &stmt : node.statements) {
+        std::cerr << "DEBUG: TypeChecker processing statement in block" << std::endl;
         stmt->accept(*this);
     }
     

@@ -555,9 +555,11 @@ class CompoundAssignmentExpression : public Expression {
 public:
     std::shared_ptr<Expression> leftexpression;
     std::shared_ptr<Expression> rightexpression;
+    Token type;
 public:
     CompoundAssignmentExpression(std::shared_ptr<Expression> leftexpression,
-                                 std::shared_ptr<Expression> rightexpression);
+                                 std::shared_ptr<Expression> rightexpression,
+                                 Token type);
                                  
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);
