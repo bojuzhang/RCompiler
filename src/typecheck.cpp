@@ -675,36 +675,68 @@ std::shared_ptr<SemanticType> TypeChecker::inferArrayExpressionType(ArrayExpress
     
     std::shared_ptr<SemanticType> elementType = nullptr;
     
-    // 检查数组元素的类型
-    for (const auto& element : expr.arrayelements->expressions) {
-        if (element) {
-            std::shared_ptr<SemanticType> elemType;
-            
-            // 对于字面量，直接推断类型
-            if (auto literal = dynamic_cast<LiteralExpression*>(element.get())) {
-                elemType = inferLiteralExpressionType(*literal);
-            } else {
-                // 对于其他类型的表达式，递归推断（但要避免对数组表达式递归）
-                if (dynamic_cast<ArrayExpression*>(element.get())) {
-                    // 嵌套数组表达式，暂时跳过处理以避免无限递归
-                    std::cerr << "DEBUG: Skipping nested array expression to avoid infinite recursion" << std::endl;
-                    elemType = std::make_shared<SimpleType>("nested_array");
+    // 检查是否是重复元素语法 [value; count]
+    if (expr.arrayelements->istwo) {
+        // 对于重复元素语法，只使用第一个表达式作为元素类型
+        if (expr.arrayelements->expressions.empty()) {
+            nodeTypeMap.erase(&expr);
+            return nullptr;
+        }
+        
+        const auto& element = expr.arrayelements->expressions[0];
+        if (!element) {
+            nodeTypeMap.erase(&expr);
+            return nullptr;
+        }
+        
+        std::shared_ptr<SemanticType> elemType;
+        
+        // 对于字面量，直接推断类型
+        if (auto literal = dynamic_cast<LiteralExpression*>(element.get())) {
+            elemType = inferLiteralExpressionType(*literal);
+        } else {
+            // 对于其他类型的表达式，递归推断
+            elemType = inferExpressionType(*element);
+        }
+        
+        if (!elemType) {
+            nodeTypeMap.erase(&expr);
+            return nullptr;
+        }
+        
+        elementType = elemType;
+    } else {
+        // 对于逗号分隔语法，检查所有数组元素的类型
+        for (const auto& element : expr.arrayelements->expressions) {
+            if (element) {
+                std::shared_ptr<SemanticType> elemType;
+                
+                // 对于字面量，直接推断类型
+                if (auto literal = dynamic_cast<LiteralExpression*>(element.get())) {
+                    elemType = inferLiteralExpressionType(*literal);
                 } else {
-                    elemType = inferExpressionType(*element);
+                    // 对于其他类型的表达式，递归推断（但要避免对数组表达式递归）
+                    if (dynamic_cast<ArrayExpression*>(element.get())) {
+                        // 嵌套数组表达式，暂时跳过处理以避免无限递归
+                        std::cerr << "DEBUG: Skipping nested array expression to avoid infinite recursion" << std::endl;
+                        elemType = std::make_shared<SimpleType>("nested_array");
+                    } else {
+                        elemType = inferExpressionType(*element);
+                    }
                 }
-            }
-            
-            if (!elemType) {
-                nodeTypeMap.erase(&expr);
-                return nullptr;
-            }
-            
-            if (!elementType) {
-                elementType = elemType;
-            } else if (!areTypesCompatible(elementType, elemType)) {
-                reportError("Array elements must have the same type");
-                nodeTypeMap.erase(&expr);
-                return nullptr;
+                
+                if (!elemType) {
+                    nodeTypeMap.erase(&expr);
+                    return nullptr;
+                }
+                
+                if (!elementType) {
+                    elementType = elemType;
+                } else if (!areTypesCompatible(elementType, elemType)) {
+                    reportError("Array elements must have the same type");
+                    nodeTypeMap.erase(&expr);
+                    return nullptr;
+                }
             }
         }
     }
@@ -793,38 +825,78 @@ std::shared_ptr<SemanticType> TypeChecker::inferArrayExpressionTypeWithExpected(
     
     std::shared_ptr<SemanticType> elementType = expectedElementType;
     
-    // 检查数组元素的类型
-    for (const auto& element : expr.arrayelements->expressions) {
-        if (element) {
-            std::shared_ptr<SemanticType> elemType;
-            
-            // 如果元素是数组表达式（用于多维数组），递归处理
-            if (auto innerArrayExpr = dynamic_cast<ArrayExpression*>(element.get())) {
-                if (expectedElementType) {
-                    elemType = inferArrayExpressionTypeWithExpected(*innerArrayExpr, expectedElementType);
-                } else {
-                    elemType = inferArrayExpressionType(*innerArrayExpr);
-                }
+    // 检查是否是重复元素语法 [value; count]
+    if (expr.arrayelements->istwo) {
+        // 对于重复元素语法，只使用第一个表达式作为元素类型
+        if (expr.arrayelements->expressions.empty()) {
+            nodeTypeMap.erase(&expr);
+            return nullptr;
+        }
+        
+        const auto& element = expr.arrayelements->expressions[0];
+        if (!element) {
+            nodeTypeMap.erase(&expr);
+            return nullptr;
+        }
+        
+        std::shared_ptr<SemanticType> elemType;
+        
+        // 如果元素是数组表达式（用于多维数组），递归处理
+        if (auto innerArrayExpr = dynamic_cast<ArrayExpression*>(element.get())) {
+            if (expectedElementType) {
+                elemType = inferArrayExpressionTypeWithExpected(*innerArrayExpr, expectedElementType);
             } else {
-                // 非数组元素，使用期望类型推断
-                if (expectedElementType) {
-                    elemType = inferConstantExpressionType(*element, expectedElementType);
+                elemType = inferArrayExpressionType(*innerArrayExpr);
+            }
+        } else {
+            // 非数组元素，使用期望类型推断
+            if (expectedElementType) {
+                elemType = inferConstantExpressionType(*element, expectedElementType);
+            } else {
+                elemType = inferExpressionType(*element);
+            }
+        }
+        
+        if (!elemType) {
+            nodeTypeMap.erase(&expr);
+            return nullptr;
+        }
+        
+        elementType = elemType;
+    } else {
+        // 对于逗号分隔语法，检查所有数组元素的类型
+        for (const auto& element : expr.arrayelements->expressions) {
+            if (element) {
+                std::shared_ptr<SemanticType> elemType;
+                
+                // 如果元素是数组表达式（用于多维数组），递归处理
+                if (auto innerArrayExpr = dynamic_cast<ArrayExpression*>(element.get())) {
+                    if (expectedElementType) {
+                        elemType = inferArrayExpressionTypeWithExpected(*innerArrayExpr, expectedElementType);
+                    } else {
+                        elemType = inferArrayExpressionType(*innerArrayExpr);
+                    }
                 } else {
-                    elemType = inferExpressionType(*element);
+                    // 非数组元素，使用期望类型推断
+                    if (expectedElementType) {
+                        elemType = inferConstantExpressionType(*element, expectedElementType);
+                    } else {
+                        elemType = inferExpressionType(*element);
+                    }
                 }
-            }
-            
-            if (!elemType) {
-                nodeTypeMap.erase(&expr);
-                return nullptr;
-            }
-            
-            if (!elementType) {
-                elementType = elemType;
-            } else if (!areTypesCompatible(elementType, elemType)) {
-                reportError("Array elements must have the same type");
-                nodeTypeMap.erase(&expr);
-                return nullptr;
+                
+                if (!elemType) {
+                    nodeTypeMap.erase(&expr);
+                    return nullptr;
+                }
+                
+                if (!elementType) {
+                    elementType = elemType;
+                } else if (!areTypesCompatible(elementType, elemType)) {
+                    reportError("Array elements must have the same type");
+                    nodeTypeMap.erase(&expr);
+                    return nullptr;
+                }
             }
         }
     }
@@ -1235,7 +1307,38 @@ void TypeChecker::checkArraySizeMatch(ArrayTypeWrapper& declaredType, ArrayExpre
         return;
     }
     
-    int64_t actualSize = arrayExpr.arrayelements->expressions.size();
+    int64_t actualSize;
+    
+    // 检查是否是重复元素语法 [value; count]
+    if (arrayExpr.arrayelements->istwo) {
+        // 对于重复元素语法，第二个表达式是重复次数
+        if (arrayExpr.arrayelements->expressions.size() < 2) {
+            reportError("Invalid repeated array expression: missing count");
+            return;
+        }
+        
+        // 获取重复次数
+        const auto& countExpr = arrayExpr.arrayelements->expressions[1];
+        if (auto literal = dynamic_cast<LiteralExpression*>(countExpr.get())) {
+            if (literal->tokentype == Token::kINTEGER_LITERAL) {
+                try {
+                    actualSize = std::stoll(literal->literal);
+                } catch (const std::exception& e) {
+                    reportError("Invalid integer literal in array count: " + literal->literal);
+                    return;
+                }
+            } else {
+                reportError("Array count must be an integer literal");
+                return;
+            }
+        } else {
+            reportError("Array count must be a literal expression");
+            return;
+        }
+    } else {
+        // 对于逗号分隔语法，实际大小就是表达式数量
+        actualSize = arrayExpr.arrayelements->expressions.size();
+    }
     
     // 比较大小
     if (declaredSize != actualSize) {
