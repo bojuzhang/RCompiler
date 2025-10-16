@@ -391,7 +391,29 @@ std::shared_ptr<SemanticType> ControlFlowAnalyzer::inferIfType(IfExpression& ifE
         return std::make_shared<NeverType>();
     }
     
-    // 否则，需要统一两个分支的类型（简化处理，返回if分支类型）
+    // 如果一个分支发散（!类型），另一个分支不发散，则if表达式类型为非发散分支的类型
+    if (ifType && ifType->tostring() == "!" && elseType && elseType->tostring() != "!") {
+        return elseType;
+    }
+    
+    if (elseType && elseType->tostring() == "!" && ifType && ifType->tostring() != "!") {
+        return ifType;
+    }
+    
+    // 如果两个分支都不发散，检查类型兼容性
+    if (ifType && elseType && ifType->tostring() != "!" && elseType->tostring() != "!") {
+        // 检查类型是否兼容
+        if (ifType->tostring() == elseType->tostring()) {
+            return ifType;
+        } else {
+            // 类型不兼容，这里应该报告错误，但为了保持控制流分析的连续性，
+            // 我们返回一个错误类型或默认类型
+            // 在实际实现中，应该通过错误处理机制报告类型不匹配
+            return std::make_shared<SimpleType>("type_error");
+        }
+    }
+    
+    // 默认情况，返回if分支类型
     return ifType;
 }
 

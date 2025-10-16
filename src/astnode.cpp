@@ -1,5 +1,6 @@
 #include "astnodes.hpp"
 #include <utility>
+#include <iostream>
 
 // constrict function
 
@@ -190,7 +191,9 @@ IfExpression::IfExpression(std::shared_ptr<Conditions> conditions,
                            std::shared_ptr<Expression> elseexpression)
     : conditions(std::move(conditions)),
       ifblockexpression(std::move(ifblockexpression)),
-      elseexpression(std::move(elseexpression)) {}
+      elseexpression(std::move(elseexpression)) {
+}
+
 
 TypeCastExpression::TypeCastExpression(std::shared_ptr<Expression> expression,
                                        std::shared_ptr<Type> typenobounds)

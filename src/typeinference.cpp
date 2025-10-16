@@ -546,6 +546,7 @@ std::shared_ptr<SemanticType> TypeInferenceChecker::inferIfExpressionType(IfExpr
     // 推断条件类型（应该是bool）
     condition->accept(*this);
     auto condType = getInferredType(condition->expression.get());
+    
     if (condType) {
         addTypeConstraint(condType, std::make_shared<SimpleType>("bool"));
     }
@@ -565,8 +566,18 @@ std::shared_ptr<SemanticType> TypeInferenceChecker::inferIfExpressionType(IfExpr
     
     if (!ifType || !elseType) return nullptr;
     
-    // 统一if和else分支的类型
-    addTypeConstraint(ifType, elseType);
+    // 检查两个分支的类型兼容性
+    if (ifType->tostring() != "!" && elseType->tostring() != "!") {
+        // 尝试统一类型，如果不兼容则报告错误
+        try {
+            addTypeConstraint(ifType, elseType);
+        } catch (const std::exception& e) {
+            reportError("If expression branches have incompatible types: " +
+                       ifType->tostring() + " vs " + elseType->tostring());
+            return std::make_shared<SimpleType>("type_error");
+        }
+    }
+    
     return ifType;  // 返回统一的类型
 }
 

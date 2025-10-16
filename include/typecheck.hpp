@@ -67,7 +67,7 @@ public:
     void visit(ConstBlockExpression& node) override {}
     void visit(InfiniteLoopExpression& node) override {}
     void visit(PredicateLoopExpression& node) override {}
-    void visit(IfExpression& node) override {}
+    void visit(IfExpression& node) override;
     void visit(MatchExpression& node) override {}
     void visit(TypeCastExpression& node) override {}
     void visit(AssignmentExpression& node) override;

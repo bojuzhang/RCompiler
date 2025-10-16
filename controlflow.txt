@@ -1,0 +1,73 @@
+这一节说明一些类型逻辑，帮助你推断表达式的类型。我们在这里使用 rust 中的 never 类型 ! 作为类型推导的中间结果，并且保证这种类型不会显式出现。
+
+BlockExpression
+
+首先有BlockExpression 的定义
+
+BlockExpression ->
+	`{`
+	    Statements?
+	`}`
+
+Statements ->
+	  Statement+
+	| Statement+ ExpressionWithoutBlock
+	| ExpressionWithoutBlock
+
+Statement ->
+    `;`
+  | Item
+  | LetStatement
+  | ExpressionStatement
+  
+ExpressionStatement ->
+    ExpressionWithoutBlock `;`
+  | ExpressionWithBlock `;`?
+下面我们统称 Statements 末尾的 ExpressionWithoutBlock 和不带分号的 ExpressionWithBlock 为「尾表达式」。
+
+Rx 中 BlockExpression 的类型规则是：
+
+有尾表达式的情况，使用该表达式的类型；
+没有尾表达式的情况，如果所有控制流都会遇到 return / break / continue ，使用 !；否则类型为 unit.
+IfExpression
+
+常规来说，两个分支需要有相同的类型。然而分支中会出现 return/ break / continue。
+
+根据控制流检查的结果，如果有分支没有尾表达式且一定返回，那么这个分支可以确定为 !。例如：
+
+if (cond1) {
+    if (cond2) {
+        return 3;
+    } else {
+        return 1;
+    } // this if evaluates to !
+    stmt; // dead code
+} else {
+    4i32
+}
+的类型是 i32 ，由于 true 分支为类型 !，可以 coerce 到 i32，所以 if 的类型出自 false 分支。如果两分支都是类型 !， if 表达式类型为 !。注意下面的语句属于类型不匹配：
+
+if (cond1) {
+    if (cond2) {
+        return 3;
+    } else {
+        return 1;
+    } // this if evaluates to !
+    "114514" // dead code
+} else {
+    4i32
+}
+由于 dead code, 以上两个例子都不会在 case 中出现。
+
+我们的 Spec 保证了不会显式出现 ! 类型，但是你需要自己实现它的一些特性。例如你可能会遇到这种代码：
+
+loop {
+    let y: i32 = if (cond) {
+        break 4; // this Block evaluates to !
+    } else {
+        2 // and coerces with i32
+    }
+} // by the way, the loop evaluates to i32
+LoopExpression ：
+
+Spec 里面提到， while 的类型是 unit， loop 类型取决于其中 break expr 的 expr 类型。我们保证没有任何情况的死循环，因此 loop 表达式一定有 break 语句，据此推断类型。

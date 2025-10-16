@@ -5,7 +5,7 @@
 #include <memory>
 #include <utility>
 
-TypeChecker::TypeChecker(std::shared_ptr<ScopeTree> scopeTree) 
+TypeChecker::TypeChecker(std::shared_ptr<ScopeTree> scopeTree)
     : scopeTree(scopeTree) {}
 
 bool TypeChecker::checkTypes() {
@@ -69,7 +69,6 @@ void TypeChecker::visit(Statement& node) {
 }
 
 void TypeChecker::visit(Function& node) {
-    std::cerr << "DEBUG: TypeChecker visiting Function: " << node.identifier_name << std::endl;
     pushNode(node);
     
     // 检查函数签名
@@ -431,37 +430,27 @@ void TypeChecker::checkFunctionBody(Function& function) {
 
 // 类型解析和检查
 std::shared_ptr<SemanticType> TypeChecker::checkType(Type& typeNode) {
-    std::cerr << "DEBUG: checkType called" << std::endl;
     if (auto typePath = dynamic_cast<TypePath*>(&typeNode)) {
-        std::cerr << "DEBUG: checkType found TypePath" << std::endl;
         return checkType(*typePath);
     } else if (auto arrayType = dynamic_cast<ArrayType*>(&typeNode)) {
-        std::cerr << "DEBUG: checkType found ArrayType" << std::endl;
         return checkType(*arrayType);
     } else if (auto sliceType = dynamic_cast<SliceType*>(&typeNode)) {
-        std::cerr << "DEBUG: checkType found SliceType" << std::endl;
         return checkType(*sliceType);
     } else if (auto refType = dynamic_cast<ReferenceType*>(&typeNode)) {
-        std::cerr << "DEBUG: checkType found ReferenceType" << std::endl;
         return checkType(*refType);
     } else if (auto inferredType = dynamic_cast<InferredType*>(&typeNode)) {
-        std::cerr << "DEBUG: checkType found InferredType" << std::endl;
         return checkType(*inferredType);
     }
-    
-    std::cerr << "DEBUG: checkType found unknown type" << std::endl;
+
     return nullptr;
 }
 
 std::shared_ptr<SemanticType> TypeChecker::checkType(TypePath& typePath) {
-    std::cerr << "DEBUG: checkType(TypePath) called" << std::endl;
     if (!typePath.simplepathsegement) {
-        std::cerr << "DEBUG: TypePath has no simplepathsegement" << std::endl;
         return nullptr;
     }
-    
+
     std::string typeName = typePath.simplepathsegement->identifier;
-    std::cerr << "DEBUG: TypePath identifier: " << typeName << std::endl;
     return resolveType(typeName);
 }
 
@@ -494,7 +483,6 @@ std::shared_ptr<SemanticType> TypeChecker::checkType(ArrayType& arrayType) {
         } else {
             // 非字面量表达式，这里简化处理，假设它是合法的
             // 在实际编译器中，这里需要更复杂的常量表达式求值
-            std::cerr << "DEBUG: Non-literal array size expression detected, skipping type check" << std::endl;
         }
     }
     
@@ -518,10 +506,7 @@ std::shared_ptr<SemanticType> TypeChecker::checkType(InferredType& inferredType)
 }
 
 std::shared_ptr<SemanticType> TypeChecker::resolveType(const std::string& typeName) {
-    std::cerr << "DEBUG: resolveType called for: " << typeName << std::endl;
-    
     // 直接创建类型，先不使用缓存
-    std::cerr << "DEBUG: resolveType creating SimpleType" << std::endl;
     auto type = std::make_shared<SimpleType>(typeName);
     return type;
 }
@@ -557,23 +542,29 @@ std::shared_ptr<SemanticType> TypeChecker::inferExpressionType(Expression& expr)
         return nodeIt->second;
     }
     
+    // 防止无限递归，先设置一个占位符
+    auto placeholder = std::make_shared<SimpleType>("inferring");
+    nodeTypeMap[&expr] = placeholder;
+    
     std::shared_ptr<SemanticType> type;
     
     if (auto literal = dynamic_cast<LiteralExpression*>(&expr)) {
-        type = inferExpressionType(*literal);
+        type = inferLiteralExpressionType(*literal);
     } else if (auto binary = dynamic_cast<BinaryExpression*>(&expr)) {
         type = inferBinaryExpressionType(*binary);
     } else if (auto call = dynamic_cast<CallExpression*>(&expr)) {
         type = inferCallExpressionType(*call);
     } else if (auto arrayExpr = dynamic_cast<ArrayExpression*>(&expr)) {
         type = inferArrayExpressionType(*arrayExpr);
+    } else if (auto pathExpr = dynamic_cast<PathExpression*>(&expr)) {
+        type = std::make_shared<SimpleType>("i32"); // 简化处理，假设所有路径表达式都是i32
     }
     // else if (auto methodCall = dynamic_cast<MethodCallExpression*>(&expr)) {
     //     type = inferMethodCallExpressionType(*methodCall);
     // }
     // 其他表达式类型...
     
-    // 缓存结果
+    // 更新缓存
     if (type) {
         nodeTypeMap[&expr] = type;
     }
@@ -1148,10 +1139,9 @@ void TypeChecker::visit(LetStatement& node) {
     if (node.expression) {
         if (declaredType) {
             // 对于有明确类型声明的let语句，进行完整的类型检查，包括数组长度验证
-            std::cerr << "DEBUG: Performing full type checking for let statement with declared type" << std::endl;
-            
             // 推断初始化表达式的类型
             auto initType = inferExpressionType(*node.expression);
+            
             if (!initType) {
                 reportError("Unable to infer type for let statement initializer");
                 popNode();
@@ -1193,16 +1183,14 @@ void TypeChecker::visit(LetStatement& node) {
 
 // 数组大小验证实现
 void TypeChecker::checkArraySizeMatch(ArrayTypeWrapper& declaredType, ArrayExpression& arrayExpr) {
-    std::cerr << "DEBUG: Checking array size match" << std::endl;
-    
     // 获取声明的数组大小
     auto sizeExpr = declaredType.getSizeExpression();
     if (!sizeExpr) {
-        std::cerr << "DEBUG: No size expression found in declared array type" << std::endl;
         return;
     }
     
     int64_t declaredSize = evaluateArraySize(*sizeExpr);
+    
     if (declaredSize < 0) {
         reportError("Invalid array size expression");
         return;
@@ -1216,8 +1204,6 @@ void TypeChecker::checkArraySizeMatch(ArrayTypeWrapper& declaredType, ArrayExpre
     
     int64_t actualSize = arrayExpr.arrayelements->expressions.size();
     
-    std::cerr << "DEBUG: Declared size: " << declaredSize << ", Actual size: " << actualSize << std::endl;
-    
     // 比较大小
     if (declaredSize != actualSize) {
         reportError("Array size mismatch: declared size " + std::to_string(declaredSize) +
@@ -1226,7 +1212,6 @@ void TypeChecker::checkArraySizeMatch(ArrayTypeWrapper& declaredType, ArrayExpre
 }
 
 int64_t TypeChecker::evaluateArraySize(Expression& sizeExpr) {
-    std::cerr << "DEBUG: Evaluating array size expression" << std::endl;
     
     // 如果是字面量表达式，直接求值
     if (auto literal = dynamic_cast<LiteralExpression*>(&sizeExpr)) {
@@ -1253,7 +1238,6 @@ int64_t TypeChecker::evaluateArraySize(Expression& sizeExpr) {
             if (symbol && symbol->kind == SymbolKind::Constant) {
                 // 这里应该获取常量的值，但当前实现简化处理
                 // 在完整的实现中，需要从常量求值器获取值
-                std::cerr << "DEBUG: Found constant reference: " << constName << " (value evaluation not implemented)" << std::endl;
                 reportError("Constant array size evaluation not fully implemented: " + constName);
                 return -1;
             }
@@ -1264,16 +1248,13 @@ int64_t TypeChecker::evaluateArraySize(Expression& sizeExpr) {
     return -1;
 }
 
-
 void TypeChecker::visit(BlockExpression& node) {
-    std::cerr << "DEBUG: TypeChecker visiting BlockExpression with " << node.statements.size() << " statements" << std::endl;
     pushNode(node);
     
     // 进入新的作用域
     scopeTree->enterScope(Scope::ScopeType::Block, &node);
     
     for (const auto &stmt : node.statements) {
-        std::cerr << "DEBUG: TypeChecker processing statement in block" << std::endl;
         stmt->accept(*this);
     }
     
@@ -1282,5 +1263,47 @@ void TypeChecker::visit(BlockExpression& node) {
     
     popNode();
 }
+
+void TypeChecker::visit(IfExpression& node) {
+    pushNode(node);
+    
+    // 检查条件表达式
+    if (node.conditions && node.conditions->expression) {
+        node.conditions->expression->accept(*this);
+        auto condType = inferExpressionType(*node.conditions->expression);
+        
+        // 条件表达式必须是布尔类型
+        if (condType && condType->tostring() != "bool") {
+            reportError("If condition must be of type bool, found " + condType->tostring());
+        }
+    }
+    
+    // 检查if分支
+    if (node.ifblockexpression) {
+        node.ifblockexpression->accept(*this);
+    }
+    
+    // 检查else分支（如果有）
+    if (node.elseexpression) {
+        node.elseexpression->accept(*this);
+        
+        // 检查两个分支的类型兼容性
+        auto ifType = inferExpressionType(*node.ifblockexpression);
+        auto elseType = inferExpressionType(*node.elseexpression);
+        
+        if (ifType && elseType) {
+            // 如果两个分支都不是!类型，检查类型兼容性
+            if (ifType->tostring() != "!" && elseType->tostring() != "!") {
+                if (!areTypesCompatible(ifType, elseType)) {
+                    reportError("If expression branches have incompatible types: " +
+                               ifType->tostring() + " vs " + elseType->tostring());
+                }
+            }
+        }
+    }
+    
+    popNode();
+}
+
 
 
