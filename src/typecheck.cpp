@@ -539,7 +539,14 @@ std::shared_ptr<SemanticType> TypeChecker::inferExpressionType(Expression& expr)
     // 检查缓存
     auto nodeIt = nodeTypeMap.find(&expr);
     if (nodeIt != nodeTypeMap.end()) {
-        return nodeIt->second;
+        // 如果缓存结果是占位符，说明正在处理中，需要继续推断而不是返回占位符
+        if (nodeIt->second->tostring() == "inferring") {
+            // 移除占位符，继续推断
+            nodeTypeMap.erase(&expr);
+        } else {
+            // 返回已完成的推断结果
+            return nodeIt->second;
+        }
     }
     
     // 防止无限递归，先设置一个占位符
@@ -564,9 +571,12 @@ std::shared_ptr<SemanticType> TypeChecker::inferExpressionType(Expression& expr)
     // }
     // 其他表达式类型...
     
-    // 更新缓存
+    // 更新缓存 - 只有当类型推断成功时才替换占位符
     if (type) {
         nodeTypeMap[&expr] = type;
+    } else {
+        // 类型推断失败，移除占位符以允许重试
+        nodeTypeMap.erase(&expr);
     }
     
     return type;
@@ -641,13 +651,17 @@ std::shared_ptr<SemanticType> TypeChecker::inferLiteralExpressionType(LiteralExp
 }
 
 std::shared_ptr<SemanticType> TypeChecker::inferArrayExpressionType(ArrayExpression& expr) {
-    std::cerr << "DEBUG: inferArrayExpressionType called" << std::endl;
-    
     // 检查循环依赖
     auto nodeIt = nodeTypeMap.find(&expr);
     if (nodeIt != nodeTypeMap.end()) {
-        std::cerr << "DEBUG: Found cached result for array expression" << std::endl;
-        return nodeIt->second;
+        // 如果缓存结果是占位符，说明正在处理中，需要继续推断而不是返回占位符
+        if (nodeIt->second->tostring() == "array_expr_placeholder" || nodeIt->second->tostring() == "inferring") {
+            // 移除占位符，继续推断
+            nodeTypeMap.erase(&expr);
+        } else {
+            // 返回已完成的推断结果
+            return nodeIt->second;
+        }
     }
     
     // 先设置占位符防止循环
@@ -655,7 +669,6 @@ std::shared_ptr<SemanticType> TypeChecker::inferArrayExpressionType(ArrayExpress
     nodeTypeMap[&expr] = placeholder;
     
     if (!expr.arrayelements) {
-        std::cerr << "DEBUG: Array expression has no elements" << std::endl;
         nodeTypeMap.erase(&expr);
         return nullptr;
     }
@@ -682,7 +695,6 @@ std::shared_ptr<SemanticType> TypeChecker::inferArrayExpressionType(ArrayExpress
             }
             
             if (!elemType) {
-                std::cerr << "DEBUG: Failed to infer element type" << std::endl;
                 nodeTypeMap.erase(&expr);
                 return nullptr;
             }
@@ -699,14 +711,12 @@ std::shared_ptr<SemanticType> TypeChecker::inferArrayExpressionType(ArrayExpress
     
     if (!elementType) {
         // 空数组，无法推断类型
-        std::cerr << "DEBUG: Empty array, cannot infer type" << std::endl;
         nodeTypeMap.erase(&expr);
         return nullptr;
     }
     
     auto result = std::make_shared<ArrayTypeWrapper>(elementType, nullptr);
     nodeTypeMap[&expr] = result; // 替换占位符
-    std::cerr << "DEBUG: Array expression type inferred successfully" << std::endl;
     return result;
 }
 
@@ -1086,6 +1096,29 @@ void TypeChecker::visit(IndexExpression& node) {
     // 检查索引表达式
     if (node.expressionin) {
         node.expressionin->accept(*this);
+        
+        // 检查索引类型必须是整数
+        auto indexType = inferExpressionType(*node.expressionin);
+        if (indexType && indexType->tostring() != "i32" && indexType->tostring() != "usize") {
+            reportError("Array index must be of integer type, found " + indexType->tostring());
+        }
+    }
+    
+    // 推断索引表达式的类型
+    if (node.expressionout) {
+        auto arrayType = inferExpressionType(*node.expressionout);
+        if (arrayType) {
+            // 如果数组类型是数组或切片，提取元素类型
+            if (auto arrayTypeWrapper = dynamic_cast<ArrayTypeWrapper*>(arrayType.get())) {
+                auto elementType = arrayTypeWrapper->getElementType();
+                nodeTypeMap[&node] = elementType;
+            } else if (auto sliceTypeWrapper = dynamic_cast<SliceTypeWrapper*>(arrayType.get())) {
+                auto elementType = sliceTypeWrapper->getElementType();
+                nodeTypeMap[&node] = elementType;
+            } else {
+                reportError("Cannot index into non-array type: " + arrayType->tostring());
+            }
+        }
     }
     
     popNode();
