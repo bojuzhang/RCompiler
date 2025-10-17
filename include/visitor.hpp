@@ -55,8 +55,6 @@ public:
     virtual void visit(Type& node) = 0;
     virtual void visit(TypePath& node) = 0;
     virtual void visit(ArrayType& node) = 0;
-    virtual void visit(SliceType& node) = 0;
-    virtual void visit(InferredType& node) = 0;
     virtual void visit(ReferenceType& node) = 0;
     
     virtual void visit(SimplePath& node) = 0;

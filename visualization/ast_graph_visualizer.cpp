@@ -815,32 +815,6 @@ void ASTGraphVisualizer::visit(ArrayType& node) {
     popNode();
 }
 
-void ASTGraphVisualizer::visit(SliceType& node) {
-    std::string nodeId = generateNodeId();
-    addNode(nodeId, getNodeLabel("SliceType"));
-    
-    int parentId = getCurrentNodeId();
-    if (parentId != -1) {
-        addEdge("node_" + std::to_string(parentId), nodeId);
-    }
-    
-    pushNode(std::stoi(nodeId.substr(5)));
-    if (node.type) {
-        node.type->accept(*this);
-    }
-    popNode();
-}
-
-void ASTGraphVisualizer::visit(InferredType& node) {
-    std::string nodeId = generateNodeId();
-    addNode(nodeId, getNodeLabel("InferredType"));
-    
-    int parentId = getCurrentNodeId();
-    if (parentId != -1) {
-        addEdge("node_" + std::to_string(parentId), nodeId);
-    }
-}
-
 void ASTGraphVisualizer::visit(ReferenceType& node) {
     std::string nodeId = generateNodeId();
     addNode(nodeId, getNodeLabel("ReferenceType", node.ismut ? "mutable" : "immutable"));

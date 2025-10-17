@@ -434,12 +434,8 @@ std::shared_ptr<SemanticType> TypeChecker::checkType(Type& typeNode) {
         return checkType(*typePath);
     } else if (auto arrayType = dynamic_cast<ArrayType*>(&typeNode)) {
         return checkType(*arrayType);
-    } else if (auto sliceType = dynamic_cast<SliceType*>(&typeNode)) {
-        return checkType(*sliceType);
     } else if (auto refType = dynamic_cast<ReferenceType*>(&typeNode)) {
         return checkType(*refType);
-    } else if (auto inferredType = dynamic_cast<InferredType*>(&typeNode)) {
-        return checkType(*inferredType);
     }
 
     return nullptr;
@@ -489,20 +485,6 @@ std::shared_ptr<SemanticType> TypeChecker::checkType(ArrayType& arrayType) {
     auto result = std::make_shared<ArrayTypeWrapper>(elementType, arrayType.expression.get());
     nodeTypeMap[&arrayType] = result; // 替换占位符
     return result;
-}
-
-std::shared_ptr<SemanticType> TypeChecker::checkType(SliceType& sliceType) {
-    auto elementType = checkType(*sliceType.type);
-    if (!elementType) {
-        return nullptr;
-    }
-    
-    return std::make_shared<SliceTypeWrapper>(elementType);
-}
-
-std::shared_ptr<SemanticType> TypeChecker::checkType(InferredType& inferredType) {
-    // 推断类型，返回一个占位符
-    return std::make_shared<SimpleType>("_");
 }
 
 std::shared_ptr<SemanticType> TypeChecker::resolveType(const std::string& typeName) {
@@ -621,7 +603,7 @@ std::shared_ptr<SemanticType> TypeChecker::inferBinaryExpressionType(BinaryExpre
 std::shared_ptr<SemanticType> TypeChecker::inferCallExpressionType(CallExpression& expr) {
     auto calleeType = inferExpressionType(*expr.expression);
     if (!calleeType) return nullptr;
-        
+
     // 查找函数符号
     // 如果callee是路径表达式，尝试解析为函数调用
     if (auto pathExpr = dynamic_cast<PathExpression*>(expr.expression.get())) {

@@ -284,10 +284,6 @@ TypePath::TypePath(std::shared_ptr<SimplePathSegment> simplepathsegement)
 ArrayType::ArrayType(std::shared_ptr<Type> type, std::shared_ptr<Expression> expression)
     : type(std::move(type)), expression(std::move(expression)) {}
 
-SliceType::SliceType(std::shared_ptr<Type> type)
-    : type(std::move(type)) {}
-
-InferredType::InferredType() = default;
 
 ReferenceType::ReferenceType(std::shared_ptr<Type> type, bool ismut)
     : type(std::move(type)), ismut(ismut) {}

@@ -90,8 +90,6 @@ public:
     void visit(Type& node) override;
     void visit(TypePath& node) override;
     void visit(ArrayType& node) override;
-    void visit(SliceType& node) override;
-    void visit(InferredType& node) override;
     void visit(ReferenceType& node) override;
     
     // Visitor接口实现 - Path节点

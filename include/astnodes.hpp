@@ -764,44 +764,12 @@ public:
         visitor.visit(*this);
     }
 };
-// class TupleType : public ASTNode {
-// public:
-//     std::vector<std::unique_ptr<Type>> types;
-// public:
-//     explicit TupleType(std::vector<std::unique_ptr<Type>>&& types);
-// };
-// class NeverType : public ASTNode {
-// public:
-//     // nothing but !
-// public:
-//     NeverType();
-// };
 class ArrayType : public Type {
 public:
     std::shared_ptr<Type> type;
     std::shared_ptr<Expression> expression;
 public:
     ArrayType(std::shared_ptr<Type> type, std::shared_ptr<Expression> expression);
-    
-    void accept(ASTVisitor& visitor) override {
-        visitor.visit(*this);
-    }
-};
-class SliceType : public Type {
-public:
-    std::shared_ptr<Type> type;
-public:
-    explicit SliceType(std::shared_ptr<Type> type);
-    
-    void accept(ASTVisitor& visitor) override {
-        visitor.visit(*this);
-    }
-};
-class InferredType : public Type {
-public:
-    // nothing but _
-public:
-    InferredType();
     
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);

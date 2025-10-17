@@ -511,10 +511,7 @@ std::shared_ptr<Type> Parser::parseType() {
         
         case Token::kAnd:
             return parseReferenceType();
-        
-        case Token::kUnderscore:
-            return std::make_shared<InferredType>();
-        
+                
         default:
             return nullptr;
     }

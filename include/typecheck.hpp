@@ -1,5 +1,6 @@
 #pragma once
 
+#include "astnodes.hpp"
 #include "symbol.hpp"
 #include "visitor.hpp"
 #include "scope.hpp"
@@ -84,8 +85,6 @@ public:
     void visit(Type& node) override {}
     void visit(TypePath& node) override {}
     void visit(ArrayType& node) override {}
-    void visit(SliceType& node) override {}
-    void visit(InferredType& node) override {}
     void visit(ReferenceType& node) override {}
     
     void visit(SimplePath& node) override {}
@@ -115,8 +114,6 @@ private:
     std::shared_ptr<SemanticType> checkType(Type& typeNode);
     std::shared_ptr<SemanticType> checkType(TypePath& typePath);
     std::shared_ptr<SemanticType> checkType(ArrayType& arrayType);
-    std::shared_ptr<SemanticType> checkType(SliceType& sliceType);
-    std::shared_ptr<SemanticType> checkType(InferredType& inferredType);
     std::shared_ptr<SemanticType> resolveType(const std::string& typeName);
     bool typeExists(const std::string& typeName);
     bool isTypeVisible(const std::string& typeName);

@@ -105,8 +105,6 @@ public:
     void visit(Type& node) override {}
     void visit(TypePath& node) override {}
     void visit(ArrayType& node) override {}
-    void visit(SliceType& node) override {}
-    void visit(InferredType& node) override {}
     void visit(ReferenceType& node) override {}
     void visit(SimplePath& node) override {}
     void visit(SimplePathSegment& node) override {}
