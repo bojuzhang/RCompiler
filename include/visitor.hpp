@@ -56,6 +56,7 @@ public:
     virtual void visit(TypePath& node) = 0;
     virtual void visit(ArrayType& node) = 0;
     virtual void visit(ReferenceType& node) = 0;
+    virtual void visit(UnitType& node) = 0;
     
     virtual void visit(SimplePath& node) = 0;
     virtual void visit(SimplePathSegment& node) = 0;

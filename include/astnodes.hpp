@@ -786,6 +786,16 @@ public:
         visitor.visit(*this);
     }
 };
+class UnitType : public Type {
+public:
+    // nothing but ()
+public:
+    UnitType() = default;
+    
+    void accept(ASTVisitor& visitor) override {
+        visitor.visit(*this);
+    }
+};
 
 // PATH Syntax
 class SimplePath : public ASTNode {

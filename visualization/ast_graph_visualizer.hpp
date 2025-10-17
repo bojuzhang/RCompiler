@@ -91,6 +91,7 @@ public:
     void visit(TypePath& node) override;
     void visit(ArrayType& node) override;
     void visit(ReferenceType& node) override;
+    void visit(UnitType& node) override {}
     
     // Visitor接口实现 - Path节点
     void visit(SimplePath& node) override;

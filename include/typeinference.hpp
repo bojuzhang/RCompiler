@@ -138,6 +138,7 @@ public:
     void visit(TypePath& node) override {}
     void visit(ArrayType& node) override {}
     void visit(ReferenceType& node) override {}
+    void visit(UnitType& node) override {}
     
     // 路径节点
     void visit(SimplePath& node) override {}

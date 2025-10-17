@@ -511,6 +511,15 @@ std::shared_ptr<Type> Parser::parseType() {
         
         case Token::kAnd:
             return parseReferenceType();
+        
+        case Token::kleftParenthe: {
+            advance();
+            if (!match(Token::krightParenthe)) {
+                return nullptr;
+            }
+            advance();
+            return std::make_shared<UnitType>();
+        }
                 
         default:
             return nullptr;

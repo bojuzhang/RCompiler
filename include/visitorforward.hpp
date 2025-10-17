@@ -91,9 +91,10 @@ class TypePath;
 // class TupleType;
 // class NeverType;
 class ArrayType;
-class SliceType;
-class InferredType;
+// class SliceType;
+// class InferredType;
 class ReferenceType;
+class UnitType;
 
 // PATH Syntax
 class SimplePath;

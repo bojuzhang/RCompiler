@@ -74,6 +74,7 @@ public:
     void visit(TypePath& node) override {}
     void visit(ArrayType& node) override {}
     void visit(ReferenceType& node) override {}
+    void visit(UnitType& node) override {}
     
     void visit(SimplePath& node) override {}
     void visit(SimplePathSegment& node) override {}
