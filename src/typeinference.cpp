@@ -404,6 +404,17 @@ void TypeInferenceChecker::visit(IdentifierPattern& node) {
     popNode();
 }
 
+void TypeInferenceChecker::visit(LiteralExpression& node) {
+    pushNode(node);
+    
+    auto type = inferLiteralType(node);
+    if (type) {
+        inferredTypes[&node] = type;
+    }
+    
+    popNode();
+}
+
 // 类型推断具体实现
 std::shared_ptr<SemanticType> TypeInferenceChecker::inferPathType(PathExpression& expr) {
     auto path = std::move(expr.simplepath);
@@ -1006,4 +1017,79 @@ std::shared_ptr<SemanticType> TypeInferenceChecker::resolveAssociatedType(std::s
     }
     
     return nullptr;
+}
+
+// 字面量类型推断实现
+std::shared_ptr<SemanticType> TypeInferenceChecker::inferLiteralType(LiteralExpression& expr) {
+    // 根据字面量类型推断类型
+    switch (expr.tokentype) {
+        case Token::kINTEGER_LITERAL: {
+            // 检查字面量后缀来确定类型
+            const std::string& literal = expr.literal;
+            
+            // 检查各种整数后缀
+            if (literal.length() >= 5) {
+                if (literal.substr(literal.length() - 5) == "usize") {
+                    return std::make_shared<SimpleType>("usize");
+                }
+                if (literal.substr(literal.length() - 5) == "isize") {
+                    return std::make_shared<SimpleType>("isize");
+                }
+            }
+            
+            if (literal.length() >= 4) {
+                if (literal.substr(literal.length() - 4) == "u128") {
+                    return std::make_shared<SimpleType>("u128");
+                }
+                if (literal.substr(literal.length() - 4) == "i128") {
+                    return std::make_shared<SimpleType>("i128");
+                }
+            }
+            
+            if (literal.length() >= 3) {
+                std::string suffix = literal.substr(literal.length() - 3);
+                if (suffix == "u32") {
+                    return std::make_shared<SimpleType>("u32");
+                }
+                if (suffix == "i32") {
+                    return std::make_shared<SimpleType>("i32");
+                }
+                if (suffix == "u64") {
+                    return std::make_shared<SimpleType>("u64");
+                }
+                if (suffix == "i64") {
+                    return std::make_shared<SimpleType>("i64");
+                }
+            }
+            
+            if (literal.length() >= 2) {
+                std::string suffix = literal.substr(literal.length() - 2);
+                if (suffix == "u8") {
+                    return std::make_shared<SimpleType>("u8");
+                }
+                if (suffix == "i8") {
+                    return std::make_shared<SimpleType>("i8");
+                }
+                if (suffix == "u16") {
+                    return std::make_shared<SimpleType>("u16");
+                }
+                if (suffix == "i16") {
+                    return std::make_shared<SimpleType>("i16");
+                }
+            }
+            
+            // 如果没有后缀，默认为 i32
+            return std::make_shared<SimpleType>("i32");
+        }
+        case Token::kCHAR_LITERAL:
+            return std::make_shared<SimpleType>("char");
+        case Token::kSTRING_LITERAL:
+        case Token::kRAW_STRING_LITERAL:
+            return std::make_shared<SimpleType>("str");
+        case Token::ktrue:
+        case Token::kfalse:
+            return std::make_shared<SimpleType>("bool");
+        default:
+            return std::make_shared<SimpleType>("unknown");
+    }
 }

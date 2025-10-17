@@ -100,7 +100,7 @@ public:
     
     // 表达式节点
     void visit(Expression& node) override {}
-    void visit(LiteralExpression& node) override {}
+    void visit(LiteralExpression& node) override;
     void visit(PathExpression& node) override;
     void visit(GroupedExpression& node) override {}
     void visit(ArrayExpression& node) override {}
