@@ -252,6 +252,9 @@ void SymbolCollector::collectFunctionSymbol(Function& node) {
         false
     );
     
+    // 确保函数符号的type字段也被设置，这样inferCallExpressionType可以从中获取
+    funcSymbol->type = returnType;
+    
     root->insertSymbol(funcName, funcSymbol);
 }
 
@@ -478,7 +481,16 @@ ASTNode* SymbolCollector::getCurrentNode() {
 }
 
 std::shared_ptr<SemanticType> SymbolCollector::resolveTypeFromNode(Type& node) {
-    return createSimpleType("unknown");
+    if (auto typePath = dynamic_cast<TypePath*>(&node)) {
+        if (typePath->simplepathsegement) {
+            std::string typeName = typePath->simplepathsegement->identifier;
+            // 确保类型名称不为空
+            if (!typeName.empty()) {
+                return createSimpleType(typeName);
+            }
+        }
+    }
+    return createSimpleType("unit");  // 默认返回unit而不是unknown
 }
 
 std::shared_ptr<SemanticType> SymbolCollector::createSimpleType(const std::string& name) {

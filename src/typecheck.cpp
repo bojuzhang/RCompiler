@@ -621,10 +621,42 @@ std::shared_ptr<SemanticType> TypeChecker::inferBinaryExpressionType(BinaryExpre
 std::shared_ptr<SemanticType> TypeChecker::inferCallExpressionType(CallExpression& expr) {
     auto calleeType = inferExpressionType(*expr.expression);
     if (!calleeType) return nullptr;
-    
+        
     // 查找函数符号
-    // 这里简化处理，实际需要解析callee的路径
-    return std::make_shared<SimpleType>("unknown");
+    // 如果callee是路径表达式，尝试解析为函数调用
+    if (auto pathExpr = dynamic_cast<PathExpression*>(expr.expression.get())) {
+        if (pathExpr->simplepath && !pathExpr->simplepath->simplepathsegements.empty()) {
+            std::string functionName = pathExpr->simplepath->simplepathsegements[0]->identifier;
+            
+            // 直接从作用域中查找符号
+            auto symbol = findSymbol(functionName);
+            if (symbol && symbol->kind == SymbolKind::Function) {
+                // 对于函数符号，尝试获取其类型
+                if (symbol->type) {
+                    return symbol->type;
+                }
+            }
+            
+            // 查找函数符号
+            auto functionSymbol = findFunction(functionName);
+            if (functionSymbol) {
+                // 返回函数的返回类型
+                // 对于任何有效的函数符号，优先使用其returntype字段
+                if (functionSymbol->returntype) {
+                    return functionSymbol->returntype;
+                }
+                
+                // 如果returntype字段无效，尝试使用type字段
+                if (functionSymbol->type) {
+                    return functionSymbol->type;
+                }
+            }
+            
+        }
+    }
+    
+    // 如果无法解析函数，返回默认类型
+    return calleeType;
 }
 
 std::shared_ptr<SemanticType> TypeChecker::inferMethodCallExpressionType(MethodCallExpression& expr) {
