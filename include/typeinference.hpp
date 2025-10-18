@@ -125,6 +125,8 @@ public:
     void visit(CompoundAssignmentExpression& node) override {}
     void visit(UnaryExpression& node) override {}
     void visit(BinaryExpression& node) override;
+    void visit(BorrowExpression& node) override {}
+    void visit(DereferenceExpression& node) override {}
     
     // 模式节点
     void visit(Pattern& node) override {}

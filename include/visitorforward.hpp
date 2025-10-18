@@ -73,6 +73,8 @@ class MatchArm;
 class MatchArmGuard;
 class UnaryExpression;
 class BinaryExpression;
+class BorrowExpression;
+class DereferenceExpression;
 
 // PATTERN Syntax
 class Pattern;

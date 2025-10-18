@@ -245,6 +245,12 @@ BinaryExpression::BinaryExpression(std::shared_ptr<Expression> leftexpression,
       rightexpression(std::move(rightexpression)),
       binarytype(binarytype) {}
 
+BorrowExpression::BorrowExpression(std::shared_ptr<Expression> expression, bool isdouble, bool ismut)
+    : expression(std::move(expression)), isdouble(isdouble), ismut(ismut) {}
+
+DereferenceExpression::DereferenceExpression(std::shared_ptr<Expression> expression)
+    : expression(std::move(expression)) {}
+
 // PATTERN Syntax
 LiteralPattern::LiteralPattern(bool isnegative, std::shared_ptr<Expression> literalexprerssion)
     : isnegative(isnegative), literalexprerssion(std::move(literalexprerssion)) {}

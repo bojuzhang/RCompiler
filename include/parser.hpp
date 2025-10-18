@@ -144,6 +144,8 @@ public:
     std::shared_ptr<GroupedExpression> parseGroupedExpression();
     std::shared_ptr<ArrayExpression> parseArrayExpression();
     std::shared_ptr<UnaryExpression> parseUnaryExpression();
+    std::shared_ptr<BorrowExpression> parseBorrowExpression();
+    std::shared_ptr<DereferenceExpression> parseDereferenceExpression();
     std::shared_ptr<BreakExpression> parseBreakExpression();
     std::shared_ptr<ReturnExpression> parseReturnExpression();
     // std::shared_ptr<TupleExpression> parseTupleExpression();

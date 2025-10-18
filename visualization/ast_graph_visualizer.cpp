@@ -697,6 +697,40 @@ void ASTGraphVisualizer::visit(BinaryExpression& node) {
     popNode();
 }
 
+void ASTGraphVisualizer::visit(BorrowExpression& node) {
+    std::string details = node.isdouble ? "&&" : "&";
+    if (node.ismut) details += "mut";
+    std::string nodeId = generateNodeId();
+    addNode(nodeId, getNodeLabel("BorrowExpression", details));
+    
+    int parentId = getCurrentNodeId();
+    if (parentId != -1) {
+        addEdge("node_" + std::to_string(parentId), nodeId);
+    }
+    
+    pushNode(std::stoi(nodeId.substr(5)));
+    if (node.expression) {
+        node.expression->accept(*this);
+    }
+    popNode();
+}
+
+void ASTGraphVisualizer::visit(DereferenceExpression& node) {
+    std::string nodeId = generateNodeId();
+    addNode(nodeId, getNodeLabel("DereferenceExpression", "*"));
+    
+    int parentId = getCurrentNodeId();
+    if (parentId != -1) {
+        addEdge("node_" + std::to_string(parentId), nodeId);
+    }
+    
+    pushNode(std::stoi(nodeId.substr(5)));
+    if (node.expression) {
+        node.expression->accept(*this);
+    }
+    popNode();
+}
+
 // Pattern节点访问实现
 void ASTGraphVisualizer::visit(Pattern& node) {
     std::string nodeId = generateNodeId();

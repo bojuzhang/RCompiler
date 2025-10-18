@@ -82,6 +82,11 @@ std::shared_ptr<Expression> Parser::parsePrefixPratt() {
         case Token::kMinus:
         case Token::kNot:
             return parseUnaryExpression();
+        case Token::kAnd:
+        case Token::kAndAnd:
+            return parseBorrowExpression();
+        case Token::kStar:
+            return parseDereferenceExpression();
         case Token::kbreak:
             return parseBreakExpression();
         case Token::kcontinue: {
@@ -275,6 +280,28 @@ std::shared_ptr<UnaryExpression> Parser::parseUnaryExpression() {
     advance();
     auto expression = parseExpression();
     return std::make_shared<UnaryExpression>(std::move(expression), unarytype);
+}
+std::shared_ptr<BorrowExpression> Parser::parseBorrowExpression() {
+    // std::cerr << "test borrowexpression\n";
+    auto borrowtype = peek();
+    bool isdouble = (borrowtype == Token::kAndAnd);
+    advance();
+    
+    bool ismut = false;
+    if (match(Token::kmut)) {
+        ismut = true;
+        advance();
+    }
+    
+    auto expression = parseExpression();
+    return std::make_shared<BorrowExpression>(std::move(expression), isdouble, ismut);
+}
+std::shared_ptr<DereferenceExpression> Parser::parseDereferenceExpression() {
+    if (match(Token::kStar)) {
+        advance();
+    }
+    auto expression = parseExpression();
+    return std::make_shared<DereferenceExpression>(std::move(expression));
 }
 std::shared_ptr<BreakExpression> Parser::parseBreakExpression() {
     if (match(Token::kbreak)) {

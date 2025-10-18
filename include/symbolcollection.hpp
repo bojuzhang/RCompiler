@@ -63,6 +63,8 @@ public:
     void visit(CompoundAssignmentExpression& node) override {}
     void visit(UnaryExpression& node) override {}
     void visit(BinaryExpression& node) override {}
+    void visit(BorrowExpression& node) override {}
+    void visit(DereferenceExpression& node) override {}
     
     void visit(Pattern& node) override {}
     void visit(LiteralPattern& node) override {}

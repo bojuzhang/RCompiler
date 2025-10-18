@@ -669,6 +669,28 @@ public:
         visitor.visit(*this);
     }
 };
+class BorrowExpression : public Expression {
+public:
+    std::shared_ptr<Expression> expression;
+    bool isdouble;  // true for '&&', false for '&'
+    bool ismut;     // true for 'mut', false otherwise
+public:
+    BorrowExpression(std::shared_ptr<Expression> expression, bool isdouble, bool ismut);
+    
+    void accept(ASTVisitor& visitor) override {
+        visitor.visit(*this);
+    }
+};
+class DereferenceExpression : public Expression {
+public:
+    std::shared_ptr<Expression> expression;
+public:
+    explicit DereferenceExpression(std::shared_ptr<Expression> expression);
+    
+    void accept(ASTVisitor& visitor) override {
+        visitor.visit(*this);
+    }
+};
 
 // PATTERN Syntax
 class Pattern : public ASTNode {

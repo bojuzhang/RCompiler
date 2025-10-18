@@ -159,6 +159,8 @@ public:
     void visit(TypeCastExpression& node) override {}
     void visit(AssignmentExpression& node) override {}
     void visit(CompoundAssignmentExpression& node) override {}
+    void visit(BorrowExpression& node) override {}
+    void visit(DereferenceExpression& node) override {}
     
     // 模式、类型、路径节点（不需要处理）
     void visit(Pattern& node) override {}

@@ -45,6 +45,8 @@ public:
     virtual void visit(CompoundAssignmentExpression& node) = 0;
     virtual void visit(UnaryExpression& node) = 0;
     virtual void visit(BinaryExpression& node) = 0;
+    virtual void visit(BorrowExpression& node) = 0;
+    virtual void visit(DereferenceExpression& node) = 0;
     
     virtual void visit(Pattern& node) = 0;
     virtual void visit(LiteralPattern& node) = 0;

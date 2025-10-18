@@ -462,3 +462,130 @@ TEST_F(ParserTest, ParseGroupedExpression) {
     auto groupedExpr = dynamic_cast<GroupedExpression*>(expr.get());
     EXPECT_NE(groupedExpr, nullptr);
 }
+
+// Test 30: 借用表达式解析 (&)
+TEST_F(ParserTest, ParseBorrowExpression) {
+    std::vector<std::pair<Token, std::string>> tokens = {
+        {Token::kAnd, "&"},
+        {Token::kIDENTIFIER, "x"}
+    };
+    auto parser = createParser(tokens);
+    
+    auto expr = parser->parseExpression();
+    EXPECT_NE(expr, nullptr);
+    
+    auto borrowExpr = dynamic_cast<BorrowExpression*>(expr.get());
+    EXPECT_NE(borrowExpr, nullptr);
+    EXPECT_FALSE(borrowExpr->isdouble);  // 单个&
+    EXPECT_FALSE(borrowExpr->ismut);     // 非mut
+}
+
+// Test 31: 可变借用表达式解析 (&mut)
+TEST_F(ParserTest, ParseMutableBorrowExpression) {
+    std::vector<std::pair<Token, std::string>> tokens = {
+        {Token::kAnd, "&"},
+        {Token::kmut, "mut"},
+        {Token::kIDENTIFIER, "x"}
+    };
+    auto parser = createParser(tokens);
+    
+    auto expr = parser->parseExpression();
+    EXPECT_NE(expr, nullptr);
+    
+    auto borrowExpr = dynamic_cast<BorrowExpression*>(expr.get());
+    EXPECT_NE(borrowExpr, nullptr);
+    EXPECT_FALSE(borrowExpr->isdouble);  // 单个&
+    EXPECT_TRUE(borrowExpr->ismut);      // mut
+}
+
+// Test 32: 双重借用表达式解析 (&&)
+TEST_F(ParserTest, ParseDoubleBorrowExpression) {
+    std::vector<std::pair<Token, std::string>> tokens = {
+        {Token::kAndAnd, "&&"},
+        {Token::kIDENTIFIER, "x"}
+    };
+    auto parser = createParser(tokens);
+    
+    auto expr = parser->parseExpression();
+    EXPECT_NE(expr, nullptr);
+    
+    auto borrowExpr = dynamic_cast<BorrowExpression*>(expr.get());
+    EXPECT_NE(borrowExpr, nullptr);
+    EXPECT_TRUE(borrowExpr->isdouble);   // 双重&&
+    EXPECT_FALSE(borrowExpr->ismut);     // 非mut
+}
+
+// Test 33: 双重可变借用表达式解析 (&&mut)
+TEST_F(ParserTest, ParseDoubleMutableBorrowExpression) {
+    std::vector<std::pair<Token, std::string>> tokens = {
+        {Token::kAndAnd, "&&"},
+        {Token::kmut, "mut"},
+        {Token::kIDENTIFIER, "x"}
+    };
+    auto parser = createParser(tokens);
+    
+    auto expr = parser->parseExpression();
+    EXPECT_NE(expr, nullptr);
+    
+    auto borrowExpr = dynamic_cast<BorrowExpression*>(expr.get());
+    EXPECT_NE(borrowExpr, nullptr);
+    EXPECT_TRUE(borrowExpr->isdouble);   // 双重&&
+    EXPECT_TRUE(borrowExpr->ismut);      // mut
+}
+
+// Test 34: 解引用表达式解析 (*)
+TEST_F(ParserTest, ParseDereferenceExpression) {
+    std::vector<std::pair<Token, std::string>> tokens = {
+        {Token::kStar, "*"},
+        {Token::kIDENTIFIER, "ptr"}
+    };
+    auto parser = createParser(tokens);
+    
+    auto expr = parser->parseExpression();
+    EXPECT_NE(expr, nullptr);
+    
+    auto derefExpr = dynamic_cast<DereferenceExpression*>(expr.get());
+    EXPECT_NE(derefExpr, nullptr);
+}
+
+// Test 35: 复杂借用表达式解析 (&*ptr)
+TEST_F(ParserTest, ParseComplexBorrowExpression) {
+    std::vector<std::pair<Token, std::string>> tokens = {
+        {Token::kAnd, "&"},
+        {Token::kStar, "*"},
+        {Token::kIDENTIFIER, "ptr"}
+    };
+    auto parser = createParser(tokens);
+    
+    auto expr = parser->parseExpression();
+    EXPECT_NE(expr, nullptr);
+    
+    auto borrowExpr = dynamic_cast<BorrowExpression*>(expr.get());
+    EXPECT_NE(borrowExpr, nullptr);
+    EXPECT_FALSE(borrowExpr->isdouble);  // 单个&
+    EXPECT_FALSE(borrowExpr->ismut);     // 非mut
+    
+    // 检查内部表达式是解引用表达式
+    auto innerExpr = dynamic_cast<DereferenceExpression*>(borrowExpr->expression.get());
+    EXPECT_NE(innerExpr, nullptr);
+}
+
+// Test 36: 复杂解引用表达式解析 (*&x)
+TEST_F(ParserTest, ParseComplexDereferenceExpression) {
+    std::vector<std::pair<Token, std::string>> tokens = {
+        {Token::kStar, "*"},
+        {Token::kAnd, "&"},
+        {Token::kIDENTIFIER, "x"}
+    };
+    auto parser = createParser(tokens);
+    
+    auto expr = parser->parseExpression();
+    EXPECT_NE(expr, nullptr);
+    
+    auto derefExpr = dynamic_cast<DereferenceExpression*>(expr.get());
+    EXPECT_NE(derefExpr, nullptr);
+    
+    // 检查内部表达式是借用表达式
+    auto innerExpr = dynamic_cast<BorrowExpression*>(derefExpr->expression.get());
+    EXPECT_NE(innerExpr, nullptr);
+}
