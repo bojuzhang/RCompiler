@@ -35,16 +35,13 @@ std::shared_ptr<SemanticType> TypeEnvironment::applySubstitutions(std::shared_pt
     if (auto typeVar = dynamic_cast<TypeVariable*>(type.get())) {
         auto it = typeSubstitutions.find(typeVar->getName());
         if (it != typeSubstitutions.end()) {
-            return applySubstitutions(it->second);  // 递归应用替换
+            return applySubstitutions(it->second);
         }
         return type;
     } else if (auto arrayType = dynamic_cast<ArrayTypeWrapper*>(type.get())) {
         auto newElement = applySubstitutions(arrayType->getElementType());
         return std::make_shared<ArrayTypeWrapper>(newElement, arrayType->getSizeExpression());
-    } else if (auto sliceType = dynamic_cast<SliceTypeWrapper*>(type.get())) {
-        auto newElement = applySubstitutions(sliceType->getElementType());
-        return std::make_shared<SliceTypeWrapper>(newElement);
-    }
+    } 
     
     return type;
 }
@@ -62,7 +59,6 @@ void TypeEnvironment::unify(std::shared_ptr<SemanticType> type1, std::shared_ptr
         addSubstitution(var1->getName(), type2);
         return;
     }
-    
     if (auto var2 = dynamic_cast<TypeVariable*>(type2.get())) {
         addSubstitution(var2->getName(), type1);
         return;
@@ -87,14 +83,6 @@ void TypeEnvironment::unify(std::shared_ptr<SemanticType> type1, std::shared_ptr
         }
     }
     
-    // 处理切片类型
-    if (auto slice1 = dynamic_cast<SliceTypeWrapper*>(type1.get())) {
-        if (auto slice2 = dynamic_cast<SliceTypeWrapper*>(type2.get())) {
-            unify(slice1->getElementType(), slice2->getElementType());
-            return;
-        }
-    }
-    
     throw std::runtime_error("SemanticType mismatch: " + type1->tostring() + " vs " + type2->tostring());
 }
 
@@ -107,8 +95,6 @@ bool TypeEnvironment::occursCheck(const std::string& typeVar, std::shared_ptr<Se
     // } 
     else if (auto arrayType = dynamic_cast<ArrayTypeWrapper*>(type.get())) {
         return occursCheck(typeVar, arrayType->getElementType());
-    } else if (auto sliceType = dynamic_cast<SliceTypeWrapper*>(type.get())) {
-        return occursCheck(typeVar, sliceType->getElementType());
     }
     
     return false;
@@ -140,7 +126,6 @@ std::shared_ptr<SemanticType> TypeInferenceChecker::getInferredType(ASTNode* nod
 void TypeInferenceChecker::visit(Crate& node) {
     pushNode(node);
     
-    // 推断整个crate的类型
     for (const auto& item : node.items) {
         if (item) {
             item->accept(*this);
@@ -165,20 +150,16 @@ void TypeInferenceChecker::visit(Function& node) {
     currentFunctionReturnType = node.functionreturntype->type ? dynamic_cast<TypePath*>(node.functionreturntype->type.get())->simplepathsegement->identifier : "()";
     
     enterFunctionContext(currentFunctionReturnType);
-    
     // 进入函数作用域
     scopeTree->enterScope(Scope::ScopeType::Function, &node);
     
-    // 处理函数参数类型
     if (node.functionparameters) {
         for (const auto& param : node.functionparameters->functionparams) {
             param->accept(*this);
         }
     }
     
-    // 处理函数体类型
     if (node.blockexpression) {
-        // 设置期望的返回类型
         pushExpectedType(std::make_shared<SimpleType>(currentFunctionReturnType));
         node.blockexpression->accept(*this);
         popExpectedType();
@@ -190,7 +171,6 @@ void TypeInferenceChecker::visit(Function& node) {
         }
     }
     
-    // 退出函数作用域
     scopeTree->exitScope();
     exitFunctionContext();
     currentFunctionReturnType = previousReturnType;
@@ -201,9 +181,7 @@ void TypeInferenceChecker::visit(Function& node) {
 void TypeInferenceChecker::visit(LetStatement& node) {
     pushNode(node);
     
-    // 获取声明的类型
     std::shared_ptr<SemanticType> type;
-    
     if (node.type) {
         // 有显式类型注解
         node.type->accept(*this);
@@ -213,7 +191,6 @@ void TypeInferenceChecker::visit(LetStatement& node) {
         type = typeEnv->freshTypeVariable();
     }
     
-    // 检查模式
     if (node.patternnotopalt) {
         // 设置期望的类型用于模式检查
         pushExpectedType(type);
@@ -221,7 +198,6 @@ void TypeInferenceChecker::visit(LetStatement& node) {
         popExpectedType();
     }
     
-    // 检查初始化表达式
     if (node.expression) {
         // 设置期望的类型
         pushExpectedType(type);
@@ -249,7 +225,6 @@ void TypeInferenceChecker::visit(ExpressionStatement& node) {
     
     if (node.astnode) {
         node.astnode->accept(*this);
-        
         // 表达式语句的类型是unit，但表达式的类型用于检查
         inferredTypes[&node] = std::make_shared<SimpleType>("()");
     }
@@ -319,10 +294,7 @@ void TypeInferenceChecker::visit(IfExpression& node) {
 void TypeInferenceChecker::visit(BlockExpression& node) {
     pushNode(node);
     
-    // 进入块作用域
     scopeTree->enterScope(Scope::ScopeType::Block, &node);
-    
-    // 处理所有语句
     for (const auto& stmt : node.statements) {
         if (stmt) {
             stmt->accept(*this);
@@ -340,7 +312,6 @@ void TypeInferenceChecker::visit(BlockExpression& node) {
         inferredTypes[&node] = type;
     }
     
-    // 退出块作用域
     scopeTree->exitScope();
     
     popNode();
@@ -462,10 +433,8 @@ std::shared_ptr<SemanticType> TypeInferenceChecker::inferFieldAccessType(FieldEx
     
     if (!baseExpr) return nullptr;
     
-    // 推断基础表达式类型
     baseExpr->accept(*this);
     auto baseType = getInferredType(baseExpr.get());
-    
     if (!baseType) return nullptr;
     
     // 解析字段类型
@@ -495,13 +464,10 @@ std::shared_ptr<SemanticType> TypeInferenceChecker::inferBinaryExpressionType(Bi
     
     if (!left || !right) return nullptr;
     
-    // 推断左右操作数类型
     left->accept(*this);
     right->accept(*this);
-    
     auto leftType = getInferredType(left.get());
     auto rightType = getInferredType(right.get());
-    
     if (!leftType || !rightType) return nullptr;
     
     // 根据操作符推断类型
@@ -511,16 +477,14 @@ std::shared_ptr<SemanticType> TypeInferenceChecker::inferBinaryExpressionType(Bi
         case Token::kStar:
         case Token::kSlash:
         case Token::kPercent:
-            // 算术运算：需要数值类型
-            addTypeConstraint(leftType, rightType);  // 左右类型应该相同
-            return leftType;  // 返回操作数类型
-            
+            addTypeConstraint(leftType, rightType); 
+            return leftType; 
+
         case Token::kShl:
         case Token::kShr:
         case Token::kAnd:
         case Token::kOr:
         case Token::kCaret:
-            // 位运算：需要整数类型
             addTypeConstraint(leftType, rightType);
             return leftType;
             
@@ -530,13 +494,11 @@ std::shared_ptr<SemanticType> TypeInferenceChecker::inferBinaryExpressionType(Bi
         case Token::kGt:
         case Token::kLe:
         case Token::kGe:
-            // 比较运算：返回bool
-            addTypeConstraint(leftType, rightType);  // 可比较的类型应该相同
+            addTypeConstraint(leftType, rightType);
             return std::make_shared<SimpleType>("bool");
             
         case Token::kAndAnd:
         case Token::kOrOr:
-            // 逻辑运算：需要bool类型，返回bool
             addTypeConstraint(leftType, std::make_shared<SimpleType>("bool"));
             addTypeConstraint(rightType, std::make_shared<SimpleType>("bool"));
             return std::make_shared<SimpleType>("bool");
@@ -554,7 +516,6 @@ std::shared_ptr<SemanticType> TypeInferenceChecker::inferIfExpressionType(IfExpr
     
     if (!condition || !ifBlock) return nullptr;
     
-    // 推断条件类型（应该是bool）
     condition->accept(*this);
     auto condType = getInferredType(condition->expression.get());
     
@@ -562,12 +523,10 @@ std::shared_ptr<SemanticType> TypeInferenceChecker::inferIfExpressionType(IfExpr
         addTypeConstraint(condType, std::make_shared<SimpleType>("bool"));
     }
     
-    // 推断if分支类型
     ifBlock->accept(*this);
     auto ifType = getInferredType(ifBlock.get());
     
     if (!elseExpr) {
-        // 没有else分支，返回unit类型
         return std::make_shared<SimpleType>("()");
     }
     
@@ -579,7 +538,6 @@ std::shared_ptr<SemanticType> TypeInferenceChecker::inferIfExpressionType(IfExpr
     
     // 检查两个分支的类型兼容性
     if (ifType->tostring() != "!" && elseType->tostring() != "!") {
-        // 尝试统一类型，如果不兼容则报告错误
         try {
             addTypeConstraint(ifType, elseType);
         } catch (const std::exception& e) {
@@ -638,7 +596,6 @@ std::shared_ptr<SemanticType> TypeInferenceChecker::inferAssignmentType(Assignme
     // 推断右侧类型
     rhs->accept(*this);
     auto rhsType = getInferredType(rhs.get());
-    
     if (!rhsType) return nullptr;
     
     // 对于赋值表达式，我们需要推断左侧的类型
@@ -658,7 +615,6 @@ std::shared_ptr<SemanticType> TypeInferenceChecker::inferAssignmentType(Assignme
     return std::make_shared<SimpleType>("()");
 }
 
-// 路径解析
 std::shared_ptr<SemanticType> TypeInferenceChecker::resolvePathType(SimplePath& path) {
     auto segments = path.simplepathsegements;
     if (segments.empty()) {
@@ -668,7 +624,6 @@ std::shared_ptr<SemanticType> TypeInferenceChecker::resolvePathType(SimplePath& 
     // 单段路径：变量、常量或类型
     if (segments.size() == 1) {
         std::string name = segments[0]->identifier;
-        
         // 查找符号
         auto symbol = resolveSymbol(name);
         if (symbol) {
@@ -684,8 +639,6 @@ std::shared_ptr<SemanticType> TypeInferenceChecker::resolvePathType(SimplePath& 
     if (segments.size() == 2) {
         std::string baseName = segments[0]->identifier;
         std::string itemName = segments[1]->identifier;
-        
-        // 查找基础类型
         auto baseSymbol = resolveSymbol(baseName);
         if (baseSymbol && baseSymbol->type) {
             return resolveAssociatedType(baseSymbol->type, itemName);
@@ -704,7 +657,6 @@ std::shared_ptr<SemanticType> TypeInferenceChecker::resolveFunctionType(const st
         reportUndefinedError(functionName, "function", getCurrentNode());
         return nullptr;
     }
-    
     auto funcSymbol = std::dynamic_pointer_cast<FunctionSymbol>(symbol);
     if (!funcSymbol) {
         return nullptr;
@@ -744,7 +696,6 @@ std::shared_ptr<SemanticType> TypeInferenceChecker::resolveMethodType(std::share
         reportUndefinedError(methodName, "method", getCurrentNode());
         return nullptr;
     }
-    
     auto methodSymbol = std::dynamic_pointer_cast<FunctionSymbol>(symbol);
     if (!methodSymbol) {
         return nullptr;
@@ -798,7 +749,6 @@ void TypeInferenceChecker::addTypeConstraint(std::shared_ptr<SemanticType> actua
 
 void TypeInferenceChecker::solveTypeConstraints() {
     // 类型约束已经在unify过程中解决
-    // 这里可以添加额外的约束解决逻辑
 }
 
 bool TypeInferenceChecker::areTypesCompatible(std::shared_ptr<SemanticType> type1, std::shared_ptr<SemanticType> type2) {
@@ -869,7 +819,6 @@ void TypeInferenceChecker::checkAssignmentMutability(Expression& lhs) {
         // 字段赋值：需要检查字段的可变性
         // 这里简化处理
     }
-    // 其他可赋值表达式...
 }
 
 // 错误处理
@@ -936,7 +885,6 @@ void TypeInferenceChecker::exitImplContext() {
 // 其他辅助方法实现...
 std::shared_ptr<SemanticType> TypeInferenceChecker::resolveTypeFromSymbol(std::shared_ptr<Symbol> symbol) {
     if (!symbol) return nullptr;
-    
     if (symbol->type) {
         return symbol->type;
     }
@@ -944,7 +892,6 @@ std::shared_ptr<SemanticType> TypeInferenceChecker::resolveTypeFromSymbol(std::s
     // 根据符号种类返回默认类型
     switch (symbol->kind) {
         case SymbolKind::Variable:
-            // 变量类型需要在声明时推断
             return typeEnv->freshTypeVariable();
             
         case SymbolKind::Function:
@@ -974,13 +921,11 @@ std::shared_ptr<SemanticType> TypeInferenceChecker::resolveTypeFromSymbol(std::s
 
 std::shared_ptr<SemanticType> TypeInferenceChecker::getStructFieldType(const std::string& structName, 
                                                               const std::string& fieldName) {
-    // 查找结构体符号
     auto structSymbol = std::dynamic_pointer_cast<StructSymbol>(resolveSymbol(structName));
     if (!structSymbol) {
         return nullptr;
     }
     
-    // 查找字段
     for (const auto& field : structSymbol->fields) {
         if (field->name == fieldName) {
             return field->type;
@@ -1024,25 +969,14 @@ std::shared_ptr<SemanticType> TypeInferenceChecker::inferLiteralType(LiteralExpr
     // 根据字面量类型推断类型
     switch (expr.tokentype) {
         case Token::kINTEGER_LITERAL: {
-            // 检查字面量后缀来确定类型
             const std::string& literal = expr.literal;
             
-            // 检查各种整数后缀
             if (literal.length() >= 5) {
                 if (literal.substr(literal.length() - 5) == "usize") {
                     return std::make_shared<SimpleType>("usize");
                 }
                 if (literal.substr(literal.length() - 5) == "isize") {
                     return std::make_shared<SimpleType>("isize");
-                }
-            }
-            
-            if (literal.length() >= 4) {
-                if (literal.substr(literal.length() - 4) == "u128") {
-                    return std::make_shared<SimpleType>("u128");
-                }
-                if (literal.substr(literal.length() - 4) == "i128") {
-                    return std::make_shared<SimpleType>("i128");
                 }
             }
             
@@ -1062,23 +996,6 @@ std::shared_ptr<SemanticType> TypeInferenceChecker::inferLiteralType(LiteralExpr
                 }
             }
             
-            if (literal.length() >= 2) {
-                std::string suffix = literal.substr(literal.length() - 2);
-                if (suffix == "u8") {
-                    return std::make_shared<SimpleType>("u8");
-                }
-                if (suffix == "i8") {
-                    return std::make_shared<SimpleType>("i8");
-                }
-                if (suffix == "u16") {
-                    return std::make_shared<SimpleType>("u16");
-                }
-                if (suffix == "i16") {
-                    return std::make_shared<SimpleType>("i16");
-                }
-            }
-            
-            // 如果没有后缀，默认为 i32
             return std::make_shared<SimpleType>("i32");
         }
         case Token::kCHAR_LITERAL:

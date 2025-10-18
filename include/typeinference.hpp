@@ -1,4 +1,3 @@
-// type_inference.hpp
 #pragma once
 
 #include "visitor.hpp"
@@ -24,7 +23,6 @@ public:
     std::string tostring() const override { return "!"; }
 };
 
-// 类型环境（用于类型推断）
 class TypeEnvironment {
 private:
     std::unordered_map<std::string, std::shared_ptr<SemanticType>> typeVariables;
@@ -52,7 +50,6 @@ private:
     bool occursCheck(const std::string& typeVar, std::shared_ptr<SemanticType> type);
 };
 
-// 类型推断检查器
 class TypeInferenceChecker : public ASTVisitor {
 private:
     std::shared_ptr<ScopeTree> scopeTree;
@@ -84,7 +81,6 @@ public:
     bool hasInferenceErrors() const;
     std::shared_ptr<SemanticType> getInferredType(ASTNode* node) const;
     
-    // Visitor接口实现
     void visit(Crate& node) override;
     void visit(Item& node) override {}
     void visit(Function& node) override;
@@ -93,12 +89,10 @@ public:
     void visit(Enumeration& node) override {}
     void visit(InherentImpl& node) override {}
     
-    // 语句节点
     void visit(Statement& node) override {}
     void visit(LetStatement& node) override;
     void visit(ExpressionStatement& node) override;
     
-    // 表达式节点
     void visit(Expression& node) override {}
     void visit(LiteralExpression& node) override;
     void visit(PathExpression& node) override;
@@ -128,21 +122,18 @@ public:
     void visit(BorrowExpression& node) override {}
     void visit(DereferenceExpression& node) override {}
     
-    // 模式节点
     void visit(Pattern& node) override {}
     void visit(LiteralPattern& node) override {}
     void visit(IdentifierPattern& node) override;
     void visit(WildcardPattern& node) override {}
     void visit(PathPattern& node) override {}
     
-    // 类型节点（AST中的Type，不是SemanticType）
     void visit(Type& node) override {}
     void visit(TypePath& node) override {}
     void visit(ArrayType& node) override {}
     void visit(ReferenceType& node) override {}
     void visit(UnitType& node) override {}
     
-    // 路径节点
     void visit(SimplePath& node) override {}
     void visit(SimplePathSegment& node) override {}
 
@@ -160,7 +151,6 @@ public:
     void visit(PathInExpression& node) override {}
 
 private:
-    // 辅助方法
     void pushNode(ASTNode& node);
     void popNode();
     ASTNode* getCurrentNode();
@@ -168,11 +158,9 @@ private:
     void popExpectedType();
     std::shared_ptr<SemanticType> getExpectedType();
     
-    // 类型推断核心方法
     std::shared_ptr<SemanticType> inferExpressionType(Expression& expr);
     void checkExpressionType(Expression& expr, std::shared_ptr<SemanticType> expectedType);
     
-    // 具体表达式类型推断
     std::shared_ptr<SemanticType> inferLiteralType(LiteralExpression& expr);
     std::shared_ptr<SemanticType> inferPathType(PathExpression& expr);
     std::shared_ptr<SemanticType> inferCallType(CallExpression& expr);
@@ -187,7 +175,6 @@ private:
     std::shared_ptr<SemanticType> inferStructExpressionType(StructExpression& expr);
     std::shared_ptr<SemanticType> inferAssignmentType(AssignmentExpression& expr);
     
-    // 函数和方法处理
     std::shared_ptr<SemanticType> resolveFunctionType(const std::string& functionName, 
                                              const std::vector<std::shared_ptr<SemanticType>>& argTypes);
     std::shared_ptr<SemanticType> resolveMethodType(std::shared_ptr<SemanticType> receiverType,
@@ -195,44 +182,36 @@ private:
                                            const std::vector<std::shared_ptr<SemanticType>>& argTypes);
     std::vector<std::shared_ptr<SemanticType>> inferArgumentTypes(CallParams& params);
     
-    // 路径解析
     std::shared_ptr<SemanticType> resolvePathType(SimplePath& path);
     std::shared_ptr<SemanticType> resolveAssociatedType(std::shared_ptr<SemanticType> baseType, 
                                                const std::string& associatedItem);
     
-    // 类型检查和约束
     void addTypeConstraint(std::shared_ptr<SemanticType> actual, std::shared_ptr<SemanticType> expected);
     void solveTypeConstraints();
     bool areTypesCompatible(std::shared_ptr<SemanticType> type1, std::shared_ptr<SemanticType> type2);
     bool isSubtype(std::shared_ptr<SemanticType> subType, std::shared_ptr<SemanticType> superType);
     
-    // 变量和符号处理
     std::shared_ptr<SemanticType> getVariableType(const std::string& varName);
     void setVariableType(const std::string& varName, std::shared_ptr<SemanticType> type);
     std::shared_ptr<Symbol> resolveSymbol(const std::string& name);
     std::shared_ptr<SemanticType> resolveTypeFromSymbol(std::shared_ptr<Symbol> symbol);
     
-    // 结构体和枚举处理
     std::shared_ptr<SemanticType> getStructFieldType(const std::string& structName, 
                                             const std::string& fieldName);
     std::shared_ptr<SemanticType> getEnumVariantType(const std::string& enumName,
                                             const std::string& variantName);
     
-    // 可变性检查
     void checkMutability(const std::string& varName, ASTNode* usageContext);
     void checkAssignmentMutability(Expression& lhs);
     
-    // 错误处理
     void reportError(const std::string& message);
     void reportTypeError(const std::string& expected, const std::string& actual, ASTNode* context);
     void reportUndefinedError(const std::string& name, const std::string& kind, ASTNode* context);
     
-    // 上下文管理
     void enterFunctionContext(const std::string& returnType);
     void exitFunctionContext();
     void enterImplContext(std::shared_ptr<SemanticType> selfType);
     void exitImplContext();
     
-    // AST Type到SemanticType的转换
     std::shared_ptr<SemanticType> convertASTTypeToSemanticType(Type& astType);
 };

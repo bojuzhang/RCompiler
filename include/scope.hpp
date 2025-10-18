@@ -48,18 +48,15 @@ public:
 public:
     ScopeTree();
     
-    // 树导航
     void enterScope(Scope::ScopeType type, ASTNode* node = nullptr);
     void exitScope();
     void gotoNode(ASTNode* node);
     
-    // 查询
     std::shared_ptr<Scope> getCurrentScope();
     std::shared_ptr<Scope> getRootScope();
     std::shared_ptr<Scope> findScopeForNode(ASTNode* node);
     std::vector<std::shared_ptr<Scope>> getPathToCurrentScope();
     
-    // 符号操作代理
     bool insertSymbol(const std::string& name, std::shared_ptr<Symbol> symbol);
     std::shared_ptr<Symbol> lookupSymbol(const std::string& name);
     std::shared_ptr<Symbol> lookupSymbolInCurrentScope(const std::string& name);

@@ -15,7 +15,6 @@ void SymbolCollector::beginCollection() {
     auto builtinTypes = {
         "i32", "i64", "u32", "u64", "bool", "char", "str", "usize", "isize", "unit"
     };
-    
     for (const auto& typeName : builtinTypes) {
         auto typeSymbol = std::make_shared<Symbol>(
             typeName, SymbolKind::BuiltinType, nullptr, false, nullptr
@@ -27,7 +26,6 @@ void SymbolCollector::beginCollection() {
     auto builtinFunctions = {
         "print", "println", "printInt", "printlnInt", "getString", "getInt", "exit"
     };
-    
     for (const auto& typeName : builtinFunctions) {
         auto typeSymbol = std::make_shared<Symbol>(
             typeName, SymbolKind::Function, nullptr, false, nullptr
@@ -38,24 +36,19 @@ void SymbolCollector::beginCollection() {
 
 void SymbolCollector::visit(Crate& node) {
     pushNode(node);
-    
     for (const auto& item : node.items) {
         if (item) {
             item->accept(*this);
         }
     }
-    
     popNode();
 }
 
 void SymbolCollector::visit(Item& node) {
     pushNode(node);
-    
-    // 根据item的具体类型分发处理
     if (node.item) {
         node.item->accept(*this);
     }
-    
     popNode();
 }
 
@@ -64,14 +57,11 @@ void SymbolCollector::visit(Function& node) {
     
     bool wasInFunction = inFunction;
     std::string previousFunctionName = currentFunctionName;
-    
     inFunction = true;
     currentFunctionName = node.identifier_name;
     
     collectFunctionSymbol(node);
-    
     root->enterScope(Scope::ScopeType::Function, &node);
-    
     collectParameterSymbols(node);
     
     if (node.blockexpression) {
@@ -79,7 +69,6 @@ void SymbolCollector::visit(Function& node) {
     }
     
     root->exitScope();
-    
     inFunction = wasInFunction;
     currentFunctionName = previousFunctionName;
     popNode();
@@ -89,7 +78,6 @@ void SymbolCollector::visit(ConstantItem& node) {
     pushNode(node);
     
     collectConstantSymbol(node);
-    
     if (node.expression) {
         node.expression->accept(*this);
     }
@@ -101,13 +89,10 @@ void SymbolCollector::visit(StructStruct& node) {
     pushNode(node);
     
     root->enterScope(Scope::ScopeType::Struct, &node);
-    
     collectStructSymbol(node);
-    
     collectFieldSymbols(node);
     
     root->exitScope();
-    
     popNode();
 }
 
@@ -115,13 +100,10 @@ void SymbolCollector::visit(Enumeration& node) {
     pushNode(node);
     
     root->enterScope(Scope::ScopeType::Enum, &node);
-    
     collectEnumSymbol(node);
-    
     collectVariantSymbols(node);
     
     root->exitScope();
-    
     popNode();
 }
 
@@ -134,7 +116,6 @@ void SymbolCollector::visit(InherentImpl& node) {
     root->enterScope(Scope::ScopeType::Impl, &node);
     
     collectImplSymbol(node);
-    
     for (const auto& item : node.associateditems) {
         if (item) {
             item->accept(*this);
@@ -142,18 +123,15 @@ void SymbolCollector::visit(InherentImpl& node) {
     }
     
     root->exitScope();
-    
     inImpl = wasInImpl;
     popNode();
 }
 
 void SymbolCollector::visit(Statement& node) {
     pushNode(node);
-    
     if (node.astnode) {
         node.astnode->accept(*this);
     }
-    
     popNode();
 }
 
@@ -164,7 +142,6 @@ void SymbolCollector::visit(LetStatement& node) {
     if (node.patternnotopalt) {
         if (auto identPattern = dynamic_cast<IdentifierPattern*>(node.patternnotopalt.get())) {
             std::string varName = identPattern->identifier;
-            
             // 获取变量类型
             std::shared_ptr<SemanticType> varType;
             if (node.type) {
@@ -177,7 +154,6 @@ void SymbolCollector::visit(LetStatement& node) {
             // 这里我们需要从上下文判断，因为 LetStatement 本身没有 const 字段
             // 临时解决方案：检查变量名是否以 "const_" 开头或者检查初始化表达式是否是编译时常量
             bool isConstant = false;
-            
             // 检查初始化表达式是否是字面量（简单的启发式方法）
             if (node.expression && dynamic_cast<LiteralExpression*>(node.expression.get())) {
                 isConstant = true;
@@ -195,7 +171,7 @@ void SymbolCollector::visit(LetStatement& node) {
                     varName,
                     SymbolKind::Variable,
                     varType,
-                    identPattern->hasmut,  // 使用模式中的可变性标志
+                    identPattern->hasmut,
                     &node
                 );
             }
@@ -216,11 +192,9 @@ void SymbolCollector::visit(BlockExpression& node) {
     pushNode(node);
     
     root->enterScope(Scope::ScopeType::Block, &node);
-
     for (const auto &stmt : node.statements) {
         stmt->accept(*this);
     }
-    
     root->exitScope();
     
     popNode();
@@ -231,13 +205,10 @@ void SymbolCollector::visit(InfiniteLoopExpression& node) {
     
     bool wasInLoop = inLoop;
     inLoop = true;
-    
     root->enterScope(Scope::ScopeType::Loop, &node);
-    
     if (node.blockexpression) {
         node.blockexpression->accept(*this);
     }
-    
     root->exitScope();
     
     inLoop = wasInLoop;
@@ -249,9 +220,7 @@ void SymbolCollector::visit(PredicateLoopExpression& node) {
     
     bool wasInLoop = inLoop;
     inLoop = true;
-    
     root->enterScope(Scope::ScopeType::Loop, &node);
-    
     if (node.conditions) {
         node.conditions->accept(*this);
     }
@@ -261,7 +230,6 @@ void SymbolCollector::visit(PredicateLoopExpression& node) {
     }
     
     root->exitScope();
-    
     inLoop = wasInLoop;
     popNode();
 }
@@ -278,33 +246,28 @@ void SymbolCollector::collectFunctionSymbol(Function& node) {
     
     auto funcSymbol = std::make_shared<FunctionSymbol>(
         funcName,
-        std::vector<std::shared_ptr<Symbol>>{},  // 参数稍后添加
+        std::vector<std::shared_ptr<Symbol>>{},
         returnType,
         false
     );
     
-    // 确保函数符号的type字段也被设置，这样inferCallExpressionType可以从中获取
+    // 确保函数符号的type字段也被设置
     funcSymbol->type = returnType;
-    
     bool insertSuccess = root->insertSymbol(funcName, funcSymbol);
 }
 
 void SymbolCollector::collectConstantSymbol(ConstantItem& node) {
     std::string constName = node.identifier;
-    
     auto constSymbol = std::make_shared<ConstantSymbol>(
         constName,
         resolveTypeFromNode(*node.type)
     );
-    
     root->insertSymbol(constName, constSymbol);
 }
 
 void SymbolCollector::collectStructSymbol(StructStruct& node) {
     std::string structName = node.identifier;
-    
     auto structSymbol = std::make_shared<StructSymbol>(structName);
-    
     root->insertSymbol(structName, structSymbol);
 }
 
@@ -321,14 +284,11 @@ void SymbolCollector::collectParameterSymbols(Function& node) {
         return;
     }
     
-    // 清空现有参数列表（如果有的话）
     funcSymbol->parameters.clear();
     funcSymbol->parameterTypes.clear();
-    
     for (const auto& param : params->functionparams) {
         if (auto identPattern = dynamic_cast<IdentifierPattern*>(param->patternnotopalt.get())) {
             std::string paramName = identPattern->identifier;
-            
             auto paramType = resolveTypeFromNode(*param->type);
             auto paramSymbol = std::make_shared<Symbol>(
                 paramName,
@@ -337,12 +297,9 @@ void SymbolCollector::collectParameterSymbols(Function& node) {
                 false,
                 &node
             );
-            
             root->insertSymbol(paramName, paramSymbol);
             
-            // 将参数添加到函数符号的参数列表中
             funcSymbol->parameters.push_back(paramSymbol);
-            // 同时添加参数类型信息
             funcSymbol->parameterTypes.push_back(paramType);
         }
     }
@@ -352,7 +309,7 @@ void SymbolCollector::collectFieldSymbols(StructStruct& node) {
     auto fields = node.structfileds;
     if (!fields) return;
     
-    for (const auto& field : fields->structfields) {  // 需要添加getter
+    for (const auto& field : fields->structfields) {
         std::string fieldName = field->identifier;
         
         auto fieldSymbol = std::make_shared<Symbol>(
@@ -378,9 +335,7 @@ void SymbolCollector::collectEnumSymbol(Enumeration& node) {
     }
         
     root->enterScope(Scope::ScopeType::Enum, &node);
-    
     collectVariantSymbols(node);
-    
     root->exitScope();
 }
 
@@ -390,16 +345,12 @@ void SymbolCollector::collectVariantSymbols(Enumeration& node) {
     }
     
     std::string enumName = node.identifier;
-    
     for (const auto& variant : node.enumvariants->enumvariants) {
         std::string variantName = variant->identifier;
-        
         VariantSymbol::VariantKind variantKind = VariantSymbol::VariantKind::Unit;
-        
         variantKind = VariantSymbol::VariantKind::Unit;
         
         auto variantSymbol = std::make_shared<VariantSymbol>(variantName, variantKind);
-        
         if (!root->insertSymbol(variantName, variantSymbol)) {
             // reportError("Variant '" + variantName + "' is already defined in enum '" + enumName + "'");
             continue;
@@ -414,12 +365,9 @@ void SymbolCollector::collectVariantSymbols(Enumeration& node) {
 
 void SymbolCollector::collectImplSymbol(InherentImpl& node) {
     auto targetType = getImplTargetType(node);
-    
     std::string targetTypeName = targetType->tostring();
-    
     std::string implName = "impl_" + targetTypeName + "_" + 
                           std::to_string(reinterpret_cast<uintptr_t>(&node));
-    
     auto implSymbol = std::make_shared<ImplSymbol>(implName, targetType);
     
     std::string traitName = getTraitNameFromImpl(node);
@@ -427,7 +375,6 @@ void SymbolCollector::collectImplSymbol(InherentImpl& node) {
         implSymbol->traitName = traitName;
         implSymbol->isTraitImpl = true;
     }
-    
     root->insertSymbol(implName, implSymbol);
     
     root->enterScope(Scope::ScopeType::Impl, &node);
@@ -450,7 +397,7 @@ void SymbolCollector::collectImplSymbol(InherentImpl& node) {
 void SymbolCollector::collectAssociatedItem(AssociatedItem& item, 
                                             std::shared_ptr<ImplSymbol> implSymbol) {
     if (!item.consttantitem_or_function) return;
-    
+
     if (auto function = dynamic_cast<Function*>(item.consttantitem_or_function.get())) {
         collectAssociatedFunction(*function, implSymbol);
     } else if (auto constant = dynamic_cast<ConstantItem*>(item.consttantitem_or_function.get())) {
@@ -461,7 +408,6 @@ void SymbolCollector::collectAssociatedItem(AssociatedItem& item,
  void SymbolCollector::collectAssociatedFunction(Function& function, 
                                                 std::shared_ptr<ImplSymbol> implSymbol) {
     std::string funcName = function.identifier_name;
-    
     auto funcSymbol = std::make_shared<FunctionSymbol>(
         funcName,
         std::vector<std::shared_ptr<Symbol>>{},
@@ -497,21 +443,17 @@ void SymbolCollector::collectAssociatedConstant(ConstantItem& constant,
         // reportError("Associated constant '" + constName + "' is already defined in this impl");
         return;
     }
-    
     implSymbol->items.push_back(constSymbol);
-    
 }
 
 std::shared_ptr<SemanticType> SymbolCollector::getImplTargetType(InherentImpl& node) {
     // 从impl节点中提取目标类型
-    // 这里需要根据你的AST结构实现具体逻辑
     // 简化实现：假设可以从node中获取类型信息
     return createSimpleType("UnknownType");
 }
 
 std::string SymbolCollector::getTraitNameFromImpl(InherentImpl& node) {
     // 从impl节点中提取trait名称
-    // 这里需要根据你的AST结构实现具体逻辑
     // 简化实现：返回空字符串表示固有实现
     return "";
 }
@@ -534,26 +476,22 @@ std::shared_ptr<SemanticType> SymbolCollector::resolveTypeFromNode(Type& node) {
     if (auto typePath = dynamic_cast<TypePath*>(&node)) {
         if (typePath->simplepathsegement) {
             std::string typeName = typePath->simplepathsegement->identifier;
-            // 确保类型名称不为空
             if (!typeName.empty()) {
                 return createSimpleType(typeName);
             }
         }
     } else if (auto arrayType = dynamic_cast<ArrayType*>(&node)) {
-        // 处理数组类型，包括多维数组
         auto elementType = resolveTypeFromNode(*arrayType->type);
         if (elementType) {
-            // 创建数组类型包装器
             return std::make_shared<ArrayTypeWrapper>(elementType, arrayType->expression.get());
         }
     } else if (auto refType = dynamic_cast<ReferenceType*>(&node)) {
-        // 处理引用类型
         auto targetType = resolveTypeFromNode(*refType->type);
         if (targetType) {
             return std::make_shared<ReferenceTypeWrapper>(targetType, refType->ismut);
         }
     }
-    return createSimpleType("unit");  // 默认返回unit而不是unknown
+    return createSimpleType("unit");
 }
 
 std::shared_ptr<SemanticType> SymbolCollector::createSimpleType(const std::string& name) {

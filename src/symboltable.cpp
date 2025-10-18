@@ -68,7 +68,6 @@ void ScopeTree::enterScope(Scope::ScopeType type, ASTNode* node) {
     
     bool isFunctionScope = (type == Scope::ScopeType::Function);
     auto newScope = currentNode->addchild(isFunctionScope);
-    
     currentNode = newScope;
     
     if (node) {
@@ -112,8 +111,8 @@ std::shared_ptr<Scope> ScopeTree::findScopeForNode(ASTNode* node) {
     if (it != nodeToScopeMap.end()) {
         return it->second;
     }
-    // 如果没有直接映射，尝试在父节点中查找
-    // 这里需要根据AST结构实现，简化处理返回nullptr
+
+    // 简化处理返回nullptr
     return nullptr;
 }
 

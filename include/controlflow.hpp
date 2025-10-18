@@ -1,4 +1,3 @@
-// control_flow_analyzer.hpp
 #pragma once
 
 #include "visitor.hpp"
@@ -17,13 +16,11 @@ enum class ControlFlow {
     Diverges      // 发散（never类型）
 };
 
-// 类型信息（扩展）
 class NeverType : public SemanticType {
 public:
     std::string tostring() const override { return "!"; }
 };
 
-// 控制流分析器
 class ControlFlowAnalyzer : public ASTVisitor {
 private:
     std::shared_ptr<ScopeTree> scopeTree;
@@ -31,13 +28,11 @@ private:
     std::stack<ASTNode*> nodeStack;
     std::stack<int> loopDepthStack;
     std::stack<ControlFlow> controlFlowStack;
-    
-    // 分析状态
+
     bool hasErrors = false;
     int currentLoopDepth = 0;
     bool inConstContext = false;
     
-    // 结果存储
     std::unordered_map<ASTNode*, ControlFlow> nodeControlFlow;
     std::unordered_map<ASTNode*, std::shared_ptr<SemanticType>> nodeTypes;
     std::unordered_map<ASTNode*, bool> alwaysDiverges;
@@ -52,7 +47,6 @@ public:
     std::shared_ptr<SemanticType> getNodeType(ASTNode* node) const;
     bool alwaysDivergesAt(ASTNode* node) const;
     
-    // Visitor接口实现
     void visit(Crate& node) override;
     void visit(Item& node) override {}
     void visit(Function& node) override;
@@ -61,12 +55,10 @@ public:
     void visit(Enumeration& node) override {}
     void visit(InherentImpl& node) override {}
     
-    // 语句节点
     void visit(Statement& node) override {}
     void visit(LetStatement& node) override;
     void visit(ExpressionStatement& node) override;
     
-    // 表达式节点
     void visit(Expression& node) override {}
     void visit(LiteralExpression& node) override {}
     void visit(PathExpression& node) override {}
@@ -83,7 +75,6 @@ public:
     void visit(CallExpression& node) override {}
     void visit(ArrayExpression& node) override {}
     
-    // 其他表达式节点（简化处理）
     void visit(GroupedExpression& node) override {}
     void visit(IndexExpression& node) override {}
     void visit(TupleExpression& node) override {}
@@ -98,7 +89,6 @@ public:
     void visit(BorrowExpression& node) override {}
     void visit(DereferenceExpression& node) override {}
     
-    // 模式、类型、路径节点
     void visit(Pattern& node) override {}
     void visit(LiteralPattern& node) override {}
     void visit(IdentifierPattern& node) override {}
@@ -138,20 +128,17 @@ private:
     ControlFlow popControlFlow();
     ControlFlow getCurrentControlFlow();
     
-    // 控制流分析方法
     ControlFlow analyzeExpressionControlFlow(Expression& expr);
     ControlFlow analyzeBlockControlFlow(BlockExpression& block);
     ControlFlow analyzeIfControlFlow(IfExpression& ifExpr);
     ControlFlow analyzeLoopControlFlow(InfiniteLoopExpression& loop);
     ControlFlow analyzePredicateLoopControlFlow(PredicateLoopExpression& loop);
     
-    // 类型推断方法
     std::shared_ptr<SemanticType> inferExpressionType(Expression& expr);
     std::shared_ptr<SemanticType> inferBlockType(BlockExpression& block);
     std::shared_ptr<SemanticType> inferIfType(IfExpression& ifExpr);
     std::shared_ptr<SemanticType> inferLoopType(InfiniteLoopExpression& loop);
     
-    // 工具方法
     bool isAlwaysDiverging(Expression& expr);
     void reportError(const std::string& message);
     void checkBreakContinueValidity(ASTNode& node, Token tokenType);

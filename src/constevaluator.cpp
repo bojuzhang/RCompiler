@@ -23,24 +23,19 @@ std::shared_ptr<ConstantValue> ConstantEvaluator::getConstantValue(const std::st
 
 void ConstantEvaluator::visit(Crate& node) {
     pushNode(node);
-    
-    // 遍历所有item，收集常量
     for (const auto& item : node.items) {
         if (item) {
             item->accept(*this);
         }
     }
-    
     popNode();
 }
 
 void ConstantEvaluator::visit(Item& node) {
     pushNode(node);
-    
     if (node.item) {
         node.item->accept(*this);
     }
-    
     popNode();
 }
 
@@ -49,7 +44,6 @@ void ConstantEvaluator::visit(ConstantItem& node) {
     
     std::string constName = node.identifier;
     
-    // 设置常量求值上下文
     bool previousConstContext = inConstContext;
     inConstContext = true;
     
@@ -69,7 +63,6 @@ void ConstantEvaluator::visit(Function& node) {
     // 函数定义中可能包含常量表达式（如默认参数），但这里简化处理
     pushNode(node);
     
-    // 处理函数体中的常量表达式
     if (node.blockexpression) {
         node.blockexpression->accept(*this);
     }
@@ -90,7 +83,6 @@ void ConstantEvaluator::visit(Statement& node) {
 void ConstantEvaluator::visit(LetStatement& node) {
     pushNode(node);
     
-    // 在常量上下文中，可以求值let语句的初始值
     if (inConstContext) {
         auto initValue = evaluateExpression(*node.expression);
         if (initValue) {
@@ -105,7 +97,6 @@ void ConstantEvaluator::visit(LetStatement& node) {
 void ConstantEvaluator::visit(ExpressionStatement& node) {
     pushNode(node);
     
-    // 在常量上下文中，可以求值表达式语句
     if (inConstContext) {
         auto value = evaluateExpression(*node.astnode);
         if (value) {
@@ -119,9 +110,7 @@ void ConstantEvaluator::visit(ExpressionStatement& node) {
 void ConstantEvaluator::visit(BlockExpression& node) {
     pushNode(node);
     
-    // 在常量上下文中，处理块中的所有语句
     if (inConstContext) {
-        // 处理所有语句
         for (const auto& stmt : node.statements) {
             if (stmt) {
                 stmt->accept(*this);
@@ -140,14 +129,12 @@ void ConstantEvaluator::visit(BlockExpression& node) {
     popNode();
 }
 
-// 表达式求值
 std::shared_ptr<ConstantValue> ConstantEvaluator::evaluateExpression(Expression& expr) {
     // 检查是否已经是编译时常量
     if (!isCompileTimeConstant(expr)) {
         return nullptr;
     }
     
-    // 根据表达式类型分派到具体的求值方法
     if (auto literal = dynamic_cast<LiteralExpression*>(&expr)) {
         return evaluateLiteral(*literal);
     } else if (auto binary = dynamic_cast<BinaryExpression*>(&expr)) {
@@ -193,7 +180,6 @@ std::shared_ptr<ConstantValue> ConstantEvaluator::evaluateLiteral(LiteralExpress
             
         case Token::kSTRING_LITERAL:
             if (!valueStr.empty() && valueStr[0] == '"' && valueStr.back() == '"') {
-                // 去除引号
                 std::string content = valueStr.substr(1, valueStr.length() - 2);
                 return std::make_shared<StringConstant>(content);
             }
@@ -228,7 +214,6 @@ std::shared_ptr<ConstantValue> ConstantEvaluator::evaluateBinaryExpression(Binar
     
     Token op = expr.binarytype;
     
-    // 整数运算
     if (auto leftInt = dynamic_cast<IntConstant*>(leftValue.get())) {
         auto rightInt = dynamic_cast<IntConstant*>(rightValue.get());
         int64_t left = leftInt->getValue();
@@ -279,9 +264,7 @@ std::shared_ptr<ConstantValue> ConstantEvaluator::evaluateBinaryExpression(Binar
                 reportError("Unsupported binary operator for integers: " + to_string(op));
                 return nullptr;
         }
-    }
-    // 布尔运算
-    else if (auto leftBool = dynamic_cast<BoolConstant*>(leftValue.get())) {
+    } else if (auto leftBool = dynamic_cast<BoolConstant*>(leftValue.get())) {
         auto rightBool = dynamic_cast<BoolConstant*>(rightValue.get());
         bool left = leftBool->getValue();
         bool right = rightBool->getValue();
@@ -313,10 +296,8 @@ std::shared_ptr<ConstantValue> ConstantEvaluator::evaluateUnaryExpression(UnaryE
     
     Token op = expr.unarytype;
     
-    // 整数一元运算
     if (auto intVal = dynamic_cast<IntConstant*>(operandValue.get())) {
         int64_t value = intVal->getValue();
-        
         switch (op) {
             case Token::kMinus:
                 return std::make_shared<IntConstant>(-value);
@@ -326,11 +307,8 @@ std::shared_ptr<ConstantValue> ConstantEvaluator::evaluateUnaryExpression(UnaryE
                 reportError("Unsupported unary operator for integers: " + to_string(op));
                 return nullptr;
         }
-    }
-    // 布尔一元运算
-    else if (auto boolVal = dynamic_cast<BoolConstant*>(operandValue.get())) {
+    } else if (auto boolVal = dynamic_cast<BoolConstant*>(operandValue.get())) {
         bool value = boolVal->getValue();
-        
         switch (op) {
             case Token::kNot:
                 return std::make_shared<BoolConstant>(!value);
@@ -350,7 +328,6 @@ std::shared_ptr<ConstantValue> ConstantEvaluator::evaluateArrayExpression(ArrayE
     }
     
     std::vector<std::shared_ptr<ConstantValue>> evaluatedElements;
-    
     for (const auto& element : expr.arrayelements->expressions) {
         auto elementValue = evaluateExpression(*element);
         if (!elementValue) {
@@ -370,7 +347,6 @@ std::shared_ptr<ConstantValue> ConstantEvaluator::evaluatePathExpression(PathExp
     // 简化处理：只处理单段路径（常量名）
     std::string constName = expr.simplepath->simplepathsegements[0]->identifier;
     
-    // 查找常量值
     auto it = constantValues.find(constName);
     if (it != constantValues.end()) {
         return it->second;
@@ -381,7 +357,6 @@ std::shared_ptr<ConstantValue> ConstantEvaluator::evaluatePathExpression(PathExp
         auto symbol = scopeTree->lookupSymbol(constName);
         if (symbol && symbol->kind == SymbolKind::Constant) {
             // 如果是常量符号但还没有求值，尝试求值
-            // 这里可能需要递归求值，但要避免循环依赖
             reportError("Constant '" + constName + "' found but not evaluated yet");
             return nullptr;
         }
@@ -395,11 +370,9 @@ std::shared_ptr<ConstantValue> ConstantEvaluator::evaluateBlockExpression(BlockE
     // 块表达式在常量上下文中：遍历所有语句
     std::shared_ptr<ConstantValue> lastValue = nullptr;
     
-    // 处理所有语句
     for (const auto& stmt : expr.statements) {
         if (stmt) {
             stmt->accept(*this);
-            // 对于表达式语句，尝试获取其值
             if (auto exprStmt = dynamic_cast<ExpressionStatement*>(stmt.get())) {
                 if (exprStmt->astnode) {
                     lastValue = evaluateExpression(*exprStmt->astnode);
@@ -417,7 +390,6 @@ std::shared_ptr<ConstantValue> ConstantEvaluator::evaluateBlockExpression(BlockE
 }
 
 std::shared_ptr<ConstantValue> ConstantEvaluator::evaluateIfExpression(IfExpression& expr) {
-    // 求值条件
     auto conditionValue = evaluateExpression(*expr.conditions->expression);
     if (!conditionValue) {
         return nullptr;
@@ -431,10 +403,8 @@ std::shared_ptr<ConstantValue> ConstantEvaluator::evaluateIfExpression(IfExpress
     }
     
     if (boolCondition->getValue()) {
-        // 求值if分支
         return evaluateExpression(*expr.ifblockexpression);
     } else {
-        // 求值else分支（如果有）
         if (expr.elseexpression) {
             return evaluateExpression(*expr.elseexpression);
         } else {
@@ -444,7 +414,6 @@ std::shared_ptr<ConstantValue> ConstantEvaluator::evaluateIfExpression(IfExpress
     }
 }
 
-// 工具方法
 bool ConstantEvaluator::isCompileTimeConstant(Expression& expr) {
     // 检查表达式是否可以在编译时求值
     if (dynamic_cast<LiteralExpression*>(&expr)) {
@@ -460,16 +429,13 @@ bool ConstantEvaluator::isCompileTimeConstant(Expression& expr) {
         }
         return false;
     } else if (dynamic_cast<BinaryExpression*>(&expr)) {
-        // 二元表达式：递归检查操作数
         auto binary = dynamic_cast<BinaryExpression*>(&expr);
         return isCompileTimeConstant(*binary->leftexpression) && 
                isCompileTimeConstant(*binary->rightexpression);
     } else if (dynamic_cast<UnaryExpression*>(&expr)) {
-        // 一元表达式：递归检查操作数
         auto unary = dynamic_cast<UnaryExpression*>(&expr);
         return isCompileTimeConstant(*unary->expression);
     } else if (dynamic_cast<ArrayExpression*>(&expr)) {
-        // 数组表达式：检查所有元素
         auto array = dynamic_cast<ArrayExpression*>(&expr);
         if (array && array->arrayelements) {
             for (const auto& element : array->arrayelements->expressions) {

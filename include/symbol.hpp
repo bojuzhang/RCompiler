@@ -87,7 +87,7 @@ public:
 class EnumSymbol : public Symbol {
 public:
     std::vector<std::shared_ptr<Symbol>> variants;
-    std::vector<std::shared_ptr<SemanticType>> genericParameters; // 泛型参数
+    std::vector<std::shared_ptr<SemanticType>> genericParameters;
     
     EnumSymbol(const std::string& name) 
         : Symbol(name, SymbolKind::Enum, std::make_shared<SimpleType>(name)) {}
@@ -102,8 +102,8 @@ public:
     };
     
     VariantKind variantKind;
-    std::vector<std::shared_ptr<SemanticType>> tupleFields; // 元组变体的字段类型
-    std::vector<std::shared_ptr<Symbol>> structFields;      // 结构变体的字段
+    std::vector<std::shared_ptr<SemanticType>> tupleFields;
+    std::vector<std::shared_ptr<Symbol>> structFields;
     
     VariantSymbol(const std::string& name, VariantKind kind) 
         : Symbol(name, SymbolKind::Variant), variantKind(kind) {}

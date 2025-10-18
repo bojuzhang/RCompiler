@@ -20,21 +20,6 @@ public:
     Expression* getSizeExpression() const { return sizeExpression; }
 };
 
-class SliceTypeWrapper : public SemanticType {
-private:
-    std::shared_ptr<SemanticType> elementType;
-    
-public:
-    SliceTypeWrapper(std::shared_ptr<SemanticType> elementType)
-        : elementType(elementType) {}
-    
-    std::string tostring() const override {
-        return "[" + elementType->tostring() + "]";
-    }
-    
-    std::shared_ptr<SemanticType> getElementType() const { return elementType; }
-};
-
 class ReferenceTypeWrapper : public SemanticType {
 private:
     std::shared_ptr<SemanticType> targetType;
@@ -71,7 +56,6 @@ public:
     std::string getName() const { return name; }
 };
 
-// 函数类型
 class FunctionType : public SemanticType {
 private:
     std::vector<std::shared_ptr<SemanticType>> parameterTypes;
@@ -95,7 +79,6 @@ public:
     std::shared_ptr<SemanticType> getReturnType() const { return returnType; }
 };
 
-// 元组类型
 class TupleType : public SemanticType {
 private:
     std::vector<std::shared_ptr<SemanticType>> elementTypes;
@@ -110,38 +93,11 @@ public:
             result += elementTypes[i]->tostring();
         }
         if (elementTypes.size() == 1) {
-            result += ",";  // 单元素元组需要逗号
+            result += ",";
         }
         result += ")";
         return result;
     }
     
     const std::vector<std::shared_ptr<SemanticType>>& getElementTypes() const { return elementTypes; }
-};
-
-// 泛型类型
-class GenericType : public SemanticType {
-private:
-    std::string baseName;
-    std::vector<std::shared_ptr<SemanticType>> typeArguments;
-    
-public:
-    GenericType(const std::string& baseName, const std::vector<std::shared_ptr<SemanticType>>& args)
-        : baseName(baseName), typeArguments(args) {}
-    
-    std::string tostring() const override {
-        std::string result = baseName;
-        if (!typeArguments.empty()) {
-            result += "<";
-            for (size_t i = 0; i < typeArguments.size(); ++i) {
-                if (i > 0) result += ", ";
-                result += typeArguments[i]->tostring();
-            }
-            result += ">";
-        }
-        return result;
-    }
-    
-    std::string getBaseName() const { return baseName; }
-    const std::vector<std::shared_ptr<SemanticType>>& getTypeArguments() const { return typeArguments; }
 };

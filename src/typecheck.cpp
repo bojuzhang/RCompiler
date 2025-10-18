@@ -11,11 +11,8 @@ TypeChecker::TypeChecker(std::shared_ptr<ScopeTree> scopeTree, std::shared_ptr<C
     : scopeTree(scopeTree), constantEvaluator(constantEvaluator) {}
 
 bool TypeChecker::checkTypes() {
+    // 默认检查在 visit 中实现
     hasErrors = false;
-    
-    // 这里可以添加全局的类型检查逻辑
-    // 但主要的检查在各个visit方法中进行
-    
     return !hasErrors;
 }
 
@@ -26,7 +23,6 @@ bool TypeChecker::hasTypeErrors() const {
 void TypeChecker::visit(Crate& node) {
     pushNode(node);
         
-    // 检查crate中的所有item
     for (const auto& item : node.items) {
         if (item) {
             item->accept(*this);
@@ -37,7 +33,6 @@ void TypeChecker::visit(Crate& node) {
         auto requirementsIt = traitRequirements.find(traitName);
         if (requirementsIt != traitRequirements.end()) {
             const auto& requirements = requirementsIt->second;
-            
             for (const auto& requirement : requirements) {
                 if (implementations.find(requirement) == implementations.end()) {
                     reportMissingTraitImplementation(traitName, requirement);
@@ -51,22 +46,18 @@ void TypeChecker::visit(Crate& node) {
 
 void TypeChecker::visit(Item& node) {
     pushNode(node);
-    
     if (node.item) {
         node.item->accept(*this);
     }
-    
     popNode();
 }
 
 
 void TypeChecker::visit(Statement& node) {
     pushNode(node);
-    
     if (node.astnode) {
         node.astnode->accept(*this);
     }
-    
     popNode();
 }
 
@@ -78,8 +69,6 @@ void TypeChecker::visit(Function& node) {
     
     // 不进入函数作用域，保持在全局作用域中进行类型检查
     // 这样可以确保能够找到全局作用域中的函数符号
-    
-    // 检查参数类型
     if (node.functionparameters) {
         checkFunctionParameters(*node.functionparameters);
     }
@@ -98,7 +87,6 @@ void TypeChecker::visit(Function& node) {
 void TypeChecker::visit(ConstantItem& node) {
     pushNode(node);
     
-    // 检查常量类型
     auto type = checkType(*node.type);
     if (!type) {
         reportError("Invalid type in constant declaration");
@@ -121,13 +109,8 @@ void TypeChecker::visit(StructStruct& node) {
     std::string previousStruct = currentStruct;
     enterStructContext(node.identifier);
     
-    // 进入结构体作用域
     scopeTree->enterScope(Scope::ScopeType::Struct, &node);
-    
-    // 检查结构体字段类型
     checkStructFields(node);
-    
-    // 退出结构体作用域
     scopeTree->exitScope();
     
     exitStructContext();
@@ -139,7 +122,6 @@ void TypeChecker::visit(StructStruct& node) {
 void TypeChecker::visit(Enumeration& node) {
     pushNode(node);
     
-    // 检查枚举类型
     auto enumName = node.identifier;
     if (!typeExists(enumName)) {
         reportUndefinedType(enumName, &node);
@@ -148,7 +130,6 @@ void TypeChecker::visit(Enumeration& node) {
     // 检查variants（如果有类型信息）
     if (node.enumvariants) {
         for (const auto& variant : node.enumvariants->enumvariants) {
-            // 检查variant类型（如果有）
             // 这里简化处理，实际需要根据enum variant的具体类型检查
         }
     }
@@ -162,7 +143,6 @@ void TypeChecker::visit(InherentImpl& node) {
     std::string previousImpl = currentImpl;
     enterImplContext("impl_" + std::to_string(reinterpret_cast<uintptr_t>(&node)));
     
-    // 进入impl作用域
     scopeTree->enterScope(Scope::ScopeType::Impl, &node);
     
     // 检查impl目标类型
@@ -174,10 +154,8 @@ void TypeChecker::visit(InherentImpl& node) {
     // 检查是固有实现还是trait实现
     std::string traitName = getTraitNameFromImpl(node);
     if (!traitName.empty()) {
-        // Trait实现检查
         checkTraitImpl(node);
     } else {
-        // 固有实现检查
         checkInherentImpl(node);
     }
     
@@ -188,7 +166,6 @@ void TypeChecker::visit(InherentImpl& node) {
         }
     }
     
-    // 退出impl作用域
     scopeTree->exitScope();
     
     exitImplContext();
@@ -197,7 +174,6 @@ void TypeChecker::visit(InherentImpl& node) {
     popNode();
 }
 
-// Struct字段检查
 void TypeChecker::checkStructFields(StructStruct& node) {
     if (!node.structfileds) return;
     
@@ -212,7 +188,6 @@ void TypeChecker::checkStructFieldType(StructField& field) {
         reportError("Invalid type in struct field: " + field.identifier);
     }
     
-    // 记录字段类型到符号表
     auto fieldSymbol = std::make_shared<Symbol>(
         field.identifier,
         SymbolKind::Variable,
@@ -224,7 +199,6 @@ void TypeChecker::checkStructFieldType(StructField& field) {
     scopeTree->insertSymbol(field.identifier, fieldSymbol);
 }
 
-// Impl检查
 void TypeChecker::checkInherentImpl(InherentImpl& node) {
     auto targetType = getImplTargetType(node);
     if (!targetType) {
@@ -255,7 +229,6 @@ void TypeChecker::checkTraitImpl(InherentImpl& node) {
         return;
     }
     
-    // 检查trait是否存在
     if (!typeExists(traitName)) {
         reportUndefinedType(traitName, &node);
         return;
@@ -273,14 +246,12 @@ void TypeChecker::checkTraitImpl(InherentImpl& node) {
 
 std::shared_ptr<SemanticType> TypeChecker::getImplTargetType(InherentImpl& node) {
     // 从impl节点中提取目标类型
-    // 这里需要根据你的AST结构实现具体逻辑
     // 简化实现：返回一个简单类型
     return std::make_shared<SimpleType>("UnknownType");
 }
 
 std::string TypeChecker::getTraitNameFromImpl(InherentImpl& node) {
     // 从impl节点中提取trait名称
-    // 这里需要根据你的AST结构实现具体逻辑
     // 简化实现：返回空字符串表示固有实现
     return "";
 }
@@ -288,7 +259,6 @@ std::string TypeChecker::getTraitNameFromImpl(InherentImpl& node) {
 void TypeChecker::checkTraitImplementation(InherentImpl& node, const std::string& traitName) {
     // 收集trait的要求
     collectTraitRequirements(traitName);
-    
     // 检查实现是否满足trait要求
     checkTraitRequirementsSatisfied(traitName, currentImpl);
 }
@@ -299,12 +269,10 @@ void TypeChecker::collectTraitRequirements(const std::string& traitName) {
     
     // 清空当前要求
     currentTraitRequirements.clear();
-    
     // 收集trait的所有关联项要求
     for (const auto& item : traitSymbol->associatedItems) {
         currentTraitRequirements.insert(item->name);
     }
-    
     // 缓存trait要求
     traitRequirements[traitName] = currentTraitRequirements;
 }
@@ -312,7 +280,6 @@ void TypeChecker::collectTraitRequirements(const std::string& traitName) {
 void TypeChecker::checkTraitRequirementsSatisfied(const std::string& traitName, const std::string& implName) {
     const auto& requirements = traitRequirements[traitName];
     auto& implementations = traitImplementations[implToTraitMap[implName]];
-    
     // 检查每个要求是否都有实现
     for (const auto& requirement : requirements) {
         if (implementations.find(requirement) == implementations.end()) {
@@ -326,7 +293,6 @@ void TypeChecker::checkAssociatedItem(AssociatedItem& item) {
     if (!item.consttantitem_or_function) return;
     
     std::string itemName;
-    
     if (auto function = dynamic_cast<Function*>(item.consttantitem_or_function.get())) {
         checkAssociatedFunction(*function);
         itemName = function->identifier_name;
@@ -350,17 +316,11 @@ void TypeChecker::checkAssociatedFunction(Function& function) {
     // 检查关联函数签名
     checkFunctionSignature(function);
     
-    // 进入函数作用域
     scopeTree->enterScope(Scope::ScopeType::Function, &function);
-    
-    // 检查参数和返回类型
     checkFunctionParameters(*function.functionparameters);
     checkFunctionReturnType(*function.functionreturntype);
-    
-    // 检查函数体
     checkFunctionBody(function);
     
-    // 退出函数作用域
     scopeTree->exitScope();
 }
 
@@ -378,7 +338,6 @@ void TypeChecker::checkAssociatedConstant(ConstantItem& constant) {
     }
 }
 
-// 函数检查
 void TypeChecker::checkFunctionSignature(Function& function) {
     // 检查函数名是否冲突（在相应作用域内）
     std::string funcName = function.identifier_name;
@@ -395,14 +354,12 @@ void TypeChecker::checkFunctionParameters(FunctionParameters& params) {
         if (!paramType) {
             reportError("Invalid type in function parameter");
         }
-        
         // 检查参数模式
         checkPattern(*param->patternnotopalt, paramType);
     }
 }
 
 void TypeChecker::checkFunctionReturnType(FunctionReturnType& returnType) {
-    // 修复：检查type是否为空指针
     if (returnType.type != nullptr) {
         auto type = checkType(*returnType.type);
         if (!type) {
@@ -413,9 +370,7 @@ void TypeChecker::checkFunctionReturnType(FunctionReturnType& returnType) {
 
 void TypeChecker::checkFunctionBody(Function& function) {
     if (function.blockexpression) {
-        // 修复：检查functionreturntype是否为空指针
         if (function.functionreturntype != nullptr && function.functionreturntype->type != nullptr) {
-            // 设置期望的返回类型
             pushExpectedType(checkType(*function.functionreturntype->type));
         } else {
             // 如果没有显式返回类型，设置默认的unit类型
@@ -427,7 +382,6 @@ void TypeChecker::checkFunctionBody(Function& function) {
     }
 }
 
-// 类型解析和检查
 std::shared_ptr<SemanticType> TypeChecker::checkType(Type& typeNode) {
     if (auto typePath = dynamic_cast<TypePath*>(&typeNode)) {
         return checkType(*typePath);
@@ -444,7 +398,6 @@ std::shared_ptr<SemanticType> TypeChecker::checkType(TypePath& typePath) {
     if (!typePath.simplepathsegement) {
         return nullptr;
     }
-
     std::string typeName = typePath.simplepathsegement->identifier;
     return resolveType(typeName);
 }
@@ -453,7 +406,7 @@ std::shared_ptr<SemanticType> TypeChecker::checkType(ArrayType& arrayType) {
     // 检查循环依赖
     auto nodeIt = nodeTypeMap.find(&arrayType);
     if (nodeIt != nodeTypeMap.end()) {
-        return nodeIt->second; // 已经在处理中，返回缓存结果
+        return nodeIt->second;
     }
     
     // 先设置一个占位符防止循环
@@ -471,13 +424,11 @@ std::shared_ptr<SemanticType> TypeChecker::checkType(ArrayType& arrayType) {
     if (arrayType.expression) {
         // 检查是否为字面量表达式
         if (auto literalExpr = dynamic_cast<LiteralExpression*>(arrayType.expression.get())) {
-            // 字面量表达式，检查类型
             if (literalExpr->tokentype != Token::kINTEGER_LITERAL) {
                 reportError("Array size must be an integer literal");
             }
         } else {
-            // 非字面量表达式，这里简化处理，假设它是合法的
-            // 在实际编译器中，这里需要更复杂的常量表达式求值
+            // 需要更复杂的常量表达式求值
         }
     }
     
@@ -490,7 +441,7 @@ std::shared_ptr<SemanticType> TypeChecker::checkType(ReferenceType& refType) {
     // 检查循环依赖
     auto nodeIt = nodeTypeMap.find(&refType);
     if (nodeIt != nodeTypeMap.end()) {
-        return nodeIt->second; // 已经在处理中，返回缓存结果
+        return nodeIt->second; 
     }
     
     // 先设置一个占位符防止循环
@@ -511,7 +462,6 @@ std::shared_ptr<SemanticType> TypeChecker::checkType(ReferenceType& refType) {
 }
 
 std::shared_ptr<SemanticType> TypeChecker::resolveType(const std::string& typeName) {
-    // 直接创建类型，先不使用缓存
     auto type = std::make_shared<SimpleType>(typeName);
     return type;
 }
@@ -526,7 +476,6 @@ bool TypeChecker::typeExists(const std::string& typeName) {
 
 bool TypeChecker::isTypeVisible(const std::string& typeName) {
     // 简化实现：假设所有类型在当前作用域都可见
-    // 实际实现需要检查模块可见性规则
     return typeExists(typeName);
 }
 
@@ -537,30 +486,24 @@ bool TypeChecker::areTypesCompatible(std::shared_ptr<SemanticType> expected, std
     std::string actualStr = actual->tostring();
     
     // 简化类型兼容性检查
-    // 实际实现需要处理类型转换、子类型等复杂情况
     if (expectedStr == actualStr) {
         return true;
     }
-    
     // 推断类型与任何类型兼容
     if (actualStr == "_") {
         return true;
     }
-    
     return false;
 }
 
-// 表达式类型推断
 std::shared_ptr<SemanticType> TypeChecker::inferExpressionType(Expression& expr) {
     // 检查缓存
     auto nodeIt = nodeTypeMap.find(&expr);
     if (nodeIt != nodeTypeMap.end()) {
         // 如果缓存结果是占位符，说明正在处理中，需要继续推断而不是返回占位符
         if (nodeIt->second->tostring() == "inferring") {
-            // 移除占位符，继续推断
             nodeTypeMap.erase(&expr);
         } else {
-            // 返回已完成的推断结果
             return nodeIt->second;
         }
     }
@@ -570,7 +513,6 @@ std::shared_ptr<SemanticType> TypeChecker::inferExpressionType(Expression& expr)
     nodeTypeMap[&expr] = placeholder;
     
     std::shared_ptr<SemanticType> type;
-    
     if (auto literal = dynamic_cast<LiteralExpression*>(&expr)) {
         type = inferLiteralExpressionType(*literal);
     } else if (auto binary = dynamic_cast<BinaryExpression*>(&expr)) {
@@ -580,7 +522,6 @@ std::shared_ptr<SemanticType> TypeChecker::inferExpressionType(Expression& expr)
     } else if (auto arrayExpr = dynamic_cast<ArrayExpression*>(&expr)) {
         type = inferArrayExpressionType(*arrayExpr);
     } else if (auto pathExpr = dynamic_cast<PathExpression*>(&expr)) {
-        // 从符号表中获取变量的类型
         if (pathExpr->simplepath && !pathExpr->simplepath->simplepathsegements.empty()) {
             std::string varName = pathExpr->simplepath->simplepathsegements[0]->identifier;
             auto symbol = findSymbol(varName);
@@ -597,9 +538,8 @@ std::shared_ptr<SemanticType> TypeChecker::inferExpressionType(Expression& expr)
     // else if (auto methodCall = dynamic_cast<MethodCallExpression*>(&expr)) {
     //     type = inferMethodCallExpressionType(*methodCall);
     // }
-    // 其他表达式类型...
     
-    // 更新缓存 - 只有当类型推断成功时才替换占位符
+    // 更新缓存
     if (type) {
         nodeTypeMap[&expr] = type;
     } else {
@@ -620,13 +560,11 @@ std::shared_ptr<SemanticType> TypeChecker::inferBinaryExpressionType(BinaryExpre
 
     // std::cerr << "test binary " << leftType->tostring() << " " << rightType->tostring() << " " << to_string(expr.binarytype) << "\n";
     
-    // 根据操作符推断类型
     switch (expr.binarytype) {
         case Token::kPlus:
         case Token::kMinus:
         case Token::kStar:
         case Token::kSlash:
-            // 算术运算：返回操作数类型（需要类型提升）
             return leftType;
             
         case Token::kShl:
@@ -634,7 +572,6 @@ std::shared_ptr<SemanticType> TypeChecker::inferBinaryExpressionType(BinaryExpre
         case Token::kAnd:
         case Token::kOr:
         case Token::kCaret:
-            // 位运算：返回操作数类型
             return leftType;
             
         case Token::kEqEq:
@@ -643,12 +580,10 @@ std::shared_ptr<SemanticType> TypeChecker::inferBinaryExpressionType(BinaryExpre
         case Token::kGt:
         case Token::kLe:
         case Token::kGe:
-            // 比较运算：返回bool
             return std::make_shared<SimpleType>("bool");
             
         case Token::kAndAnd:
         case Token::kOrOr:
-            // 逻辑运算：返回bool
             return std::make_shared<SimpleType>("bool");
             
         default:
@@ -667,9 +602,7 @@ std::shared_ptr<SemanticType> TypeChecker::inferCallExpressionType(CallExpressio
             
             // 直接从作用域中查找符号
             auto symbol = findSymbol(functionName);
-            
             if (symbol && symbol->kind == SymbolKind::Function) {
-                // 对于函数符号，尝试获取其类型
                 if (symbol->type) {
                     return symbol->type;
                 }
@@ -678,12 +611,9 @@ std::shared_ptr<SemanticType> TypeChecker::inferCallExpressionType(CallExpressio
             // 查找函数符号
             auto functionSymbol = findFunction(functionName);
             if (functionSymbol) {
-                // 返回函数的返回类型
-                // 对于任何有效的函数符号，优先使用其returntype字段
                 if (functionSymbol->returntype) {
                     return functionSymbol->returntype;
                 }
-                
                 // 如果returntype字段无效，尝试使用type字段
                 if (functionSymbol->type) {
                     return functionSymbol->type;
@@ -692,7 +622,6 @@ std::shared_ptr<SemanticType> TypeChecker::inferCallExpressionType(CallExpressio
         }
     }
     
-    // 如果无法解析函数，返回默认类型
     return calleeType;
 }
 
@@ -705,10 +634,8 @@ std::shared_ptr<SemanticType> TypeChecker::inferLiteralExpressionType(LiteralExp
     // 根据字面量类型推断类型
     switch (expr.tokentype) {
         case Token::kINTEGER_LITERAL: {
-            // 检查字面量后缀来确定类型
             const std::string& literal = expr.literal;
             
-            // 检查各种整数后缀
             if (literal.length() >= 5) {
                 if (literal.substr(literal.length() - 5) == "usize") {
                     return std::make_shared<SimpleType>("usize");
@@ -717,7 +644,6 @@ std::shared_ptr<SemanticType> TypeChecker::inferLiteralExpressionType(LiteralExp
                     return std::make_shared<SimpleType>("isize");
                 }
             }
-            
             if (literal.length() >= 3) {
                 std::string suffix = literal.substr(literal.length() - 3);
                 if (suffix == "u32") {
@@ -790,7 +716,6 @@ std::shared_ptr<SemanticType> TypeChecker::inferArrayExpressionType(ArrayExpress
         }
         
         std::shared_ptr<SemanticType> elemType;
-        
         // 对于字面量，直接推断类型
         if (auto literal = dynamic_cast<LiteralExpression*>(element.get())) {
             elemType = inferLiteralExpressionType(*literal);
@@ -803,21 +728,18 @@ std::shared_ptr<SemanticType> TypeChecker::inferArrayExpressionType(ArrayExpress
             nodeTypeMap.erase(&expr);
             return nullptr;
         }
-        
         elementType = elemType;
     } else {
         // 对于逗号分隔语法，检查所有数组元素的类型
         for (const auto& element : expr.arrayelements->expressions) {
             if (element) {
                 std::shared_ptr<SemanticType> elemType;
-                
                 // 对于字面量，直接推断类型
                 if (auto literal = dynamic_cast<LiteralExpression*>(element.get())) {
                     elemType = inferLiteralExpressionType(*literal);
                 } else {
                     // 对于其他类型的表达式，递归推断（但要避免对数组表达式递归）
                     if (auto innerArrayExpr = dynamic_cast<ArrayExpression*>(element.get())) {
-                        // 嵌套数组表达式，正确推断其类型
                         elemType = inferArrayExpressionType(*innerArrayExpr);
                     } else {
                         elemType = inferExpressionType(*element);
@@ -828,7 +750,6 @@ std::shared_ptr<SemanticType> TypeChecker::inferArrayExpressionType(ArrayExpress
                     nodeTypeMap.erase(&expr);
                     return nullptr;
                 }
-                
                 if (!elementType) {
                     elementType = elemType;
                 } else if (!areTypesCompatible(elementType, elemType)) {
@@ -851,7 +772,6 @@ std::shared_ptr<SemanticType> TypeChecker::inferArrayExpressionType(ArrayExpress
     return result;
 }
 
-// 安全的常量表达式类型推断，避免无限递归
 std::shared_ptr<SemanticType> TypeChecker::inferConstantExpressionType(Expression& expr, std::shared_ptr<SemanticType> expectedType) {
     // 检查循环依赖
     auto nodeIt = nodeTypeMap.find(&expr);
@@ -872,12 +792,10 @@ std::shared_ptr<SemanticType> TypeChecker::inferConstantExpressionType(Expressio
     if (auto literalExpr = dynamic_cast<LiteralExpression*>(&expr)) {
         result = inferLiteralExpressionType(*literalExpr);
     } else if (auto arrayExpr = dynamic_cast<ArrayExpression*>(&expr)) {
-        // 对于数组表达式，使用期望类型来指导推断
         result = inferArrayExpressionTypeWithExpected(*arrayExpr, expectedType);
     } else if (auto binaryExpr = dynamic_cast<BinaryExpression*>(&expr)) {
         result = inferBinaryExpressionType(*binaryExpr);
     } else {
-        // 其他类型的表达式，暂时返回期望类型
         result = expectedType;
     }
     
@@ -891,7 +809,6 @@ std::shared_ptr<SemanticType> TypeChecker::inferConstantExpressionType(Expressio
     return result;
 }
 
-// 使用期望类型指导的数组表达式类型推断
 std::shared_ptr<SemanticType> TypeChecker::inferArrayExpressionTypeWithExpected(ArrayExpression& expr, std::shared_ptr<SemanticType> expectedType) {
     if (!expectedType) {
         return inferArrayExpressionType(expr);
@@ -911,7 +828,6 @@ std::shared_ptr<SemanticType> TypeChecker::inferArrayExpressionTypeWithExpected(
     auto placeholder = std::make_shared<SimpleType>("array_expr_placeholder");
     nodeTypeMap[&expr] = placeholder;
     
-    // 如果期望类型是数组类型，提取元素类型
     std::shared_ptr<SemanticType> expectedElementType = nullptr;
     if (auto arrayTypeWrapper = dynamic_cast<ArrayTypeWrapper*>(expectedType.get())) {
         expectedElementType = arrayTypeWrapper->getElementType();
@@ -960,14 +876,12 @@ std::shared_ptr<SemanticType> TypeChecker::inferArrayExpressionTypeWithExpected(
             nodeTypeMap.erase(&expr);
             return nullptr;
         }
-        
         elementType = elemType;
     } else {
         // 对于逗号分隔语法，检查所有数组元素的类型
         for (const auto& element : expr.arrayelements->expressions) {
             if (element) {
                 std::shared_ptr<SemanticType> elemType;
-                
                 // 如果元素是数组表达式（用于多维数组），递归处理
                 if (auto innerArrayExpr = dynamic_cast<ArrayExpression*>(element.get())) {
                     if (expectedElementType) {
@@ -988,7 +902,6 @@ std::shared_ptr<SemanticType> TypeChecker::inferArrayExpressionTypeWithExpected(
                     nodeTypeMap.erase(&expr);
                     return nullptr;
                 }
-                
                 if (!elementType) {
                     elementType = elemType;
                 } else if (!areTypesCompatible(elementType, elemType)) {
@@ -1027,14 +940,12 @@ void TypeChecker::reportMissingTraitImplementation(const std::string& traitName,
     hasErrors = true;
 }
 
-// 符号查找
 std::shared_ptr<Symbol> TypeChecker::findSymbol(const std::string& name) {
     if (!scopeTree) {
         return nullptr;
     }
-    
-    auto p = scopeTree->lookupSymbol(name);
-    return p;
+    auto  symbol= scopeTree->lookupSymbol(name);
+    return symbol;
 }
 
 std::shared_ptr<FunctionSymbol> TypeChecker::findFunction(const std::string& name) {
@@ -1126,10 +1037,7 @@ void TypeChecker::checkPattern(Pattern& pattern, std::shared_ptr<SemanticType> e
 }
 
 void TypeChecker::checkPattern(IdentifierPattern& pattern, std::shared_ptr<SemanticType> expectedType) {
-    // 检查标识符模式类型兼容性
     std::string varName = pattern.identifier;
-    
-    // 在符号表中注册变量
     auto varSymbol = std::make_shared<Symbol>(
         varName,
         SymbolKind::Variable,
@@ -1163,16 +1071,13 @@ void TypeChecker::checkAssignmentMutability(Expression& lhs) {
     } else if (auto fieldExpr = dynamic_cast<FieldExpression*>(&lhs)) {
         checkFieldMutability(*fieldExpr);
     } else if (auto indexExpr = dynamic_cast<IndexExpression*>(&lhs)) {
-        // 对于索引表达式，直接调用checkIndexMutability
         checkIndexMutability(*indexExpr);
     }
-    // 其他类型的左值表达式可以在这里添加
 }
 
 void TypeChecker::checkVariableMutability(PathExpression& pathExpr) {
     if (!pathExpr.simplepath) return;
     
-    // 获取变量名
     std::string varName;
     if (!pathExpr.simplepath || pathExpr.simplepath->simplepathsegements.empty()) {
         return;
@@ -1180,15 +1085,12 @@ void TypeChecker::checkVariableMutability(PathExpression& pathExpr) {
     varName = pathExpr.simplepath->simplepathsegements[0]->identifier;
     
     if (varName.empty()) return;
-    
-    // 查找符号 - 使用作用域树查找
     auto symbol = scopeTree->lookupSymbol(varName);
     if (!symbol) {
         reportError("Undefined variable: " + varName);
         return;
     }
     
-    // 检查可变性
     if (!symbol->ismutable) {
         reportMutabilityError(varName, "variable", &pathExpr);
     }
@@ -1232,7 +1134,6 @@ void TypeChecker::reportMutabilityError(const std::string& name, const std::stri
     hasErrors = true;
 }
 
-// 实现关键的表达式 visit 方法
 void TypeChecker::visit(AssignmentExpression& node) {
     pushNode(node);
     
@@ -1251,11 +1152,9 @@ void TypeChecker::visit(CompoundAssignmentExpression& node) {
     if (node.leftexpression) {
         checkAssignmentMutability(*node.leftexpression);
     }
-    
     // 检查右值的类型
     if (node.rightexpression) {
         auto rightType = inferExpressionType(*node.rightexpression);
-        // 这里可以添加类型兼容性检查
     }
     
     popNode();
@@ -1264,12 +1163,9 @@ void TypeChecker::visit(CompoundAssignmentExpression& node) {
 void TypeChecker::visit(IndexExpression& node) {
     pushNode(node);
     
-    // 检查数组表达式
     if (node.expressionout) {
         node.expressionout->accept(*this);
     }
-    
-    // 检查索引表达式
     if (node.expressionin) {
         node.expressionin->accept(*this);
         
@@ -1284,12 +1180,9 @@ void TypeChecker::visit(IndexExpression& node) {
     if (node.expressionout) {
         auto arrayType = inferExpressionType(*node.expressionout);
         if (arrayType) {
-            // 如果数组类型是数组或切片，提取元素类型
+            // 提取元素类型
             if (auto arrayTypeWrapper = dynamic_cast<ArrayTypeWrapper*>(arrayType.get())) {
                 auto elementType = arrayTypeWrapper->getElementType();
-                nodeTypeMap[&node] = elementType;
-            } else if (auto sliceTypeWrapper = dynamic_cast<SliceTypeWrapper*>(arrayType.get())) {
-                auto elementType = sliceTypeWrapper->getElementType();
                 nodeTypeMap[&node] = elementType;
             } else {
                 reportError("Cannot index into non-array type: " + arrayType->tostring());
@@ -1302,12 +1195,9 @@ void TypeChecker::visit(IndexExpression& node) {
 
 void TypeChecker::visit(FieldExpression& node) {
     pushNode(node);
-    
-    // 检查基础表达式
     if (node.expression) {
         node.expression->accept(*this);
     }
-    
     popNode();
 }
 
@@ -1333,7 +1223,6 @@ void TypeChecker::visit(ExpressionStatement& node) {
 void TypeChecker::visit(LetStatement& node) {
     pushNode(node);
     
-    // 检查类型（如果有）
     std::shared_ptr<SemanticType> declaredType = nullptr;
     if (node.type) {
         declaredType = checkType(*node.type);
@@ -1352,7 +1241,6 @@ void TypeChecker::visit(LetStatement& node) {
             auto initType = inferExpressionType(*node.expression);
             
             if (!initType) {
-                // 添加调试信息
                 if (auto pattern = dynamic_cast<IdentifierPattern*>(node.patternnotopalt.get())) {
                     reportError("Unable to infer type for let statement initializer for variable: " + pattern->identifier);
                 } else {
@@ -1361,7 +1249,6 @@ void TypeChecker::visit(LetStatement& node) {
                 popNode();
                 return;
             }
-            
             // 检查类型兼容性
             if (!areTypesCompatible(declaredType, initType)) {
                 reportError("Type mismatch in let statement: expected '" + declaredType->tostring() +
@@ -1369,7 +1256,6 @@ void TypeChecker::visit(LetStatement& node) {
                 popNode();
                 return;
             }
-            
             // 特殊处理数组类型：进行大小验证
             if (auto arrayType = dynamic_cast<ArrayTypeWrapper*>(declaredType.get())) {
                 if (auto arrayExpr = dynamic_cast<ArrayExpression*>(node.expression.get())) {
@@ -1409,7 +1295,6 @@ void TypeChecker::checkArraySizeMatch(ArrayTypeWrapper& declaredType, ArrayExpre
     }
     
     int64_t declaredSize = evaluateArraySize(*sizeExpr);
-    
     if (declaredSize < 0) {
         reportError("Invalid array size expression");
         return;
@@ -1422,7 +1307,6 @@ void TypeChecker::checkArraySizeMatch(ArrayTypeWrapper& declaredType, ArrayExpre
     }
     
     int64_t actualSize;
-    
     // 检查是否是重复元素语法 [value; count]
     if (arrayExpr.arrayelements->istwo) {
         // 对于重复元素语法，第二个表达式是重复次数
@@ -1433,8 +1317,6 @@ void TypeChecker::checkArraySizeMatch(ArrayTypeWrapper& declaredType, ArrayExpre
         
         // 获取重复次数
         const auto& countExpr = arrayExpr.arrayelements->expressions[1];
-        
-        // 尝试求值数组大小表达式
         actualSize = evaluateArraySize(*countExpr);
         if (actualSize < 0) {
             reportError("Invalid array count expression");
@@ -1453,13 +1335,10 @@ void TypeChecker::checkArraySizeMatch(ArrayTypeWrapper& declaredType, ArrayExpre
 }
 
 int64_t TypeChecker::evaluateArraySize(Expression& sizeExpr) {
-    // 如果是字面量表达式，直接求值
     if (auto literal = dynamic_cast<LiteralExpression*>(&sizeExpr)) {
         if (literal->tokentype == Token::kINTEGER_LITERAL) {
             try {
-                // 提取数字部分，忽略后缀
                 std::string numStr = literal->literal;
-                // 移除可能的后缀
                 if (numStr.length() >= 3) {
                     std::string suffix = numStr.substr(numStr.length() - 3);
                     if (suffix == "u32" || suffix == "i32" || suffix == "u64" || suffix == "i64") {
@@ -1484,7 +1363,6 @@ int64_t TypeChecker::evaluateArraySize(Expression& sizeExpr) {
         }
     }
     
-    // 如果是二元表达式，尝试求值
     if (auto binaryExpr = dynamic_cast<BinaryExpression*>(&sizeExpr)) {
         if (binaryExpr->binarytype == Token::kPlus ||
             binaryExpr->binarytype == Token::kMinus ||
@@ -1517,12 +1395,10 @@ int64_t TypeChecker::evaluateArraySize(Expression& sizeExpr) {
         }
     }
     
-    // 如果是路径表达式，尝试查找常量值
     if (auto pathExpr = dynamic_cast<PathExpression*>(&sizeExpr)) {
         if (pathExpr->simplepath && !pathExpr->simplepath->simplepathsegements.empty()) {
             std::string constName = pathExpr->simplepath->simplepathsegements[0]->identifier;
             
-            // 如果有常量求值器，尝试从常量求值器获取值
             if (constantEvaluator) {
                 auto constValue = constantEvaluator->getConstantValue(constName);
                 if (constValue) {
@@ -1554,11 +1430,9 @@ void TypeChecker::visit(BlockExpression& node) {
     
     // 进入新的作用域
     scopeTree->enterScope(Scope::ScopeType::Block, &node);
-    
     for (const auto &stmt : node.statements) {
         stmt->accept(*this);
     }
-    
     // 退出作用域
     scopeTree->exitScope();
     
@@ -1572,7 +1446,6 @@ void TypeChecker::visit(IfExpression& node) {
     if (node.conditions && node.conditions->expression) {
         node.conditions->expression->accept(*this);
         auto condType = inferExpressionType(*node.conditions->expression);
-        
         // 条件表达式必须是布尔类型
         if (condType && condType->tostring() != "bool") {
             reportError("If condition must be of type bool, found " + condType->tostring());
@@ -1587,11 +1460,9 @@ void TypeChecker::visit(IfExpression& node) {
     // 检查else分支（如果有）
     if (node.elseexpression) {
         node.elseexpression->accept(*this);
-        
         // 检查两个分支的类型兼容性
         auto ifType = inferExpressionType(*node.ifblockexpression);
         auto elseType = inferExpressionType(*node.elseexpression);
-        
         if (ifType && elseType) {
             // 如果两个分支都不是!类型，检查类型兼容性
             if (ifType->tostring() != "!" && elseType->tostring() != "!") {
