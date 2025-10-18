@@ -173,13 +173,32 @@ void SymbolCollector::visit(LetStatement& node) {
                 varType = createSimpleType("inferred");
             }
             
-            auto varSymbol = std::make_shared<Symbol>(
-                varName,
-                SymbolKind::Variable,
-                varType,
-                identPattern->hasmut,  // 使用模式中的可变性标志
-                &node
-            );
+            // 检查是否是 const 声明（在 Rust 中，const 可以在函数内部声明）
+            // 这里我们需要从上下文判断，因为 LetStatement 本身没有 const 字段
+            // 临时解决方案：检查变量名是否以 "const_" 开头或者检查初始化表达式是否是编译时常量
+            bool isConstant = false;
+            
+            // 检查初始化表达式是否是字面量（简单的启发式方法）
+            if (node.expression && dynamic_cast<LiteralExpression*>(node.expression.get())) {
+                isConstant = true;
+            }
+            
+            // 如果是常量，创建常量符号
+            std::shared_ptr<Symbol> varSymbol;
+            if (isConstant) {
+                varSymbol = std::make_shared<ConstantSymbol>(
+                    varName,
+                    varType
+                );
+            } else {
+                varSymbol = std::make_shared<Symbol>(
+                    varName,
+                    SymbolKind::Variable,
+                    varType,
+                    identPattern->hasmut,  // 使用模式中的可变性标志
+                    &node
+                );
+            }
             
             root->insertSymbol(varName, varSymbol);
         }
@@ -265,8 +284,9 @@ void SymbolCollector::collectFunctionSymbol(Function& node) {
     );
     
     // 确保函数符号的type字段也被设置，这样inferCallExpressionType可以从中获取
-    funcSymbol->type = returnType;    
-    root->insertSymbol(funcName, funcSymbol);
+    funcSymbol->type = returnType;
+    
+    bool insertSuccess = root->insertSymbol(funcName, funcSymbol);
 }
 
 void SymbolCollector::collectConstantSymbol(ConstantItem& node) {
@@ -518,6 +538,19 @@ std::shared_ptr<SemanticType> SymbolCollector::resolveTypeFromNode(Type& node) {
             if (!typeName.empty()) {
                 return createSimpleType(typeName);
             }
+        }
+    } else if (auto arrayType = dynamic_cast<ArrayType*>(&node)) {
+        // 处理数组类型，包括多维数组
+        auto elementType = resolveTypeFromNode(*arrayType->type);
+        if (elementType) {
+            // 创建数组类型包装器
+            return std::make_shared<ArrayTypeWrapper>(elementType, arrayType->expression.get());
+        }
+    } else if (auto refType = dynamic_cast<ReferenceType*>(&node)) {
+        // 处理引用类型
+        auto targetType = resolveTypeFromNode(*refType->type);
+        if (targetType) {
+            return std::make_shared<ReferenceTypeWrapper>(targetType, refType->ismut);
         }
     }
     return createSimpleType("unit");  // 默认返回unit而不是unknown

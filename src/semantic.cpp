@@ -80,7 +80,7 @@ bool CompleteSemanticAnalyzer::runControlFlowAnalysis() {
 bool CompleteSemanticAnalyzer::runTypeChecking() {
     std::cerr << "Step 4: Type Checking" << std::endl;
     
-    typeChecker = std::make_shared<TypeChecker>(scopeTree);
+    typeChecker = std::make_shared<TypeChecker>(scopeTree, constantEvaluator);
     ast->accept(*typeChecker);
     
     return !typeChecker->hasTypeErrors();

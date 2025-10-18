@@ -7,8 +7,8 @@
 #include <utility>
 #include <unordered_map>
 
-TypeChecker::TypeChecker(std::shared_ptr<ScopeTree> scopeTree)
-    : scopeTree(scopeTree) {}
+TypeChecker::TypeChecker(std::shared_ptr<ScopeTree> scopeTree, std::shared_ptr<ConstantEvaluator> constantEvaluator)
+    : scopeTree(scopeTree), constantEvaluator(constantEvaluator) {}
 
 bool TypeChecker::checkTypes() {
     hasErrors = false;
@@ -486,6 +486,30 @@ std::shared_ptr<SemanticType> TypeChecker::checkType(ArrayType& arrayType) {
     return result;
 }
 
+std::shared_ptr<SemanticType> TypeChecker::checkType(ReferenceType& refType) {
+    // 检查循环依赖
+    auto nodeIt = nodeTypeMap.find(&refType);
+    if (nodeIt != nodeTypeMap.end()) {
+        return nodeIt->second; // 已经在处理中，返回缓存结果
+    }
+    
+    // 先设置一个占位符防止循环
+    auto placeholder = std::make_shared<SimpleType>("ref_placeholder");
+    nodeTypeMap[&refType] = placeholder;
+    
+    // 检查引用的目标类型
+    auto targetType = checkType(*refType.type);
+    if (!targetType) {
+        nodeTypeMap.erase(&refType);
+        return nullptr;
+    }
+    
+    // 创建引用类型
+    auto result = std::make_shared<ReferenceTypeWrapper>(targetType, refType.ismut);
+    nodeTypeMap[&refType] = result; // 替换占位符
+    return result;
+}
+
 std::shared_ptr<SemanticType> TypeChecker::resolveType(const std::string& typeName) {
     // 直接创建类型，先不使用缓存
     auto type = std::make_shared<SimpleType>(typeName);
@@ -634,7 +658,6 @@ std::shared_ptr<SemanticType> TypeChecker::inferBinaryExpressionType(BinaryExpre
 
 std::shared_ptr<SemanticType> TypeChecker::inferCallExpressionType(CallExpression& expr) {
     auto calleeType = inferExpressionType(*expr.expression);
-    // if (!calleeType) return nullptr;
 
     // 查找函数符号
     // 如果callee是路径表达式，尝试解析为函数调用
@@ -644,6 +667,7 @@ std::shared_ptr<SemanticType> TypeChecker::inferCallExpressionType(CallExpressio
             
             // 直接从作用域中查找符号
             auto symbol = findSymbol(functionName);
+            
             if (symbol && symbol->kind == SymbolKind::Function) {
                 // 对于函数符号，尝试获取其类型
                 if (symbol->type) {
@@ -665,7 +689,6 @@ std::shared_ptr<SemanticType> TypeChecker::inferCallExpressionType(CallExpressio
                     return functionSymbol->type;
                 }
             }
-            
         }
     }
     
@@ -793,10 +816,9 @@ std::shared_ptr<SemanticType> TypeChecker::inferArrayExpressionType(ArrayExpress
                     elemType = inferLiteralExpressionType(*literal);
                 } else {
                     // 对于其他类型的表达式，递归推断（但要避免对数组表达式递归）
-                    if (dynamic_cast<ArrayExpression*>(element.get())) {
-                        // 嵌套数组表达式，暂时跳过处理以避免无限递归
-                        std::cerr << "DEBUG: Skipping nested array expression to avoid infinite recursion" << std::endl;
-                        elemType = std::make_shared<SimpleType>("nested_array");
+                    if (auto innerArrayExpr = dynamic_cast<ArrayExpression*>(element.get())) {
+                        // 嵌套数组表达式，正确推断其类型
+                        elemType = inferArrayExpressionType(*innerArrayExpr);
                     } else {
                         elemType = inferExpressionType(*element);
                     }
@@ -1007,6 +1029,10 @@ void TypeChecker::reportMissingTraitImplementation(const std::string& traitName,
 
 // 符号查找
 std::shared_ptr<Symbol> TypeChecker::findSymbol(const std::string& name) {
+    if (!scopeTree) {
+        return nullptr;
+    }
+    
     auto p = scopeTree->lookupSymbol(name);
     return p;
 }
@@ -1434,22 +1460,10 @@ int64_t TypeChecker::evaluateArraySize(Expression& sizeExpr) {
                 // 提取数字部分，忽略后缀
                 std::string numStr = literal->literal;
                 // 移除可能的后缀
-                if (numStr.length() >= 2) {
-                    std::string suffix = numStr.substr(numStr.length() - 2);
-                    if (suffix == "u8" || suffix == "i8" || suffix == "u16" || suffix == "i16") {
-                        numStr = numStr.substr(0, numStr.length() - 2);
-                    }
-                }
                 if (numStr.length() >= 3) {
                     std::string suffix = numStr.substr(numStr.length() - 3);
                     if (suffix == "u32" || suffix == "i32" || suffix == "u64" || suffix == "i64") {
                         numStr = numStr.substr(0, numStr.length() - 3);
-                    }
-                }
-                if (numStr.length() >= 4) {
-                    std::string suffix = numStr.substr(numStr.length() - 4);
-                    if (suffix == "u128" || suffix == "i128") {
-                        numStr = numStr.substr(0, numStr.length() - 4);
                     }
                 }
                 if (numStr.length() >= 5) {
@@ -1508,23 +1522,25 @@ int64_t TypeChecker::evaluateArraySize(Expression& sizeExpr) {
         if (pathExpr->simplepath && !pathExpr->simplepath->simplepathsegements.empty()) {
             std::string constName = pathExpr->simplepath->simplepathsegements[0]->identifier;
             
-            // 查找常量符号
-            auto symbol = findSymbol(constName);
+            // 如果有常量求值器，尝试从常量求值器获取值
+            if (constantEvaluator) {
+                auto constValue = constantEvaluator->getConstantValue(constName);
+                if (constValue) {
+                    // 尝试将常量值转换为整数
+                    if (auto intConst = dynamic_cast<IntConstant*>(constValue.get())) {
+                        return intConst->getValue();
+                    } else {
+                        reportError("Constant '" + constName + "' is not an integer constant");
+                        return -1;
+                    }
+                }
+            }
             
+            // 查找常量符号（作为备用方案）
+            auto symbol = findSymbol(constName);
             if (symbol && symbol->kind == SymbolKind::Constant) {
-                // 这里应该获取常量的值，但当前实现简化处理
-                // 在完整的实现中，需要从常量求值器获取值
-                // 对于常量 N: usize = 24，我们返回 24
-                if (constName == "N") {
-                    return 24;
-                }
-                reportError("Unknown constant in array size expression: " + constName);
+                reportError("Cannot evaluate constant '" + constName + "' at compile time");
                 return -1;
-            } else {
-                // 对于测试，我们假设 N 是 24
-                if (constName == "N") {
-                    return 24;
-                }
             }
         }
     }

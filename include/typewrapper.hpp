@@ -35,6 +35,28 @@ public:
     std::shared_ptr<SemanticType> getElementType() const { return elementType; }
 };
 
+class ReferenceTypeWrapper : public SemanticType {
+private:
+    std::shared_ptr<SemanticType> targetType;
+    bool isMutable;
+    
+public:
+    ReferenceTypeWrapper(std::shared_ptr<SemanticType> targetType, bool isMutable = false)
+        : targetType(targetType), isMutable(isMutable) {}
+    
+    std::string tostring() const override {
+        std::string result = "&";
+        if (isMutable) {
+            result += "mut ";
+        }
+        result += targetType->tostring();
+        return result;
+    }
+    
+    std::shared_ptr<SemanticType> getTargetType() const { return targetType; }
+    bool getIsMutable() const { return isMutable; }
+};
+
 class TypeVariable : public SemanticType {
 private:
     std::string name;

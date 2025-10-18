@@ -62,18 +62,28 @@ ScopeTree::ScopeTree() {
 }
 
 void ScopeTree::enterScope(Scope::ScopeType type, ASTNode* node) {
+    if (!currentNode) {
+        return;
+    }
+    
     bool isFunctionScope = (type == Scope::ScopeType::Function);
     auto newScope = currentNode->addchild(isFunctionScope);
+    
     currentNode = newScope;
+    
     if (node) {
         nodeToScopeMap[node] = currentNode;
     }
 }
 
 void ScopeTree::exitScope() {
+    if (!currentNode) {
+        return;
+    }
+    
     if (currentNode->getparent()) {
         currentNode = currentNode->getparent();
-    } 
+    }
 }
 
 void ScopeTree::gotoNode(ASTNode* node) {
@@ -124,6 +134,10 @@ bool ScopeTree::insertSymbol(const std::string& name, std::shared_ptr<Symbol> sy
 }
 
 std::shared_ptr<Symbol> ScopeTree::lookupSymbol(const std::string& name) {
+    if (!currentNode) {
+        return nullptr;
+    }
+    
     auto symbol = currentNode->lookup(name, false);
     return symbol;
 }

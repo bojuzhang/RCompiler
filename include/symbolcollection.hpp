@@ -3,6 +3,7 @@
 
 #include "visitor.hpp"
 #include "scope.hpp"
+#include "typewrapper.hpp"
 #include <memory>
 #include <stack>
 

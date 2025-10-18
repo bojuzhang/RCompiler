@@ -412,6 +412,24 @@ std::shared_ptr<Statement> Parser::parseStatement() {
     if (match(Token::klet)) {
         return std::make_shared<Statement>(std::move(parseLetStatement()));
     }
+    if (match(Token::kconst)) {
+        // 检查是否是 const 语句（在函数内部）
+        size_t tmp = pos;
+        advance();
+        if (match(Token::kIDENTIFIER)) {
+            advance();
+            if (match(Token::kColon)) {
+                // 这是一个 const 语句，解析为 ConstantItem
+                pos = tmp;
+                auto constItem = parseConstantItem();
+                if (constItem != nullptr) {
+                    return std::make_shared<Statement>(std::move(constItem));
+                }
+            }
+        }
+        // 如果不是 const 语句，回退
+        pos = tmp;
+    }
     size_t tmp = pos;
     auto item = parseItem();
     if (item != nullptr) {

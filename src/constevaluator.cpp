@@ -57,7 +57,6 @@ void ConstantEvaluator::visit(ConstantItem& node) {
     auto value = evaluateExpression(*node.expression);
     if (value) {
         constantValues[constName] = value;
-        std::cerr << "Constant '" << constName << "' = " << value->toString() << std::endl;
     } else {
         reportError("Cannot evaluate constant '" + constName + "' at compile time");
     }
@@ -70,11 +69,9 @@ void ConstantEvaluator::visit(Function& node) {
     // 函数定义中可能包含常量表达式（如默认参数），但这里简化处理
     pushNode(node);
     
-    // 不处理函数体中的常量，只处理函数签名中的常量表达式
-    if (node.functionparameters) {
-        for (const auto& param : node.functionparameters->functionparams) {
-            // 检查参数默认值（如果有）
-        }
+    // 处理函数体中的常量表达式
+    if (node.blockexpression) {
+        node.blockexpression->accept(*this);
     }
     
     popNode();
@@ -119,6 +116,29 @@ void ConstantEvaluator::visit(ExpressionStatement& node) {
     popNode();
 }
 
+void ConstantEvaluator::visit(BlockExpression& node) {
+    pushNode(node);
+    
+    // 在常量上下文中，处理块中的所有语句
+    if (inConstContext) {
+        // 处理所有语句
+        for (const auto& stmt : node.statements) {
+            if (stmt) {
+                stmt->accept(*this);
+            }
+        }
+        
+        // 处理尾表达式（如果有）
+        if (node.expressionwithoutblock) {
+            node.expressionwithoutblock->accept(*this);
+        }
+    } else {
+        // 即使不在常量上下文中，也要处理函数内部的常量声明
+        evaluateBlockExpression(node);
+    }
+    
+    popNode();
+}
 
 // 表达式求值
 std::shared_ptr<ConstantValue> ConstantEvaluator::evaluateExpression(Expression& expr) {
@@ -343,26 +363,31 @@ std::shared_ptr<ConstantValue> ConstantEvaluator::evaluateArrayExpression(ArrayE
 }
 
 std::shared_ptr<ConstantValue> ConstantEvaluator::evaluatePathExpression(PathExpression& expr) {
-    if (!expr.simplepath) {
+    if (!expr.simplepath || expr.simplepath->simplepathsegements.empty()) {
         return nullptr;
     }
     
-    // // 简化处理：只处理单段路径（常量名）
-    // auto segments = path;
-    // if (segments.size() != 1) {
-    //     reportError("Complex path expressions not supported in constant evaluation");
-    //     return nullptr;
-    // }
+    // 简化处理：只处理单段路径（常量名）
+    std::string constName = expr.simplepath->simplepathsegements[0]->identifier;
     
-    // std::string constName = segments[0]->getIdentifier();
+    // 查找常量值
+    auto it = constantValues.find(constName);
+    if (it != constantValues.end()) {
+        return it->second;
+    }
     
-    // // 查找常量值
-    // auto it = constantValues.find(constName);
-    // if (it != constantValues.end()) {
-    //     return it->second;
-    // }
+    // 尝试从作用域树中查找符号
+    if (scopeTree) {
+        auto symbol = scopeTree->lookupSymbol(constName);
+        if (symbol && symbol->kind == SymbolKind::Constant) {
+            // 如果是常量符号但还没有求值，尝试求值
+            // 这里可能需要递归求值，但要避免循环依赖
+            reportError("Constant '" + constName + "' found but not evaluated yet");
+            return nullptr;
+        }
+    }
     
-    // reportError("Undefined constant in constant expression: " + constName);
+    reportError("Undefined constant in constant expression: " + constName);
     return nullptr;
 }
 

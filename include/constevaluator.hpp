@@ -103,26 +103,7 @@ public:
     void visit(BinaryExpression& node) override {}
     void visit(UnaryExpression& node) override {}
     void visit(ArrayExpression& node) override {}
-    void visit(BlockExpression& node) override {
-        pushNode(node);
-        
-        // 在常量上下文中，处理块中的所有语句
-        if (inConstContext) {
-            // 处理所有语句
-            for (const auto& stmt : node.statements) {
-                if (stmt) {
-                    stmt->accept(*this);
-                }
-            }
-            
-            // 处理尾表达式（如果有）
-            if (node.expressionwithoutblock) {
-                node.expressionwithoutblock->accept(*this);
-            }
-        }
-        
-        popNode();
-    }
+    void visit(BlockExpression& node) override;
     void visit(IfExpression& node) override {}
     
     // 其他表达式节点（简化处理）

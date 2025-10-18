@@ -5,6 +5,7 @@
 #include "visitor.hpp"
 #include "scope.hpp"
 #include "typewrapper.hpp"
+#include "constevaluator.hpp"
 #include <memory>
 #include <stack>
 #include <unordered_map>
@@ -13,6 +14,7 @@
 class TypeChecker : public ASTVisitor {
 private:
     std::shared_ptr<ScopeTree> scopeTree;
+    std::shared_ptr<ConstantEvaluator> constantEvaluator;
     std::stack<ASTNode*> nodeStack;
     std::stack<std::shared_ptr<SemanticType>> expectedTypeStack;
     
@@ -31,7 +33,7 @@ private:
     std::unordered_map<std::string, std::string> implToTraitMap;
 
 public:
-    TypeChecker(std::shared_ptr<ScopeTree> scopeTree);
+    TypeChecker(std::shared_ptr<ScopeTree> scopeTree, std::shared_ptr<ConstantEvaluator> constantEvaluator = nullptr);
     
     bool checkTypes();
     bool hasTypeErrors() const;
@@ -117,6 +119,7 @@ private:
     std::shared_ptr<SemanticType> checkType(Type& typeNode);
     std::shared_ptr<SemanticType> checkType(TypePath& typePath);
     std::shared_ptr<SemanticType> checkType(ArrayType& arrayType);
+    std::shared_ptr<SemanticType> checkType(ReferenceType& refType);
     std::shared_ptr<SemanticType> resolveType(const std::string& typeName);
     bool typeExists(const std::string& typeName);
     bool isTypeVisible(const std::string& typeName);
