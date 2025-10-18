@@ -41,11 +41,11 @@ public:
     ControlFlowAnalyzer(std::shared_ptr<ScopeTree> scopeTree, 
                        std::shared_ptr<ConstantEvaluator> constantEvaluator);
     
-    bool analyzeControlFlow();
-    bool hasAnalysisErrors() const;
-    ControlFlow getControlFlow(ASTNode* node) const;
-    std::shared_ptr<SemanticType> getNodeType(ASTNode* node) const;
-    bool alwaysDivergesAt(ASTNode* node) const;
+    bool AnalyzeControlFlow();
+    bool HasAnalysisErrors() const;
+    ControlFlow GetControlFlow(ASTNode* node) const;
+    std::shared_ptr<SemanticType> GetNodeType(ASTNode* node) const;
+    bool AlwaysDivergesAt(ASTNode* node) const;
     
     void visit(Crate& node) override;
     void visit(Item& node) override {}
@@ -116,30 +116,30 @@ public:
     void visit(PathInExpression& node) override {}
 
 private:
-    void pushNode(ASTNode& node);
-    void popNode();
-    ASTNode* getCurrentNode();
+    void PushNode(ASTNode& node);
+    void PopNode();
+    ASTNode* GetCurrentNode();
     
-    void enterLoop();
-    void exitLoop();
-    bool inLoop() const;
+    void EnterLoop();
+    void ExitLoop();
+    bool InLoop() const;
     
-    void pushControlFlow(ControlFlow flow);
-    ControlFlow popControlFlow();
-    ControlFlow getCurrentControlFlow();
+    void PushControlFlow(ControlFlow flow);
+    ControlFlow PopControlFlow();
+    ControlFlow GetCurrentControlFlow();
     
-    ControlFlow analyzeExpressionControlFlow(Expression& expr);
-    ControlFlow analyzeBlockControlFlow(BlockExpression& block);
-    ControlFlow analyzeIfControlFlow(IfExpression& ifExpr);
-    ControlFlow analyzeLoopControlFlow(InfiniteLoopExpression& loop);
-    ControlFlow analyzePredicateLoopControlFlow(PredicateLoopExpression& loop);
+    ControlFlow AnalyzeExpressionControlFlow(Expression& expr);
+    ControlFlow AnalyzeBlockControlFlow(BlockExpression& block);
+    ControlFlow AnalyzeIfControlFlow(IfExpression& ifExpr);
+    ControlFlow AnalyzeLoopControlFlow(InfiniteLoopExpression& loop);
+    ControlFlow AnalyzePredicateLoopControlFlow(PredicateLoopExpression& loop);
     
-    std::shared_ptr<SemanticType> inferExpressionType(Expression& expr);
-    std::shared_ptr<SemanticType> inferBlockType(BlockExpression& block);
-    std::shared_ptr<SemanticType> inferIfType(IfExpression& ifExpr);
-    std::shared_ptr<SemanticType> inferLoopType(InfiniteLoopExpression& loop);
+    std::shared_ptr<SemanticType> InferExpressionType(Expression& expr);
+    std::shared_ptr<SemanticType> InferBlockType(BlockExpression& block);
+    std::shared_ptr<SemanticType> InferIfType(IfExpression& ifExpr);
+    std::shared_ptr<SemanticType> InferLoopType(InfiniteLoopExpression& loop);
     
-    bool isAlwaysDiverging(Expression& expr);
-    void reportError(const std::string& message);
-    void checkBreakContinueValidity(ASTNode& node, Token tokenType);
+    bool IsAlwaysDiverging(Expression& expr);
+    void ReportError(const std::string& message);
+    void CheckBreakContinueValidity(ASTNode& node, Token tokenType);
 };

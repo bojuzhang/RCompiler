@@ -7,40 +7,40 @@
 ConstantEvaluator::ConstantEvaluator(std::shared_ptr<ScopeTree> scopeTree) 
     : scopeTree(scopeTree) {}
 
-bool ConstantEvaluator::evaluateConstants() {
+bool ConstantEvaluator::EvaluateConstants() {
     hasErrors = false;
     return !hasErrors;
 }
 
-bool ConstantEvaluator::hasEvaluationErrors() const {
+bool ConstantEvaluator::HasEvaluationErrors() const {
     return hasErrors;
 }
 
-std::shared_ptr<ConstantValue> ConstantEvaluator::getConstantValue(const std::string& name) {
+std::shared_ptr<ConstantValue> ConstantEvaluator::GetConstantValue(const std::string& name) {
     auto it = constantValues.find(name);
     return it != constantValues.end() ? it->second : nullptr;
 }
 
 void ConstantEvaluator::visit(Crate& node) {
-    pushNode(node);
+    PushNode(node);
     for (const auto& item : node.items) {
         if (item) {
             item->accept(*this);
         }
     }
-    popNode();
+    PopNode();
 }
 
 void ConstantEvaluator::visit(Item& node) {
-    pushNode(node);
+    PushNode(node);
     if (node.item) {
         node.item->accept(*this);
     }
-    popNode();
+    PopNode();
 }
 
 void ConstantEvaluator::visit(ConstantItem& node) {
-    pushNode(node);
+    PushNode(node);
     
     std::string constName = node.identifier;
     
@@ -48,67 +48,67 @@ void ConstantEvaluator::visit(ConstantItem& node) {
     inConstContext = true;
     
     // 求值常量表达式
-    auto value = evaluateExpression(*node.expression);
+    auto value = EvaluateExpression(*node.expression);
     if (value) {
         constantValues[constName] = value;
     } else {
-        reportError("Cannot evaluate constant '" + constName + "' at compile time");
+        ReportError("Cannot evaluate constant '" + constName + "' at compile time");
     }
     
     inConstContext = previousConstContext;
-    popNode();
+    PopNode();
 }
 
 void ConstantEvaluator::visit(Function& node) {
     // 函数定义中可能包含常量表达式（如默认参数），但这里简化处理
-    pushNode(node);
+    PushNode(node);
     
     if (node.blockexpression) {
         node.blockexpression->accept(*this);
     }
     
-    popNode();
+    PopNode();
 }
 
 void ConstantEvaluator::visit(Statement& node) {
-    pushNode(node);
+    PushNode(node);
     
     if (node.astnode) {
         node.astnode->accept(*this);
     }
     
-    popNode();
+    PopNode();
 }
 
 void ConstantEvaluator::visit(LetStatement& node) {
-    pushNode(node);
+    PushNode(node);
     
     if (inConstContext) {
-        auto initValue = evaluateExpression(*node.expression);
+        auto initValue = EvaluateExpression(*node.expression);
         if (initValue) {
             // 记录常量初始值（用于后续分析）
             std::cerr << "Let statement initializer evaluated to: " << initValue->toString() << std::endl;
         }
     }
     
-    popNode();
+    PopNode();
 }
 
 void ConstantEvaluator::visit(ExpressionStatement& node) {
-    pushNode(node);
+    PushNode(node);
     
     if (inConstContext) {
-        auto value = evaluateExpression(*node.astnode);
+        auto value = EvaluateExpression(*node.astnode);
         if (value) {
             std::cerr << "Expression statement evaluated to: " << value->toString() << std::endl;
         }
     }
     
-    popNode();
+    PopNode();
 }
 
 void ConstantEvaluator::visit(BlockExpression& node) {
-    pushNode(node);
+    PushNode(node);
     
     if (inConstContext) {
         for (const auto& stmt : node.statements) {
@@ -123,38 +123,38 @@ void ConstantEvaluator::visit(BlockExpression& node) {
         }
     } else {
         // 即使不在常量上下文中，也要处理函数内部的常量声明
-        evaluateBlockExpression(node);
+        EvaluateBlockExpression(node);
     }
     
-    popNode();
+    PopNode();
 }
 
-std::shared_ptr<ConstantValue> ConstantEvaluator::evaluateExpression(Expression& expr) {
+std::shared_ptr<ConstantValue> ConstantEvaluator::EvaluateExpression(Expression& expr) {
     // 检查是否已经是编译时常量
-    if (!isCompileTimeConstant(expr)) {
+    if (!IsCompileTimeConstant(expr)) {
         return nullptr;
     }
     
     if (auto literal = dynamic_cast<LiteralExpression*>(&expr)) {
-        return evaluateLiteral(*literal);
+        return EvaluateLiteral(*literal);
     } else if (auto binary = dynamic_cast<BinaryExpression*>(&expr)) {
-        return evaluateBinaryExpression(*binary);
+        return EvaluateBinaryExpression(*binary);
     } else if (auto unary = dynamic_cast<UnaryExpression*>(&expr)) {
-        return evaluateUnaryExpression(*unary);
+        return EvaluateUnaryExpression(*unary);
     } else if (auto array = dynamic_cast<ArrayExpression*>(&expr)) {
-        return evaluateArrayExpression(*array);
+        return EvaluateArrayExpression(*array);
     } else if (auto path = dynamic_cast<PathExpression*>(&expr)) {
-        return evaluatePathExpression(*path);
+        return EvaluatePathExpression(*path);
     } else if (auto block = dynamic_cast<BlockExpression*>(&expr)) {
-        return evaluateBlockExpression(*block);
+        return EvaluateBlockExpression(*block);
     } else if (auto ifExpr = dynamic_cast<IfExpression*>(&expr)) {
-        return evaluateIfExpression(*ifExpr);
+        return EvaluateIfExpression(*ifExpr);
     }
     
     return nullptr;
 }
 
-std::shared_ptr<ConstantValue> ConstantEvaluator::evaluateLiteral(LiteralExpression& expr) {
+std::shared_ptr<ConstantValue> ConstantEvaluator::EvaluateLiteral(LiteralExpression& expr) {
     Token tokenType = expr.tokentype;
     const std::string& valueStr = expr.literal;
     
@@ -164,7 +164,7 @@ std::shared_ptr<ConstantValue> ConstantEvaluator::evaluateLiteral(LiteralExpress
                 int64_t value = std::stoll(valueStr);
                 return std::make_shared<IntConstant>(value);
             } catch (const std::exception& e) {
-                reportError("Invalid integer literal: " + valueStr);
+                ReportError("Invalid integer literal: " + valueStr);
                 return nullptr;
             }
             
@@ -175,7 +175,7 @@ std::shared_ptr<ConstantValue> ConstantEvaluator::evaluateLiteral(LiteralExpress
                     return std::make_shared<CharConstant>(valueStr[1]);
                 }
             }
-            reportError("Invalid char literal: " + valueStr);
+            ReportError("Invalid char literal: " + valueStr);
             return nullptr;
             
         case Token::kSTRING_LITERAL:
@@ -183,7 +183,7 @@ std::shared_ptr<ConstantValue> ConstantEvaluator::evaluateLiteral(LiteralExpress
                 std::string content = valueStr.substr(1, valueStr.length() - 2);
                 return std::make_shared<StringConstant>(content);
             }
-            reportError("Invalid string literal: " + valueStr);
+            ReportError("Invalid string literal: " + valueStr);
             return nullptr;
             
         case Token::ktrue:
@@ -193,14 +193,14 @@ std::shared_ptr<ConstantValue> ConstantEvaluator::evaluateLiteral(LiteralExpress
             return std::make_shared<BoolConstant>(false);
             
         default:
-            reportError("Unsupported literal type for constant evaluation");
+            ReportError("Unsupported literal type for constant evaluation");
             return nullptr;
     }
 }
 
-std::shared_ptr<ConstantValue> ConstantEvaluator::evaluateBinaryExpression(BinaryExpression& expr) {
-    auto leftValue = evaluateExpression(*expr.leftexpression);
-    auto rightValue = evaluateExpression(*expr.rightexpression);
+std::shared_ptr<ConstantValue> ConstantEvaluator::EvaluateBinaryExpression(BinaryExpression& expr) {
+    auto leftValue = EvaluateExpression(*expr.leftexpression);
+    auto rightValue = EvaluateExpression(*expr.rightexpression);
     
     if (!leftValue || !rightValue) {
         return nullptr;
@@ -208,7 +208,7 @@ std::shared_ptr<ConstantValue> ConstantEvaluator::evaluateBinaryExpression(Binar
     
     // 类型检查：左右操作数类型必须兼容
     if (typeid(*leftValue) != typeid(*rightValue)) {
-        reportError("Type mismatch in binary expression");
+        ReportError("Type mismatch in binary expression");
         return nullptr;
     }
     
@@ -228,13 +228,13 @@ std::shared_ptr<ConstantValue> ConstantEvaluator::evaluateBinaryExpression(Binar
                 return std::make_shared<IntConstant>(left * right);
             case Token::kSlash:
                 if (right == 0) {
-                    reportError("Division by zero in constant expression");
+                    ReportError("Division by zero in constant expression");
                     return nullptr;
                 }
                 return std::make_shared<IntConstant>(left / right);
             case Token::kPercent:
                 if (right == 0) {
-                    reportError("Modulo by zero in constant expression");
+                    ReportError("Modulo by zero in constant expression");
                     return nullptr;
                 }
                 return std::make_shared<IntConstant>(left % right);
@@ -261,7 +261,7 @@ std::shared_ptr<ConstantValue> ConstantEvaluator::evaluateBinaryExpression(Binar
             case Token::kGe:
                 return std::make_shared<BoolConstant>(left >= right);
             default:
-                reportError("Unsupported binary operator for integers: " + to_string(op));
+                ReportError("Unsupported binary operator for integers: " + to_string(op));
                 return nullptr;
         }
     } else if (auto leftBool = dynamic_cast<BoolConstant*>(leftValue.get())) {
@@ -279,17 +279,17 @@ std::shared_ptr<ConstantValue> ConstantEvaluator::evaluateBinaryExpression(Binar
             case Token::kNe:
                 return std::make_shared<BoolConstant>(left != right);
             default:
-                reportError("Unsupported binary operator for booleans: " + to_string(op));
+                ReportError("Unsupported binary operator for booleans: " + to_string(op));
                 return nullptr;
         }
     }
     
-    reportError("Unsupported types for binary operation");
+    ReportError("Unsupported types for binary operation");
     return nullptr;
 }
 
-std::shared_ptr<ConstantValue> ConstantEvaluator::evaluateUnaryExpression(UnaryExpression& expr) {
-    auto operandValue = evaluateExpression(*expr.expression);
+std::shared_ptr<ConstantValue> ConstantEvaluator::EvaluateUnaryExpression(UnaryExpression& expr) {
+    auto operandValue = EvaluateExpression(*expr.expression);
     if (!operandValue) {
         return nullptr;
     }
@@ -304,7 +304,7 @@ std::shared_ptr<ConstantValue> ConstantEvaluator::evaluateUnaryExpression(UnaryE
             case Token::kNot:
                 return std::make_shared<IntConstant>(~value);
             default:
-                reportError("Unsupported unary operator for integers: " + to_string(op));
+                ReportError("Unsupported unary operator for integers: " + to_string(op));
                 return nullptr;
         }
     } else if (auto boolVal = dynamic_cast<BoolConstant*>(operandValue.get())) {
@@ -313,23 +313,23 @@ std::shared_ptr<ConstantValue> ConstantEvaluator::evaluateUnaryExpression(UnaryE
             case Token::kNot:
                 return std::make_shared<BoolConstant>(!value);
             default:
-                reportError("Unsupported unary operator for booleans: " + to_string(op));
+                ReportError("Unsupported unary operator for booleans: " + to_string(op));
                 return nullptr;
         }
     }
     
-    reportError("Unsupported type for unary operation");
+    ReportError("Unsupported type for unary operation");
     return nullptr;
 }
 
-std::shared_ptr<ConstantValue> ConstantEvaluator::evaluateArrayExpression(ArrayExpression& expr) {
+std::shared_ptr<ConstantValue> ConstantEvaluator::EvaluateArrayExpression(ArrayExpression& expr) {
     if (!expr.arrayelements) {
         return nullptr;
     }
     
     std::vector<std::shared_ptr<ConstantValue>> evaluatedElements;
     for (const auto& element : expr.arrayelements->expressions) {
-        auto elementValue = evaluateExpression(*element);
+        auto elementValue = EvaluateExpression(*element);
         if (!elementValue) {
             return nullptr;
         }
@@ -339,7 +339,7 @@ std::shared_ptr<ConstantValue> ConstantEvaluator::evaluateArrayExpression(ArrayE
     return std::make_shared<ArrayConstant>(std::move(evaluatedElements));
 }
 
-std::shared_ptr<ConstantValue> ConstantEvaluator::evaluatePathExpression(PathExpression& expr) {
+std::shared_ptr<ConstantValue> ConstantEvaluator::EvaluatePathExpression(PathExpression& expr) {
     if (!expr.simplepath || expr.simplepath->simplepathsegements.empty()) {
         return nullptr;
     }
@@ -354,19 +354,19 @@ std::shared_ptr<ConstantValue> ConstantEvaluator::evaluatePathExpression(PathExp
     
     // 尝试从作用域树中查找符号
     if (scopeTree) {
-        auto symbol = scopeTree->lookupSymbol(constName);
+        auto symbol = scopeTree->LookupSymbol(constName);
         if (symbol && symbol->kind == SymbolKind::Constant) {
             // 如果是常量符号但还没有求值，尝试求值
-            reportError("Constant '" + constName + "' found but not evaluated yet");
+            ReportError("Constant '" + constName + "' found but not evaluated yet");
             return nullptr;
         }
     }
     
-    reportError("Undefined constant in constant expression: " + constName);
+    ReportError("Undefined constant in constant expression: " + constName);
     return nullptr;
 }
 
-std::shared_ptr<ConstantValue> ConstantEvaluator::evaluateBlockExpression(BlockExpression& expr) {
+std::shared_ptr<ConstantValue> ConstantEvaluator::EvaluateBlockExpression(BlockExpression& expr) {
     // 块表达式在常量上下文中：遍历所有语句
     std::shared_ptr<ConstantValue> lastValue = nullptr;
     
@@ -375,7 +375,7 @@ std::shared_ptr<ConstantValue> ConstantEvaluator::evaluateBlockExpression(BlockE
             stmt->accept(*this);
             if (auto exprStmt = dynamic_cast<ExpressionStatement*>(stmt.get())) {
                 if (exprStmt->astnode) {
-                    lastValue = evaluateExpression(*exprStmt->astnode);
+                    lastValue = EvaluateExpression(*exprStmt->astnode);
                 }
             }
         }
@@ -383,14 +383,14 @@ std::shared_ptr<ConstantValue> ConstantEvaluator::evaluateBlockExpression(BlockE
     
     // 如果有尾表达式，块的值由尾表达式决定
     if (expr.expressionwithoutblock) {
-        lastValue = evaluateExpression(*expr.expressionwithoutblock);
+        lastValue = EvaluateExpression(*expr.expressionwithoutblock);
     }
     
     return lastValue;
 }
 
-std::shared_ptr<ConstantValue> ConstantEvaluator::evaluateIfExpression(IfExpression& expr) {
-    auto conditionValue = evaluateExpression(*expr.conditions->expression);
+std::shared_ptr<ConstantValue> ConstantEvaluator::EvaluateIfExpression(IfExpression& expr) {
+    auto conditionValue = EvaluateExpression(*expr.conditions->expression);
     if (!conditionValue) {
         return nullptr;
     }
@@ -398,15 +398,15 @@ std::shared_ptr<ConstantValue> ConstantEvaluator::evaluateIfExpression(IfExpress
     // 条件必须是布尔值
     auto boolCondition = dynamic_cast<BoolConstant*>(conditionValue.get());
     if (!boolCondition) {
-        reportError("If condition must be boolean in constant expression");
+        ReportError("If condition must be boolean in constant expression");
         return nullptr;
     }
     
     if (boolCondition->getValue()) {
-        return evaluateExpression(*expr.ifblockexpression);
+        return EvaluateExpression(*expr.ifblockexpression);
     } else {
         if (expr.elseexpression) {
-            return evaluateExpression(*expr.elseexpression);
+            return EvaluateExpression(*expr.elseexpression);
         } else {
             // 没有else分支，返回unit类型（这里用nullptr表示）
             return nullptr;
@@ -414,7 +414,7 @@ std::shared_ptr<ConstantValue> ConstantEvaluator::evaluateIfExpression(IfExpress
     }
 }
 
-bool ConstantEvaluator::isCompileTimeConstant(Expression& expr) {
+bool ConstantEvaluator::IsCompileTimeConstant(Expression& expr) {
     // 检查表达式是否可以在编译时求值
     if (dynamic_cast<LiteralExpression*>(&expr)) {
         return true;
@@ -430,16 +430,16 @@ bool ConstantEvaluator::isCompileTimeConstant(Expression& expr) {
         return false;
     } else if (dynamic_cast<BinaryExpression*>(&expr)) {
         auto binary = dynamic_cast<BinaryExpression*>(&expr);
-        return isCompileTimeConstant(*binary->leftexpression) && 
-               isCompileTimeConstant(*binary->rightexpression);
+        return IsCompileTimeConstant(*binary->leftexpression) &&
+               IsCompileTimeConstant(*binary->rightexpression);
     } else if (dynamic_cast<UnaryExpression*>(&expr)) {
         auto unary = dynamic_cast<UnaryExpression*>(&expr);
-        return isCompileTimeConstant(*unary->expression);
+        return IsCompileTimeConstant(*unary->expression);
     } else if (dynamic_cast<ArrayExpression*>(&expr)) {
         auto array = dynamic_cast<ArrayExpression*>(&expr);
         if (array && array->arrayelements) {
             for (const auto& element : array->arrayelements->expressions) {
-                if (!isCompileTimeConstant(*element)) {
+                if (!IsCompileTimeConstant(*element)) {
                     return false;
                 }
             }
@@ -451,21 +451,21 @@ bool ConstantEvaluator::isCompileTimeConstant(Expression& expr) {
     return false;
 }
 
-void ConstantEvaluator::reportError(const std::string& message) {
+void ConstantEvaluator::ReportError(const std::string& message) {
     std::cerr << "Constant Evaluation Error: " << message << std::endl;
     hasErrors = true;
 }
 
-void ConstantEvaluator::pushNode(ASTNode& node) {
+void ConstantEvaluator::PushNode(ASTNode& node) {
     nodeStack.push(&node);
 }
 
-void ConstantEvaluator::popNode() {
+void ConstantEvaluator::PopNode() {
     if (!nodeStack.empty()) {
         nodeStack.pop();
     }
 }
 
-ASTNode* ConstantEvaluator::getCurrentNode() {
+ASTNode* ConstantEvaluator::GetCurrentNode() {
     return nodeStack.empty() ? nullptr : nodeStack.top();
 }

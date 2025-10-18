@@ -21,13 +21,13 @@ private:
 public:
     CompleteSemanticAnalyzer(std::shared_ptr<Crate> ast);
     
-    bool analyze();
-    bool hasAnalysisErrors() const;
+    bool Analyze();
+    bool HasAnalysisErrors() const;
     
 private:
-    bool runSymbolCollection();
-    bool runConstantEvaluation(); 
-    bool runControlFlowAnalysis();
-    bool runTypeChecking();
-    bool runTypeInference();
+    bool RunSymbolCollection();
+    bool RunConstantEvaluation();
+    bool RunControlFlowAnalysis();
+    bool RunTypeChecking();
+    bool RunTypeInference();
 };

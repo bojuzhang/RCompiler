@@ -41,7 +41,7 @@ std::vector<std::pair<Token, std::string>> Lexer::lexString(std::string s) {
     return ans;
 }
 
-std::string Lexer::getString() {
+std::string Lexer::GetString() {
     std::string ans;
 
     std::stringstream buffer;

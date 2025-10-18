@@ -35,8 +35,8 @@ private:
 public:
     TypeChecker(std::shared_ptr<ScopeTree> scopeTree, std::shared_ptr<ConstantEvaluator> constantEvaluator = nullptr);
     
-    bool checkTypes();
-    bool hasTypeErrors() const;
+    bool CheckTypes();
+    bool HasTypeErrors() const;
     
     void visit(Crate& node) override;
     void visit(Item& node) override;
@@ -109,78 +109,78 @@ public:
     void visit(PathInExpression& node) override {}
 
 private:
-    void pushNode(ASTNode& node);
-    void popNode();
-    ASTNode* getCurrentNode();
-    void pushExpectedType(std::shared_ptr<SemanticType> type);
-    void popExpectedType();
-    std::shared_ptr<SemanticType> getExpectedType();
+    void PushNode(ASTNode& node);
+    void PopNode();
+    ASTNode* GetCurrentNode();
+    void PushExpectedType(std::shared_ptr<SemanticType> type);
+    void PopExpectedType();
+    std::shared_ptr<SemanticType> GetExpectedType();
     
-    std::shared_ptr<SemanticType> checkType(Type& typeNode);
-    std::shared_ptr<SemanticType> checkType(TypePath& typePath);
-    std::shared_ptr<SemanticType> checkType(ArrayType& arrayType);
-    std::shared_ptr<SemanticType> checkType(ReferenceType& refType);
-    std::shared_ptr<SemanticType> resolveType(const std::string& typeName);
-    bool typeExists(const std::string& typeName);
-    bool isTypeVisible(const std::string& typeName);
-    bool areTypesCompatible(std::shared_ptr<SemanticType> expected, std::shared_ptr<SemanticType> actual);
+    std::shared_ptr<SemanticType> CheckType(Type& typeNode);
+    std::shared_ptr<SemanticType> CheckType(TypePath& typePath);
+    std::shared_ptr<SemanticType> CheckType(ArrayType& arrayType);
+    std::shared_ptr<SemanticType> CheckType(ReferenceType& refType);
+    std::shared_ptr<SemanticType> ResolveType(const std::string& typeName);
+    bool TypeExists(const std::string& typeName);
+    bool IsTypeVisible(const std::string& typeName);
+    bool AreTypesCompatible(std::shared_ptr<SemanticType> expected, std::shared_ptr<SemanticType> actual);
     
-    void checkStructFields(StructStruct& node);
-    void checkStructFieldType(StructField& field);
+    void CheckStructFields(StructStruct& node);
+    void CheckStructFieldType(StructField& field);
     
-    void checkInherentImpl(InherentImpl& node);
-    void checkTraitImpl(InherentImpl& node);
-    std::shared_ptr<SemanticType> getImplTargetType(InherentImpl& node);
-    std::string getTraitNameFromImpl(InherentImpl& node);
-    void checkTraitImplementation(InherentImpl& node, const std::string& traitName);
-    void collectTraitRequirements(const std::string& traitName);
-    void checkTraitRequirementsSatisfied(const std::string& traitName, const std::string& implName);
+    void CheckInherentImpl(InherentImpl& node);
+    void CheckTraitImpl(InherentImpl& node);
+    std::shared_ptr<SemanticType> GetImplTargetType(InherentImpl& node);
+    std::string GetTraitNameFromImpl(InherentImpl& node);
+    void CheckTraitImplementation(InherentImpl& node, const std::string& traitName);
+    void CollectTraitRequirements(const std::string& traitName);
+    void CheckTraitRequirementsSatisfied(const std::string& traitName, const std::string& implName);
     
-    void checkAssociatedItem(AssociatedItem& item);
-    void checkAssociatedFunction(Function& function);
-    void checkAssociatedConstant(ConstantItem& constant);
+    void CheckAssociatedItem(AssociatedItem& item);
+    void CheckAssociatedFunction(Function& function);
+    void CheckAssociatedConstant(ConstantItem& constant);
     
-    void checkFunctionSignature(Function& function);
-    void checkFunctionParameters(FunctionParameters& params);
-    void checkFunctionReturnType(FunctionReturnType& returnType);
-    void checkFunctionBody(Function& function);
+    void CheckFunctionSignature(Function& function);
+    void CheckFunctionParameters(FunctionParameters& params);
+    void CheckFunctionReturnType(FunctionReturnType& returnType);
+    void CheckFunctionBody(Function& function);
     
-    std::shared_ptr<SemanticType> inferExpressionType(Expression& expr);
-    std::shared_ptr<SemanticType> inferBinaryExpressionType(BinaryExpression& expr);
-    std::shared_ptr<SemanticType> inferCallExpressionType(CallExpression& expr);
-    std::shared_ptr<SemanticType> inferMethodCallExpressionType(MethodCallExpression& expr);
-    std::shared_ptr<SemanticType> inferArrayExpressionType(ArrayExpression& expr);
-    std::shared_ptr<SemanticType> inferConstantExpressionType(Expression& expr, std::shared_ptr<SemanticType> expectedType);
-    std::shared_ptr<SemanticType> inferArrayExpressionTypeWithExpected(ArrayExpression& expr, std::shared_ptr<SemanticType> expectedType);
-    std::shared_ptr<SemanticType> inferLiteralExpressionType(LiteralExpression& expr);
+    std::shared_ptr<SemanticType> InferExpressionType(Expression& expr);
+    std::shared_ptr<SemanticType> InferBinaryExpressionType(BinaryExpression& expr);
+    std::shared_ptr<SemanticType> InferCallExpressionType(CallExpression& expr);
+    std::shared_ptr<SemanticType> InferMethodCallExpressionType(MethodCallExpression& expr);
+    std::shared_ptr<SemanticType> InferArrayExpressionType(ArrayExpression& expr);
+    std::shared_ptr<SemanticType> InferConstantExpressionType(Expression& expr, std::shared_ptr<SemanticType> expectedType);
+    std::shared_ptr<SemanticType> InferArrayExpressionTypeWithExpected(ArrayExpression& expr, std::shared_ptr<SemanticType> expectedType);
+    std::shared_ptr<SemanticType> InferLiteralExpressionType(LiteralExpression& expr);
     
-    void reportError(const std::string& message);
-    void reportUndefinedType(const std::string& typeName, ASTNode* context);
-    void reportMissingTraitImplementation(const std::string& traitName, const std::string& missingItem);
+    void ReportError(const std::string& message);
+    void ReportUndefinedType(const std::string& typeName, ASTNode* context);
+    void ReportMissingTraitImplementation(const std::string& traitName, const std::string& missingItem);
     
-    std::shared_ptr<Symbol> findSymbol(const std::string& name);
-    std::shared_ptr<FunctionSymbol> findFunction(const std::string& name);
-    std::shared_ptr<StructSymbol> findStruct(const std::string& name);
-    std::shared_ptr<TraitSymbol> findTrait(const std::string& name);
+    std::shared_ptr<Symbol> FindSymbol(const std::string& name);
+    std::shared_ptr<FunctionSymbol> FindFunction(const std::string& name);
+    std::shared_ptr<StructSymbol> FindStruct(const std::string& name);
+    std::shared_ptr<TraitSymbol> FindTrait(const std::string& name);
     
-    void enterStructContext(const std::string& structName);
-    void exitStructContext();
-    void enterTraitContext(const std::string& traitName);
-    void exitTraitContext();
-    void enterImplContext(const std::string& implName);
-    void exitImplContext();
+    void EnterStructContext(const std::string& structName);
+    void ExitStructContext();
+    void EnterTraitContext(const std::string& traitName);
+    void ExitTraitContext();
+    void EnterImplContext(const std::string& implName);
+    void ExitImplContext();
 
-    void checkPattern(Pattern& pattern, std::shared_ptr<SemanticType> expectedType);
-    void checkPattern(IdentifierPattern& pattern, std::shared_ptr<SemanticType> expectedType);
-    void checkPattern(ReferencePattern& pattern, std::shared_ptr<SemanticType> expectedType);
+    void CheckPattern(Pattern& pattern, std::shared_ptr<SemanticType> expectedType);
+    void CheckPattern(IdentifierPattern& pattern, std::shared_ptr<SemanticType> expectedType);
+    void CheckPattern(ReferencePattern& pattern, std::shared_ptr<SemanticType> expectedType);
     
     // 可变性检查方法
-    void checkAssignmentMutability(Expression& lhs);
-    void checkVariableMutability(PathExpression& pathExpr);
-    void checkFieldMutability(FieldExpression& fieldExpr);
-    void checkIndexMutability(IndexExpression& indexExpr);
-    void reportMutabilityError(const std::string& name, const std::string& errorType, ASTNode* context);
+    void CheckAssignmentMutability(Expression& lhs);
+    void CheckVariableMutability(PathExpression& pathExpr);
+    void CheckFieldMutability(FieldExpression& fieldExpr);
+    void CheckIndexMutability(IndexExpression& indexExpr);
+    void ReportMutabilityError(const std::string& name, const std::string& errorType, ASTNode* context);
     
-    void checkArraySizeMatch(ArrayTypeWrapper& declaredType, ArrayExpression& arrayExpr);
-    int64_t evaluateArraySize(Expression& sizeExpr);
+    void CheckArraySizeMatch(ArrayTypeWrapper& declaredType, ArrayExpression& arrayExpr);
+    int64_t EvaluateArraySize(Expression& sizeExpr);
 };

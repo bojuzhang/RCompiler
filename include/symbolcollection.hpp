@@ -21,9 +21,9 @@ private:
 public:
     SymbolCollector();
     
-    void beginCollection();
-    void endCollection();
-    std::shared_ptr<Scope> getScope() const;
+    void BeginCollection();
+    void EndCollection();
+    std::shared_ptr<Scope> GetScope() const;
     
     void visit(Crate& node) override;
     void visit(Item& node) override;
@@ -98,26 +98,26 @@ public:
     std::shared_ptr<ScopeTree> getScopeTree() {return root;}
     
 private:
-    void pushNode(ASTNode& node);
-    void popNode();
-    ASTNode* getCurrentNode();
+    void PushNode(ASTNode& node);
+    void PopNode();
+    ASTNode* GetCurrentNode();
     
-    void collectFunctionSymbol(Function& node);
-    void collectConstantSymbol(ConstantItem& node);
-    void collectStructSymbol(StructStruct& node);
-    void collectEnumSymbol(Enumeration& node);
-    void collectImplSymbol(InherentImpl& node);
-    void collectParameterSymbols(Function& node);
-    void collectFieldSymbols(StructStruct& node);
-    void collectVariantSymbols(Enumeration& node);
+    void CollectFunctionSymbol(Function& node);
+    void CollectConstantSymbol(ConstantItem& node);
+    void CollectStructSymbol(StructStruct& node);
+    void CollectEnumSymbol(Enumeration& node);
+    void CollectImplSymbol(InherentImpl& node);
+    void CollectParameterSymbols(Function& node);
+    void CollectFieldSymbols(StructStruct& node);
+    void CollectVariantSymbols(Enumeration& node);
     
-    std::shared_ptr<SemanticType> resolveTypeFromNode(Type& node);
-    std::shared_ptr<SemanticType> createSimpleType(const std::string& name);
+    std::shared_ptr<SemanticType> ResolveTypeFromNode(Type& node);
+    std::shared_ptr<SemanticType> CreateSimpleType(const std::string& name);
 
-    std::shared_ptr<SemanticType> getImplTargetType(InherentImpl& node);
-    std::string getTraitNameFromImpl(InherentImpl& node);
+    std::shared_ptr<SemanticType> GetImplTargetType(InherentImpl& node);
+    std::string GetTraitNameFromImpl(InherentImpl& node);
 
-    void collectAssociatedItem(AssociatedItem& item, std::shared_ptr<ImplSymbol> implSymbol);
-    void collectAssociatedFunction(Function& function, std::shared_ptr<ImplSymbol> implSymbol);
-    void collectAssociatedConstant(ConstantItem& constant, std::shared_ptr<ImplSymbol> implSymbol);
+    void CollectAssociatedItem(AssociatedItem& item, std::shared_ptr<ImplSymbol> implSymbol);
+    void CollectAssociatedFunction(Function& function, std::shared_ptr<ImplSymbol> implSymbol);
+    void CollectAssociatedConstant(ConstantItem& constant, std::shared_ptr<ImplSymbol> implSymbol);
 };

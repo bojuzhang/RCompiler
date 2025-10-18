@@ -16,8 +16,8 @@ public:
         return "[" + elementType->tostring() + "]";
     }
     
-    std::shared_ptr<SemanticType> getElementType() const { return elementType; }
-    Expression* getSizeExpression() const { return sizeExpression; }
+    std::shared_ptr<SemanticType> GetElementType() const { return elementType; }
+    Expression* GetSizeExpression() const { return sizeExpression; }
 };
 
 class ReferenceTypeWrapper : public SemanticType {
@@ -39,7 +39,7 @@ public:
     }
     
     std::shared_ptr<SemanticType> getTargetType() const { return targetType; }
-    bool getIsMutable() const { return isMutable; }
+    bool GetIsMutable() const { return isMutable; }
 };
 
 class TypeVariable : public SemanticType {
@@ -53,7 +53,7 @@ public:
         return name;
     }
     
-    std::string getName() const { return name; }
+    std::string GetName() const { return name; }
 };
 
 class FunctionType : public SemanticType {
@@ -75,8 +75,8 @@ public:
         return result;
     }
     
-    const std::vector<std::shared_ptr<SemanticType>>& getParameterTypes() const { return parameterTypes; }
-    std::shared_ptr<SemanticType> getReturnType() const { return returnType; }
+    const std::vector<std::shared_ptr<SemanticType>>& GetParameterTypes() const { return parameterTypes; }
+    std::shared_ptr<SemanticType> GetReturnType() const { return returnType; }
 };
 
 class TupleType : public SemanticType {
@@ -99,5 +99,5 @@ public:
         return result;
     }
     
-    const std::vector<std::shared_ptr<SemanticType>>& getElementTypes() const { return elementTypes; }
+    const std::vector<std::shared_ptr<SemanticType>>& GetElementTypes() const { return elementTypes; }
 };

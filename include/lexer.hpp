@@ -264,7 +264,7 @@ private:
 public:
     std::vector<std::pair<Token, std::string>> lexString(std::string); 
 
-    std::string getString();
+    std::string GetString();
 };
 
 inline std::string to_string(Token token) {

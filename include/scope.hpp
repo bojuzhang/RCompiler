@@ -28,14 +28,14 @@ public:
 
     Scope(std::shared_ptr<Scope> parent = nullptr, bool isFunctionScope = false);
     
-    bool insert(const std::string& name, std::shared_ptr<Symbol> symbol);
-    std::shared_ptr<Symbol> lookup(const std::string& name, bool iscurrent = 0);
+    bool Insert(const std::string& name, std::shared_ptr<Symbol> symbol);
+    std::shared_ptr<Symbol> Lookup(const std::string& name, bool iscurrent = 0);
     
-    std::shared_ptr<Scope> addchild(bool isFunctionScope = false);
-    std::shared_ptr<Scope> getparent() const;
-    const std::vector<std::shared_ptr<Scope>>& getchildren() const;
-    int getdep() const;
-    bool isInFunctionScope() const;
+    std::shared_ptr<Scope> AddChild(bool isFunctionScope = false);
+    std::shared_ptr<Scope> GetParent() const;
+    const std::vector<std::shared_ptr<Scope>>& GetChildren() const;
+    int GetDepth() const;
+    bool IsInFunctionScope() const;
 };
 
 class ScopeTree {
@@ -48,16 +48,16 @@ public:
 public:
     ScopeTree();
     
-    void enterScope(Scope::ScopeType type, ASTNode* node = nullptr);
-    void exitScope();
-    void gotoNode(ASTNode* node);
+    void EnterScope(Scope::ScopeType type, ASTNode* node = nullptr);
+    void ExitScope();
+    void GoToNode(ASTNode* node);
     
-    std::shared_ptr<Scope> getCurrentScope();
-    std::shared_ptr<Scope> getRootScope();
-    std::shared_ptr<Scope> findScopeForNode(ASTNode* node);
-    std::vector<std::shared_ptr<Scope>> getPathToCurrentScope();
+    std::shared_ptr<Scope> GetCurrentScope();
+    std::shared_ptr<Scope> GetRootScope();
+    std::shared_ptr<Scope> FindScopeForNode(ASTNode* node);
+    std::vector<std::shared_ptr<Scope>> GetPathToCurrentScope();
     
-    bool insertSymbol(const std::string& name, std::shared_ptr<Symbol> symbol);
-    std::shared_ptr<Symbol> lookupSymbol(const std::string& name);
-    std::shared_ptr<Symbol> lookupSymbolInCurrentScope(const std::string& name);
+    bool InsertSymbol(const std::string& name, std::shared_ptr<Symbol> symbol);
+    std::shared_ptr<Symbol> LookupSymbol(const std::string& name);
+    std::shared_ptr<Symbol> LookupSymbolInCurrentScope(const std::string& name);
 };

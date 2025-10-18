@@ -33,18 +33,18 @@ public:
     TypeEnvironment();
     
     // 类型变量管理
-    std::shared_ptr<SemanticType> freshTypeVariable();
-    std::shared_ptr<SemanticType> getTypeVariable(const std::string& name);
-    void setTypeVariable(const std::string& name, std::shared_ptr<SemanticType> type);
+    std::shared_ptr<SemanticType> FreshTypeVariable();
+    std::shared_ptr<SemanticType> GetTypeVariable(const std::string& name);
+    void SetTypeVariable(const std::string& name, std::shared_ptr<SemanticType> type);
     
     // 类型替换
-    void addSubstitution(const std::string& typeVar, std::shared_ptr<SemanticType> type);
-    std::shared_ptr<SemanticType> applySubstitutions(std::shared_ptr<SemanticType> type);
+    void AddSubstitution(const std::string& typeVar, std::shared_ptr<SemanticType> type);
+    std::shared_ptr<SemanticType> ApplySubstitutions(std::shared_ptr<SemanticType> type);
     void unify(std::shared_ptr<SemanticType> type1, std::shared_ptr<SemanticType> type2);
     
     // 环境管理
-    void enterScope();
-    void exitScope();
+    void EnterScope();
+    void ExitScope();
     
 private:
     bool occursCheck(const std::string& typeVar, std::shared_ptr<SemanticType> type);
@@ -77,9 +77,9 @@ public:
                         std::shared_ptr<ControlFlowAnalyzer> controlFlowAnalyzer,
                         std::shared_ptr<ConstantEvaluator> constantEvaluator);
     
-    bool inferTypes();
-    bool hasInferenceErrors() const;
-    std::shared_ptr<SemanticType> getInferredType(ASTNode* node) const;
+    bool InferTypes();
+    bool HasInferenceErrors() const;
+    std::shared_ptr<SemanticType> GetInferredType(ASTNode* node) const;
     
     void visit(Crate& node) override;
     void visit(Item& node) override {}
@@ -151,67 +151,67 @@ public:
     void visit(PathInExpression& node) override {}
 
 private:
-    void pushNode(ASTNode& node);
-    void popNode();
-    ASTNode* getCurrentNode();
-    void pushExpectedType(std::shared_ptr<SemanticType> type);
-    void popExpectedType();
-    std::shared_ptr<SemanticType> getExpectedType();
+    void PushNode(ASTNode& node);
+    void PopNode();
+    ASTNode* GetCurrentNode();
+    void PushExpectedType(std::shared_ptr<SemanticType> type);
+    void PopExpectedType();
+    std::shared_ptr<SemanticType> GetExpectedType();
     
-    std::shared_ptr<SemanticType> inferExpressionType(Expression& expr);
-    void checkExpressionType(Expression& expr, std::shared_ptr<SemanticType> expectedType);
+    std::shared_ptr<SemanticType> InferExpressionType(Expression& expr);
+    void CheckExpressionType(Expression& expr, std::shared_ptr<SemanticType> expectedType);
     
-    std::shared_ptr<SemanticType> inferLiteralType(LiteralExpression& expr);
-    std::shared_ptr<SemanticType> inferPathType(PathExpression& expr);
-    std::shared_ptr<SemanticType> inferCallType(CallExpression& expr);
-    std::shared_ptr<SemanticType> inferMethodCallType(MethodCallExpression& expr);
-    std::shared_ptr<SemanticType> inferFieldAccessType(FieldExpression& expr);
-    std::shared_ptr<SemanticType> inferBinaryExpressionType(BinaryExpression& expr);
-    std::shared_ptr<SemanticType> inferUnaryExpressionType(UnaryExpression& expr);
-    std::shared_ptr<SemanticType> inferIfExpressionType(IfExpression& expr);
-    std::shared_ptr<SemanticType> inferBlockExpressionType(BlockExpression& expr);
-    std::shared_ptr<SemanticType> inferArrayExpressionType(ArrayExpression& expr);
-    std::shared_ptr<SemanticType> inferTupleExpressionType(TupleExpression& expr);
-    std::shared_ptr<SemanticType> inferStructExpressionType(StructExpression& expr);
-    std::shared_ptr<SemanticType> inferAssignmentType(AssignmentExpression& expr);
+    std::shared_ptr<SemanticType> InferLiteralType(LiteralExpression& expr);
+    std::shared_ptr<SemanticType> InferPathType(PathExpression& expr);
+    std::shared_ptr<SemanticType> InferCallType(CallExpression& expr);
+    std::shared_ptr<SemanticType> InferMethodCallType(MethodCallExpression& expr);
+    std::shared_ptr<SemanticType> InferFieldAccessType(FieldExpression& expr);
+    std::shared_ptr<SemanticType> InferBinaryExpressionType(BinaryExpression& expr);
+    std::shared_ptr<SemanticType> InferUnaryExpressionType(UnaryExpression& expr);
+    std::shared_ptr<SemanticType> InferIfExpressionType(IfExpression& expr);
+    std::shared_ptr<SemanticType> InferBlockExpressionType(BlockExpression& expr);
+    std::shared_ptr<SemanticType> InferArrayExpressionType(ArrayExpression& expr);
+    std::shared_ptr<SemanticType> InferTupleExpressionType(TupleExpression& expr);
+    std::shared_ptr<SemanticType> InferStructExpressionType(StructExpression& expr);
+    std::shared_ptr<SemanticType> InferAssignmentType(AssignmentExpression& expr);
     
-    std::shared_ptr<SemanticType> resolveFunctionType(const std::string& functionName, 
+    std::shared_ptr<SemanticType> ResolveFunctionType(const std::string& functionName,
                                              const std::vector<std::shared_ptr<SemanticType>>& argTypes);
-    std::shared_ptr<SemanticType> resolveMethodType(std::shared_ptr<SemanticType> receiverType,
+    std::shared_ptr<SemanticType> ResolveMethodType(std::shared_ptr<SemanticType> receiverType,
                                            const std::string& methodName,
                                            const std::vector<std::shared_ptr<SemanticType>>& argTypes);
-    std::vector<std::shared_ptr<SemanticType>> inferArgumentTypes(CallParams& params);
+    std::vector<std::shared_ptr<SemanticType>> InferArgumentTypes(CallParams& params);
     
-    std::shared_ptr<SemanticType> resolvePathType(SimplePath& path);
-    std::shared_ptr<SemanticType> resolveAssociatedType(std::shared_ptr<SemanticType> baseType, 
+    std::shared_ptr<SemanticType> ResolvePathType(SimplePath& path);
+    std::shared_ptr<SemanticType> ResolveAssociatedType(std::shared_ptr<SemanticType> baseType,
                                                const std::string& associatedItem);
     
-    void addTypeConstraint(std::shared_ptr<SemanticType> actual, std::shared_ptr<SemanticType> expected);
-    void solveTypeConstraints();
-    bool areTypesCompatible(std::shared_ptr<SemanticType> type1, std::shared_ptr<SemanticType> type2);
-    bool isSubtype(std::shared_ptr<SemanticType> subType, std::shared_ptr<SemanticType> superType);
+    void AddTypeConstraint(std::shared_ptr<SemanticType> actual, std::shared_ptr<SemanticType> expected);
+    void SolveTypeConstraints();
+    bool AreTypesCompatible(std::shared_ptr<SemanticType> type1, std::shared_ptr<SemanticType> type2);
+    bool IsSubtype(std::shared_ptr<SemanticType> subType, std::shared_ptr<SemanticType> superType);
     
-    std::shared_ptr<SemanticType> getVariableType(const std::string& varName);
-    void setVariableType(const std::string& varName, std::shared_ptr<SemanticType> type);
-    std::shared_ptr<Symbol> resolveSymbol(const std::string& name);
-    std::shared_ptr<SemanticType> resolveTypeFromSymbol(std::shared_ptr<Symbol> symbol);
+    std::shared_ptr<SemanticType> GetVariableType(const std::string& varName);
+    void SetVariableType(const std::string& varName, std::shared_ptr<SemanticType> type);
+    std::shared_ptr<Symbol> ResolveSymbol(const std::string& name);
+    std::shared_ptr<SemanticType> ResolveTypeFromSymbol(std::shared_ptr<Symbol> symbol);
     
-    std::shared_ptr<SemanticType> getStructFieldType(const std::string& structName, 
-                                            const std::string& fieldName);
-    std::shared_ptr<SemanticType> getEnumVariantType(const std::string& enumName,
-                                            const std::string& variantName);
+    std::shared_ptr<SemanticType> GetStructFieldType(const std::string& structName,
+                                             const std::string& fieldName);
+    std::shared_ptr<SemanticType> GetEnumVariantType(const std::string& enumName,
+                                             const std::string& variantName);
     
-    void checkMutability(const std::string& varName, ASTNode* usageContext);
-    void checkAssignmentMutability(Expression& lhs);
+    void CheckMutability(const std::string& varName, ASTNode* usageContext);
+    void CheckAssignmentMutability(Expression& lhs);
     
-    void reportError(const std::string& message);
-    void reportTypeError(const std::string& expected, const std::string& actual, ASTNode* context);
-    void reportUndefinedError(const std::string& name, const std::string& kind, ASTNode* context);
+    void ReportError(const std::string& message);
+    void ReportTypeError(const std::string& expected, const std::string& actual, ASTNode* context);
+    void ReportUndefinedError(const std::string& name, const std::string& kind, ASTNode* context);
     
-    void enterFunctionContext(const std::string& returnType);
-    void exitFunctionContext();
-    void enterImplContext(std::shared_ptr<SemanticType> selfType);
-    void exitImplContext();
+    void EnterFunctionContext(const std::string& returnType);
+    void ExitFunctionContext();
+    void EnterImplContext(std::shared_ptr<SemanticType> selfType);
+    void ExitImplContext();
     
-    std::shared_ptr<SemanticType> convertASTTypeToSemanticType(Type& astType);
+    std::shared_ptr<SemanticType> ConvertASTTypeToSemanticType(Type& astType);
 };

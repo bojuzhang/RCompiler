@@ -83,11 +83,10 @@ private:
 public:
     ConstantEvaluator(std::shared_ptr<ScopeTree> scopeTree);
     
-    bool evaluateConstants();
-    bool hasEvaluationErrors() const;
-    std::shared_ptr<ConstantValue> getConstantValue(const std::string& name);
+    bool EvaluateConstants();
+    bool HasEvaluationErrors() const;
+    std::shared_ptr<ConstantValue> GetConstantValue(const std::string& name);
     
-    // Visitor接口实现
     void visit(Crate& node) override;
     void visit(Item& node) override;
     void visit(ConstantItem& node) override;
@@ -96,7 +95,6 @@ public:
     void visit(Enumeration& node) override {}
     void visit(InherentImpl& node) override {}
     
-    // 表达式节点
     void visit(Expression& node) override {}
     void visit(LiteralExpression& node) override {}
     void visit(PathExpression& node) override {}
@@ -106,7 +104,6 @@ public:
     void visit(BlockExpression& node) override;
     void visit(IfExpression& node) override {}
     
-    // 其他表达式节点（简化处理）
     void visit(GroupedExpression& node) override {}
     void visit(IndexExpression& node) override {}
     void visit(TupleExpression& node) override {}
@@ -119,7 +116,7 @@ public:
     void visit(ReturnExpression& node) override {}
     void visit(UnderscoreExpression& node) override {}
     void visit(ConstBlockExpression& node) override {
-        pushNode(node);
+        PushNode(node);
         
         // 设置常量上下文
         bool previousConstContext = inConstContext;
@@ -132,7 +129,7 @@ public:
         }
         
         inConstContext = previousConstContext;
-        popNode();
+        PopNode();
     }
     void visit(InfiniteLoopExpression& node) override {}
     void visit(PredicateLoopExpression& node) override {}
@@ -143,7 +140,6 @@ public:
     void visit(BorrowExpression& node) override {}
     void visit(DereferenceExpression& node) override {}
     
-    // 模式、类型、路径节点（不需要处理）
     void visit(Pattern& node) override {}
     void visit(LiteralPattern& node) override {}
     void visit(IdentifierPattern& node) override {}
@@ -157,7 +153,6 @@ public:
     void visit(SimplePath& node) override {}
     void visit(SimplePathSegment& node) override {}
     
-    // 语句节点
     void visit(Statement& node) override;
     void visit(LetStatement& node) override;
     void visit(ExpressionStatement& node) override;
@@ -176,21 +171,19 @@ public:
     void visit(PathInExpression& node) override {}
 
 private:
-    void pushNode(ASTNode& node);
-    void popNode();
-    ASTNode* getCurrentNode();
+    void PushNode(ASTNode& node);
+    void PopNode();
+    ASTNode* GetCurrentNode();
     
-    // 常量求值方法
-    std::shared_ptr<ConstantValue> evaluateExpression(Expression& expr);
-    std::shared_ptr<ConstantValue> evaluateLiteral(LiteralExpression& expr);
-    std::shared_ptr<ConstantValue> evaluateBinaryExpression(BinaryExpression& expr);
-    std::shared_ptr<ConstantValue> evaluateUnaryExpression(UnaryExpression& expr);
-    std::shared_ptr<ConstantValue> evaluateArrayExpression(ArrayExpression& expr);
-    std::shared_ptr<ConstantValue> evaluatePathExpression(PathExpression& expr);
-    std::shared_ptr<ConstantValue> evaluateBlockExpression(BlockExpression& expr);
-    std::shared_ptr<ConstantValue> evaluateIfExpression(IfExpression& expr);
+    std::shared_ptr<ConstantValue> EvaluateExpression(Expression& expr);
+    std::shared_ptr<ConstantValue> EvaluateLiteral(LiteralExpression& expr);
+    std::shared_ptr<ConstantValue> EvaluateBinaryExpression(BinaryExpression& expr);
+    std::shared_ptr<ConstantValue> EvaluateUnaryExpression(UnaryExpression& expr);
+    std::shared_ptr<ConstantValue> EvaluateArrayExpression(ArrayExpression& expr);
+    std::shared_ptr<ConstantValue> EvaluatePathExpression(PathExpression& expr);
+    std::shared_ptr<ConstantValue> EvaluateBlockExpression(BlockExpression& expr);
+    std::shared_ptr<ConstantValue> EvaluateIfExpression(IfExpression& expr);
     
-    // 工具方法
-    bool isCompileTimeConstant(Expression& expr);
-    void reportError(const std::string& message);
+    bool IsCompileTimeConstant(Expression& expr);
+    void ReportError(const std::string& message);
 };

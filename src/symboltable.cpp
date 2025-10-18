@@ -27,7 +27,7 @@ Scope::Scope(std::shared_ptr<Scope> parent, bool isFunctionScope)
     : parent(parent), depth(parent ? parent->depth + 1 : 0), 
       isFunctionScope(isFunctionScope) {}
 
-bool Scope::insert(const std::string& name, std::shared_ptr<Symbol> symbol) {
+bool Scope::Insert(const std::string& name, std::shared_ptr<Symbol> symbol) {
     if (symbols.find(name) != symbols.end()) {
         return false;
     }
@@ -35,24 +35,24 @@ bool Scope::insert(const std::string& name, std::shared_ptr<Symbol> symbol) {
     return true;
 }
 
-std::shared_ptr<Symbol> Scope::lookup(const std::string& name, bool iscurrent) {
+std::shared_ptr<Symbol> Scope::Lookup(const std::string& name, bool iscurrent) {
     auto it = symbols.find(name);
     if (it != symbols.end()) {
         return it->second;
     }
     if (!iscurrent && parent) {
-        return parent->lookup(name);
+        return parent->Lookup(name);
     }
     return nullptr;
 }
 
-std::shared_ptr<Scope> Scope::addchild(bool isFunctionScope) {
-    auto child = std::make_shared<Scope>(std::make_shared<Scope>(*this), isFunctionScope);
+std::shared_ptr<Scope> Scope::AddChild(bool isFunctionScope) {
+    auto child = std::make_shared<Scope>(GetParent(), isFunctionScope);
     childrens.push_back(child);
     return child;
 }
 
-std::shared_ptr<Scope> Scope::getparent() const {
+std::shared_ptr<Scope> Scope::GetParent() const {
     return parent;
 }
 
@@ -61,13 +61,13 @@ ScopeTree::ScopeTree() {
     currentNode = root;
 }
 
-void ScopeTree::enterScope(Scope::ScopeType type, ASTNode* node) {
+void ScopeTree::EnterScope(Scope::ScopeType type, ASTNode* node) {
     if (!currentNode) {
         return;
     }
     
     bool isFunctionScope = (type == Scope::ScopeType::Function);
-    auto newScope = currentNode->addchild(isFunctionScope);
+    auto newScope = currentNode->AddChild(isFunctionScope);
     currentNode = newScope;
     
     if (node) {
@@ -75,17 +75,17 @@ void ScopeTree::enterScope(Scope::ScopeType type, ASTNode* node) {
     }
 }
 
-void ScopeTree::exitScope() {
+void ScopeTree::ExitScope() {
     if (!currentNode) {
         return;
     }
     
-    if (currentNode->getparent()) {
-        currentNode = currentNode->getparent();
+    if (currentNode->GetParent()) {
+        currentNode = currentNode->GetParent();
     }
 }
 
-void ScopeTree::gotoNode(ASTNode* node) {
+void ScopeTree::GoToNode(ASTNode* node) {
     if (node == nullptr) {
         // 如果node为null，重置到根作用域
         currentNode = root;
@@ -98,15 +98,15 @@ void ScopeTree::gotoNode(ASTNode* node) {
     }
 }
 
-std::shared_ptr<Scope> ScopeTree::getCurrentScope() {
+std::shared_ptr<Scope> ScopeTree::GetCurrentScope() {
     return currentNode;
 }
 
-std::shared_ptr<Scope> ScopeTree::getRootScope() {
+std::shared_ptr<Scope> ScopeTree::GetRootScope() {
     return root;
 }
 
-std::shared_ptr<Scope> ScopeTree::findScopeForNode(ASTNode* node) {
+std::shared_ptr<Scope> ScopeTree::FindScopeForNode(ASTNode* node) {
     auto it = nodeToScopeMap.find(node);
     if (it != nodeToScopeMap.end()) {
         return it->second;
@@ -116,32 +116,32 @@ std::shared_ptr<Scope> ScopeTree::findScopeForNode(ASTNode* node) {
     return nullptr;
 }
 
-std::vector<std::shared_ptr<Scope>> ScopeTree::getPathToCurrentScope() {
+std::vector<std::shared_ptr<Scope>> ScopeTree::GetPathToCurrentScope() {
     std::vector<std::shared_ptr<Scope>> path;
     auto current = currentNode;
     while (current) {
         path.push_back(current);
-        current = current->getparent();
+        current = current->GetParent();
     }
     std::reverse(path.begin(), path.end());
     return path;
 }
 
-bool ScopeTree::insertSymbol(const std::string& name, std::shared_ptr<Symbol> symbol) {
-    bool success = currentNode->insert(name, symbol);
+bool ScopeTree::InsertSymbol(const std::string& name, std::shared_ptr<Symbol> symbol) {
+    bool success = currentNode->Insert(name, symbol);
     return success;
 }
 
-std::shared_ptr<Symbol> ScopeTree::lookupSymbol(const std::string& name) {
+std::shared_ptr<Symbol> ScopeTree::LookupSymbol(const std::string& name) {
     if (!currentNode) {
         return nullptr;
     }
     
-    auto symbol = currentNode->lookup(name, false);
+    auto symbol = currentNode->Lookup(name, false);
     return symbol;
 }
 
-std::shared_ptr<Symbol> ScopeTree::lookupSymbolInCurrentScope(const std::string& name) {
-    auto symbol = currentNode->lookup(name, true);
+std::shared_ptr<Symbol> ScopeTree::LookupSymbolInCurrentScope(const std::string& name) {
+    auto symbol = currentNode->Lookup(name, true);
     return symbol;
 }
