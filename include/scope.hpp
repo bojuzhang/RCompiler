@@ -7,7 +7,7 @@
 #include "symbol.hpp"
 
 class Scope {
-private:
+public:
     std::unordered_map<std::string, std::shared_ptr<Symbol>> symbols;
     std::shared_ptr<Scope> parent;
     std::vector<std::shared_ptr<Scope>> childrens;
@@ -39,7 +39,7 @@ public:
 };
 
 class ScopeTree {
-private:
+public:
     std::shared_ptr<Scope> root;
     std::shared_ptr<Scope> currentNode;
     std::unordered_map<ASTNode*, std::shared_ptr<Scope>> nodeToScopeMap;

@@ -5,6 +5,7 @@
 #include <iostream>
 #include <memory>
 #include <utility>
+#include <unordered_map>
 
 TypeChecker::TypeChecker(std::shared_ptr<ScopeTree> scopeTree)
     : scopeTree(scopeTree) {}
@@ -73,10 +74,10 @@ void TypeChecker::visit(Function& node) {
     pushNode(node);
     
     // 检查函数签名
-    checkFunctionSignature(node);
+    // checkFunctionSignature(node);
     
-    // 进入函数作用域
-    scopeTree->enterScope(Scope::ScopeType::Function, &node);
+    // 不进入函数作用域，保持在全局作用域中进行类型检查
+    // 这样可以确保能够找到全局作用域中的函数符号
     
     // 检查参数类型
     if (node.functionparameters) {
@@ -90,9 +91,6 @@ void TypeChecker::visit(Function& node) {
     
     // 检查函数体
     checkFunctionBody(node);
-    
-    // 退出函数作用域
-    scopeTree->exitScope();
     
     popNode();
 }
@@ -636,7 +634,7 @@ std::shared_ptr<SemanticType> TypeChecker::inferBinaryExpressionType(BinaryExpre
 
 std::shared_ptr<SemanticType> TypeChecker::inferCallExpressionType(CallExpression& expr) {
     auto calleeType = inferExpressionType(*expr.expression);
-    if (!calleeType) return nullptr;
+    // if (!calleeType) return nullptr;
 
     // 查找函数符号
     // 如果callee是路径表达式，尝试解析为函数调用
@@ -1009,7 +1007,8 @@ void TypeChecker::reportMissingTraitImplementation(const std::string& traitName,
 
 // 符号查找
 std::shared_ptr<Symbol> TypeChecker::findSymbol(const std::string& name) {
-    return scopeTree->lookupSymbol(name);
+    auto p = scopeTree->lookupSymbol(name);
+    return p;
 }
 
 std::shared_ptr<FunctionSymbol> TypeChecker::findFunction(const std::string& name) {

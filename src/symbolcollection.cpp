@@ -11,14 +11,26 @@ SymbolCollector::SymbolCollector() {
 void SymbolCollector::beginCollection() {
     auto globalScope = root->getCurrentScope();
     
+    // 添加内置类型
     auto builtinTypes = {
-        "i32", "i64", "f32", "f64", "bool", "char", "str", 
-        "usize", "isize", "unit", "Self"
+        "i32", "i64", "u32", "u64", "bool", "char", "str", "usize", "isize", "unit"
     };
     
     for (const auto& typeName : builtinTypes) {
         auto typeSymbol = std::make_shared<Symbol>(
-            typeName, SymbolKind::BuiltinType, createSimpleType(typeName)
+            typeName, SymbolKind::BuiltinType, nullptr, false, nullptr
+        );
+        globalScope->insert(typeName, typeSymbol);
+    }
+    
+    // 添加内置函数
+    auto builtinFunctions = {
+        "print", "println", "printInt", "printlnInt", "getString", "getInt", "exit"
+    };
+    
+    for (const auto& typeName : builtinFunctions) {
+        auto typeSymbol = std::make_shared<Symbol>(
+            typeName, SymbolKind::Function, nullptr, false, nullptr
         );
         globalScope->insert(typeName, typeSymbol);
     }
@@ -56,9 +68,9 @@ void SymbolCollector::visit(Function& node) {
     inFunction = true;
     currentFunctionName = node.identifier_name;
     
-    root->enterScope(Scope::ScopeType::Function, &node);
-    
     collectFunctionSymbol(node);
+    
+    root->enterScope(Scope::ScopeType::Function, &node);
     
     collectParameterSymbols(node);
     
@@ -253,8 +265,7 @@ void SymbolCollector::collectFunctionSymbol(Function& node) {
     );
     
     // 确保函数符号的type字段也被设置，这样inferCallExpressionType可以从中获取
-    funcSymbol->type = returnType;
-    
+    funcSymbol->type = returnType;    
     root->insertSymbol(funcName, funcSymbol);
 }
 
@@ -278,28 +289,47 @@ void SymbolCollector::collectStructSymbol(StructStruct& node) {
 }
 
 void SymbolCollector::collectParameterSymbols(Function& node) {
-    auto params = std::move(node.functionparameters);
+    auto params = node.functionparameters;
     if (!params) return;
     
-    for (const auto& param : params->functionparams) {  // 需要添加getter
+    // 获取刚刚创建的函数符号，以便添加参数信息
+    std::string funcName = node.identifier_name;
+    auto funcSymbol = std::dynamic_pointer_cast<FunctionSymbol>(root->lookupSymbol(funcName));
+    if (!funcSymbol) {
+        // 如果找不到函数符号，创建一个临时的参数列表
+        std::cerr << "Warning: Could not find function symbol for " << funcName << std::endl;
+        return;
+    }
+    
+    // 清空现有参数列表（如果有的话）
+    funcSymbol->parameters.clear();
+    funcSymbol->parameterTypes.clear();
+    
+    for (const auto& param : params->functionparams) {
         if (auto identPattern = dynamic_cast<IdentifierPattern*>(param->patternnotopalt.get())) {
             std::string paramName = identPattern->identifier;
             
+            auto paramType = resolveTypeFromNode(*param->type);
             auto paramSymbol = std::make_shared<Symbol>(
                 paramName,
                 SymbolKind::Variable,
-                resolveTypeFromNode(*param->type),
+                paramType,
                 false,
                 &node
             );
             
             root->insertSymbol(paramName, paramSymbol);
+            
+            // 将参数添加到函数符号的参数列表中
+            funcSymbol->parameters.push_back(paramSymbol);
+            // 同时添加参数类型信息
+            funcSymbol->parameterTypes.push_back(paramType);
         }
     }
 }
 
 void SymbolCollector::collectFieldSymbols(StructStruct& node) {
-    auto fields = std::move(node.structfileds);
+    auto fields = node.structfileds;
     if (!fields) return;
     
     for (const auto& field : fields->structfields) {  // 需要添加getter
@@ -387,7 +417,7 @@ void SymbolCollector::collectImplSymbol(InherentImpl& node) {
     );
     root->insertSymbol("Self", selfTypeSymbol);
     
-    auto items = std::move(node.associateditems);
+    auto items = node.associateditems;
     for (const auto& item : items) {
         if (item) {
             collectAssociatedItem(*item, implSymbol);

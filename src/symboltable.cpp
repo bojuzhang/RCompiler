@@ -1,8 +1,9 @@
-#include "symboltable.hpp"
+#include "astnodes.hpp"
 #include "scope.hpp"
 #include "symbol.hpp"
 #include <memory>
 #include <utility>
+#include <iostream>
 
 Symbol::Symbol(const std::string& name, SymbolKind kind, 
            std::shared_ptr<SemanticType> type, 
@@ -55,68 +56,6 @@ std::shared_ptr<Scope> Scope::getparent() const {
     return parent;
 }
 
-// SymbolTable实现
-SymbolTable::SymbolTable() : currentPass(0) {
-    globalScope = std::make_shared<Scope>();
-    currentScope = globalScope;
-    initializeBuiltins();
-}
-
-void SymbolTable::enterScope(bool isFunctionScope) {
-    scopeStack.push(currentScope);
-    currentScope = currentScope->addchild(isFunctionScope);
-}
-
-void SymbolTable::exitScope() {
-    if (!scopeStack.empty()) {
-        currentScope = scopeStack.top();
-        scopeStack.pop();
-    }
-}
-
-bool SymbolTable::insertSymbol(const std::string& name, std::shared_ptr<Symbol> symbol) {
-    return currentScope->insert(name, symbol);
-}
-
-std::shared_ptr<Symbol> SymbolTable::lookupSymbol(const std::string& name) {
-    return currentScope->lookup(name);
-}
-
-void SymbolTable::beginPass(int passNumber) {
-    currentPass = passNumber;
-    deferredSymbols.clear();
-}
-
-void SymbolTable::endPass() {
-    // 可以在这里处理pass结束的清理工作
-}
-
-void SymbolTable::initializeBuiltins() {
-    // 添加内置类型
-    auto builtinTypes = {
-        "i32", "i64", "f32", "f64", "bool", "char", "str", "usize", "isize", "unit"
-    };
-    
-    for (const auto& typeName : builtinTypes) {
-        auto typeSymbol = std::make_shared<Symbol>(
-            typeName, SymbolKind::BuiltinType, nullptr, false, nullptr
-        );
-        globalScope->insert(typeName, typeSymbol);
-    }
-    
-    // 添加内置函数
-    auto builtinFunctions = {
-        "print", "println", "printInt", "printlnInt", "getString", "getInt", "exit"
-    };
-    
-    for (const auto& typeName : builtinFunctions) {
-        auto typeSymbol = std::make_shared<Symbol>(
-            typeName, SymbolKind::Function, nullptr, false, nullptr
-        );
-        globalScope->insert(typeName, typeSymbol);
-    }
-}
-
 ScopeTree::ScopeTree() {
     root = std::make_shared<Scope>(nullptr, false);
     currentNode = root;
@@ -138,10 +77,16 @@ void ScopeTree::exitScope() {
 }
 
 void ScopeTree::gotoNode(ASTNode* node) {
+    if (node == nullptr) {
+        // 如果node为null，重置到根作用域
+        currentNode = root;
+        return;
+    }
+    
     auto it = nodeToScopeMap.find(node);
     if (it != nodeToScopeMap.end()) {
         currentNode = it->second;
-    } 
+    }
 }
 
 std::shared_ptr<Scope> ScopeTree::getCurrentScope() {
