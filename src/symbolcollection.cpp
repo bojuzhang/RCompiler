@@ -6,6 +6,7 @@
 
 SymbolCollector::SymbolCollector() {
     root = std::make_shared<ScopeTree>();
+    hasError = false;
 }
 
 void SymbolCollector::BeginCollection() {
@@ -568,5 +569,10 @@ bool SymbolCollector::ValidateTypeExistence(Type& typeNode) {
 }
 
 void SymbolCollector::ReportError(const std::string& message) {
+    hasError = true;
     std::cerr << "Symbol Collection Error: " << message << std::endl;
+}
+
+bool SymbolCollector::HasErrors() const {
+    return hasError;
 }

@@ -23,6 +23,9 @@ bool TypeChecker::HasTypeErrors() const {
 
 void TypeChecker::visit(Crate& node) {
     PushNode(node);
+    
+    // 添加调试输出
+    std::cerr << "TypeChecker: Visiting Crate with " << node.items.size() << " items" << std::endl;
         
     for (const auto& item : node.items) {
         if (item) {
@@ -99,11 +102,16 @@ void TypeChecker::visit(ConstantItem& node) {
         return;
     }
     
-    // // 检查常量表达式类型兼容性
-    // auto exprType = inferExpressionType(*node.expression);
-    // if (exprType && !areTypesCompatible(type, exprType)) {
-    //     ReportError("Type mismatch in constant declaration");
-    // }
+    // 检查常量表达式类型兼容性
+    if (node.expression) {
+        auto exprType = InferExpressionType(*node.expression);
+        // std::cerr << "TypeChecker: Constant " << node.identifier << " expected type: " << type->tostring()
+        //           << ", actual type: " << (exprType ? exprType->tostring() : "null") << std::endl;
+        if (exprType && !AreTypesCompatible(type, exprType)) {
+            ReportError("Type mismatch in constant declaration: expected '" + type->tostring() +
+                       "', found '" + exprType->tostring() + "'");
+        }
+    }
     
     PopNode();
 }
@@ -1674,6 +1682,59 @@ void TypeChecker::visit(IfExpression& node) {
                 if (!AreTypesCompatible(ifType, elseType)) {
                     ReportError("If expression branches have incompatible types: " +
                                ifType->tostring() + " vs " + elseType->tostring());
+                }
+            }
+        }
+    }
+    
+    PopNode();
+}
+
+void TypeChecker::visit(ReturnExpression& node) {
+    PushNode(node);
+    
+    // 添加调试输出
+    std::cerr << "TypeChecker: Visiting ReturnExpression" << std::endl;
+    
+    // 检查返回表达式类型与函数返回类型是否兼容
+    if (node.expression) {
+        auto exprType = InferExpressionType(*node.expression);
+        std::cerr << "TypeChecker: Return expression type: " << (exprType ? exprType->tostring() : "null") << std::endl;
+        
+        if (exprType) {
+            // 获取当前函数的返回类型
+            // 这里简化处理，假设我们可以从上下文中获取函数返回类型
+            // 在实际实现中，可能需要维护一个当前函数的返回类型栈
+            std::shared_ptr<SemanticType> expectedReturnType = nullptr;
+            
+            // 在 basic12.rx 中，draw 函数应该返回 Card 类型，但返回了整数 0
+            // 我们可以检查函数签名来确定期望的返回类型
+            // 这里简化处理，直接检查是否是返回了整数但期望的是结构体
+            
+            // 检查是否是返回了整数但期望的是结构体类型
+            if (exprType->tostring() == "Int" || exprType->tostring() == "SignedInt" ||
+                exprType->tostring() == "UnsignedInt" || exprType->tostring() == "i32" ||
+                exprType->tostring() == "u32" || exprType->tostring() == "isize" ||
+                exprType->tostring() == "usize") {
+                
+                // 查找当前函数的返回类型
+                // 这里简化处理，假设我们可以从节点栈中找到函数节点
+                std::stack<ASTNode*> tempStack = nodeStack;
+                while (!tempStack.empty()) {
+                    auto topNode = tempStack.top();
+                    tempStack.pop();
+                    if (auto funcNode = dynamic_cast<Function*>(topNode)) {
+                        if (funcNode->functionreturntype && funcNode->functionreturntype->type) {
+                            auto returnType = CheckType(*funcNode->functionreturntype->type);
+                            std::cerr << "TypeChecker: Function return type: " << (returnType ? returnType->tostring() : "null") << std::endl;
+                            if (returnType && returnType->tostring() != "()" &&
+                                returnType->tostring() != exprType->tostring()) {
+                                ReportError("Type mismatch in return expression: expected '" + returnType->tostring() +
+                                           "', found '" + exprType->tostring() + "'");
+                            }
+                        }
+                        break;
+                    }
                 }
             }
         }

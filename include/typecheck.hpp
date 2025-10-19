@@ -64,7 +64,7 @@ public:
     void visit(FieldExpression& node) override;
     void visit(ContinueExpression& node) override {}
     void visit(BreakExpression& node) override {}
-    void visit(ReturnExpression& node) override {}
+    void visit(ReturnExpression& node) override;
     void visit(UnderscoreExpression& node) override {}
     void visit(BlockExpression& node) override;
     void visit(ConstBlockExpression& node) override {}

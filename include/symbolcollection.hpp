@@ -17,6 +17,7 @@ private:
     bool inTrait = false;
     bool inImpl = false;
     std::string currentFunctionName;
+    bool hasError = false;
     
 public:
     SymbolCollector();
@@ -24,6 +25,7 @@ public:
     void BeginCollection();
     void EndCollection();
     std::shared_ptr<Scope> GetScope() const;
+    bool HasErrors() const;
     
     void visit(Crate& node) override;
     void visit(Item& node) override;

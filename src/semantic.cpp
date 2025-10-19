@@ -50,6 +50,13 @@ bool CompleteSemanticAnalyzer::RunSymbolCollection() {
     // collector.endCollection();
     
     scopeTree = collector.getScopeTree();
+    
+    // 检查符号收集过程中是否有错误
+    if (collector.HasErrors()) {
+        std::cerr << "Symbol collection failed with errors" << std::endl;
+        return false;
+    }
+    
     return true;
 }
 
