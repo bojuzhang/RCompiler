@@ -1,6 +1,7 @@
 #pragma once
 
 #include "symbol.hpp"
+#include "astnodes.hpp"
 #include <memory>
 
 class ArrayTypeWrapper : public SemanticType {
@@ -13,7 +14,18 @@ public:
         : elementType(elementType), sizeExpression(sizeExpr) {}
     
     std::string tostring() const override {
-        return "[" + elementType->tostring() + "]";
+        std::string result = "[" + elementType->tostring();
+        if (sizeExpression) {
+            result += "; ";
+            // 尝试获取大小值
+            if (auto literal = dynamic_cast<LiteralExpression*>(sizeExpression)) {
+                result += literal->literal;
+            } else {
+                result += "?"; // 未知大小
+            }
+        }
+        result += "]";
+        return result;
     }
     
     std::shared_ptr<SemanticType> GetElementType() const { return elementType; }

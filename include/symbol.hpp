@@ -19,6 +19,22 @@ public:
     std::string tostring() const override { return typeName; }
 };
 
+// 特殊整数类型，用于类型推断
+class IntType : public SemanticType {
+public:
+    std::string tostring() const override { return "Int"; }
+};
+
+class SignedIntType : public SemanticType {
+public:
+    std::string tostring() const override { return "SignedInt"; }
+};
+
+class UnsignedIntType : public SemanticType {
+public:
+    std::string tostring() const override { return "UnsignedInt"; }
+};
+
 enum class SymbolKind {
     Variable,
     Function,

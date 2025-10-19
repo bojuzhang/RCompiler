@@ -3,6 +3,7 @@
 #include "symbol.hpp"
 #include "typewrapper.hpp"
 #include <iostream>
+#include <algorithm>
 
 // TypeEnvironment实现
 TypeEnvironment::TypeEnvironment() {}
@@ -752,6 +753,47 @@ void TypeInferenceChecker::SolveTypeConstraints() {
 }
 
 bool TypeInferenceChecker::AreTypesCompatible(std::shared_ptr<SemanticType> type1, std::shared_ptr<SemanticType> type2) {
+    if (!type1 || !type2) return false;
+    
+    std::string type1Str = type1->tostring();
+    std::string type2Str = type2->tostring();
+    
+    // 如果类型相同，直接兼容
+    if (type1Str == type2Str) {
+        return true;
+    }
+    
+    // 实现隐式转换规则：
+    // 1) Int 可以为 usize,isize,i32,u32
+    // 2) SignedInt 可以为 i32,isize
+    // 3) UnsignedInt 可以为 u32,usize
+    // 4) 其余usize,isize,u32,i32 类型之间不应该有任何的隐式类型转化
+    
+    if (type1Str == "Int") {
+        return (type2Str == "usize" || type2Str == "isize" || type2Str == "i32" || type2Str == "u32");
+    }
+    
+    if (type2Str == "Int") {
+        return (type1Str == "usize" || type1Str == "isize" || type1Str == "i32" || type1Str == "u32");
+    }
+    
+    if (type1Str == "SignedInt") {
+        return (type2Str == "i32" || type2Str == "isize");
+    }
+    
+    if (type2Str == "SignedInt") {
+        return (type1Str == "i32" || type1Str == "isize");
+    }
+    
+    if (type1Str == "UnsignedInt") {
+        return (type2Str == "u32" || type2Str == "usize");
+    }
+    
+    if (type2Str == "UnsignedInt") {
+        return (type1Str == "u32" || type1Str == "usize");
+    }
+    
+    // 对于其他类型，使用原有的统一逻辑
     try {
         typeEnv->unify(type1, type2);
         return true;
@@ -971,6 +1013,7 @@ std::shared_ptr<SemanticType> TypeInferenceChecker::InferLiteralType(LiteralExpr
         case Token::kINTEGER_LITERAL: {
             const std::string& literal = expr.literal;
             
+            // 检查是否有显式类型后缀
             if (literal.length() >= 5) {
                 if (literal.substr(literal.length() - 5) == "usize") {
                     return std::make_shared<SimpleType>("usize");
@@ -988,15 +1031,67 @@ std::shared_ptr<SemanticType> TypeInferenceChecker::InferLiteralType(LiteralExpr
                 if (suffix == "i32") {
                     return std::make_shared<SimpleType>("i32");
                 }
-                if (suffix == "u64") {
-                    return std::make_shared<SimpleType>("u64");
+            }
+            
+            // 没有显式后缀，需要根据数值大小进行推断
+            std::string numStr = literal;
+            
+            // 移除可能的下划线
+            numStr.erase(std::remove(numStr.begin(), numStr.end(), '_'), numStr.end());
+            
+            // 处理不同进制
+            int64_t value = 0;
+            if (numStr.length() >= 2 && numStr.substr(0, 2) == "0b") {
+                // 二进制
+                std::string binStr = numStr.substr(2);
+                for (char c : binStr) {
+                    if (c == '0' || c == '1') {
+                        value = value * 2 + (c - '0');
+                    }
                 }
-                if (suffix == "i64") {
-                    return std::make_shared<SimpleType>("i64");
+            } else if (numStr.length() >= 2 && numStr.substr(0, 2) == "0o") {
+                // 八进制
+                std::string octStr = numStr.substr(2);
+                for (char c : octStr) {
+                    if (c >= '0' && c <= '7') {
+                        value = value * 8 + (c - '0');
+                    }
+                }
+            } else if (numStr.length() >= 2 && numStr.substr(0, 2) == "0x") {
+                // 十六进制
+                std::string hexStr = numStr.substr(2);
+                for (char c : hexStr) {
+                    if (c >= '0' && c <= '9') {
+                        value = value * 16 + (c - '0');
+                    } else if (c >= 'a' && c <= 'f') {
+                        value = value * 16 + (c - 'a' + 10);
+                    } else if (c >= 'A' && c <= 'F') {
+                        value = value * 16 + (c - 'A' + 10);
+                    }
+                }
+            } else {
+                // 十进制
+                try {
+                    value = std::stoll(numStr);
+                } catch (const std::exception&) {
+                    // 如果解析失败，默认为 Int
+                    return std::make_shared<IntType>();
                 }
             }
             
-            return std::make_shared<SimpleType>("i32");
+            // 根据数值范围推断类型
+            // 负数且在 i32 范围内为 SignedInt
+            if (value < 0 && value >= -2147483648LL) {
+                return std::make_shared<SignedIntType>();
+            }
+            
+            // 超出 32 位有符号整数范围为 UnsignedInt
+            if (value > 2147483647LL) {
+                return std::make_shared<UnsignedIntType>();
+            }
+            
+            // 其余为 Int
+            return std::make_shared<IntType>();
         }
         case Token::kCHAR_LITERAL:
             return std::make_shared<SimpleType>("char");

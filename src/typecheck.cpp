@@ -6,6 +6,7 @@
 #include <memory>
 #include <utility>
 #include <unordered_map>
+#include <algorithm>
 
 TypeChecker::TypeChecker(std::shared_ptr<ScopeTree> scopeTree, std::shared_ptr<ConstantEvaluator> constantEvaluator)
     : scopeTree(scopeTree), constantEvaluator(constantEvaluator) {}
@@ -497,6 +498,63 @@ bool TypeChecker::AreTypesCompatible(std::shared_ptr<SemanticType> expected, std
     if (actualStr == "_") {
         return true;
     }
+    
+    // 实现隐式转换规则：
+    // 1) Int 可以为 usize,isize,i32,u32
+    // 2) SignedInt 可以为 i32,isize
+    // 3) UnsignedInt 可以为 u32,usize
+    // 4) 其余usize,isize,u32,i32 类型之间不应该有任何的隐式类型转化
+    
+    if (expectedStr == "Int") {
+        return (actualStr == "usize" || actualStr == "isize" || actualStr == "i32" || actualStr == "u32");
+    }
+    
+    if (actualStr == "Int") {
+        return (expectedStr == "usize" || expectedStr == "isize" || expectedStr == "i32" || expectedStr == "u32");
+    }
+    
+    if (expectedStr == "SignedInt") {
+        return (actualStr == "i32" || actualStr == "isize");
+    }
+    
+    if (actualStr == "SignedInt") {
+        return (expectedStr == "i32" || expectedStr == "isize");
+    }
+    
+    if (expectedStr == "UnsignedInt") {
+        return (actualStr == "u32" || actualStr == "usize");
+    }
+    
+    if (actualStr == "UnsignedInt") {
+        return (expectedStr == "u32" || expectedStr == "usize");
+    }
+    
+    // 特殊处理数组类型的兼容性检查
+    auto expectedArray = dynamic_cast<ArrayTypeWrapper*>(expected.get());
+    auto actualArray = dynamic_cast<ArrayTypeWrapper*>(actual.get());
+    
+    if (expectedArray && actualArray) {
+        // 检查元素类型是否兼容
+        if (!AreTypesCompatible(expectedArray->GetElementType(), actualArray->GetElementType())) {
+            return false;
+        }
+        
+        // 检查数组大小是否匹配
+        auto expectedSizeExpr = expectedArray->GetSizeExpression();
+        auto actualSizeExpr = actualArray->GetSizeExpression();
+        
+        if (expectedSizeExpr && actualSizeExpr) {
+            int64_t expectedSize = EvaluateArraySize(*expectedSizeExpr);
+            int64_t actualSize = EvaluateArraySize(*actualSizeExpr);
+            
+            if (expectedSize >= 0 && actualSize >= 0 && expectedSize != actualSize) {
+                return false;
+            }
+        }
+        
+        return true;
+    }
+    
     return false;
 }
 
@@ -664,6 +722,7 @@ std::shared_ptr<SemanticType> TypeChecker::InferLiteralExpressionType(LiteralExp
         case Token::kINTEGER_LITERAL: {
             const std::string& literal = expr.literal;
             
+            // 检查是否有显式类型后缀
             if (literal.length() >= 5) {
                 if (literal.substr(literal.length() - 5) == "usize") {
                     return std::make_shared<SimpleType>("usize");
@@ -672,6 +731,7 @@ std::shared_ptr<SemanticType> TypeChecker::InferLiteralExpressionType(LiteralExp
                     return std::make_shared<SimpleType>("isize");
                 }
             }
+            
             if (literal.length() >= 3) {
                 std::string suffix = literal.substr(literal.length() - 3);
                 if (suffix == "u32") {
@@ -680,16 +740,67 @@ std::shared_ptr<SemanticType> TypeChecker::InferLiteralExpressionType(LiteralExp
                 if (suffix == "i32") {
                     return std::make_shared<SimpleType>("i32");
                 }
-                if (suffix == "u64") {
-                    return std::make_shared<SimpleType>("u64");
+            }
+            
+            // 没有显式后缀，需要根据数值大小进行推断
+            std::string numStr = literal;
+            
+            // 移除可能的下划线
+            numStr.erase(std::remove(numStr.begin(), numStr.end(), '_'), numStr.end());
+            
+            // 处理不同进制
+            int64_t value = 0;
+            if (numStr.length() >= 2 && numStr.substr(0, 2) == "0b") {
+                // 二进制
+                std::string binStr = numStr.substr(2);
+                for (char c : binStr) {
+                    if (c == '0' || c == '1') {
+                        value = value * 2 + (c - '0');
+                    }
                 }
-                if (suffix == "i64") {
-                    return std::make_shared<SimpleType>("i64");
+            } else if (numStr.length() >= 2 && numStr.substr(0, 2) == "0o") {
+                // 八进制
+                std::string octStr = numStr.substr(2);
+                for (char c : octStr) {
+                    if (c >= '0' && c <= '7') {
+                        value = value * 8 + (c - '0');
+                    }
+                }
+            } else if (numStr.length() >= 2 && numStr.substr(0, 2) == "0x") {
+                // 十六进制
+                std::string hexStr = numStr.substr(2);
+                for (char c : hexStr) {
+                    if (c >= '0' && c <= '9') {
+                        value = value * 16 + (c - '0');
+                    } else if (c >= 'a' && c <= 'f') {
+                        value = value * 16 + (c - 'a' + 10);
+                    } else if (c >= 'A' && c <= 'F') {
+                        value = value * 16 + (c - 'A' + 10);
+                    }
+                }
+            } else {
+                // 十进制
+                try {
+                    value = std::stoll(numStr);
+                } catch (const std::exception&) {
+                    // 如果解析失败，默认为 Int
+                    return std::make_shared<IntType>();
                 }
             }
             
-            // 如果没有后缀，默认为 i32
-            return std::make_shared<SimpleType>("i32");
+            // 根据数值范围推断类型
+            // 负数且在 i32 范围内为 SignedInt
+            if (value < 0 && value >= -2147483648LL) {
+                return std::make_shared<SignedIntType>();
+            }
+            
+            // 超出 32 位有符号整数范围为 UnsignedInt
+            if (value > 2147483647LL) {
+                return std::make_shared<UnsignedIntType>();
+            }
+            
+            // 其余为 Int
+            return std::make_shared<IntType>();
         }
         case Token::kCHAR_LITERAL:
             return std::make_shared<SimpleType>("char");
@@ -795,7 +906,25 @@ std::shared_ptr<SemanticType> TypeChecker::InferArrayExpressionType(ArrayExpress
         return nullptr;
     }
     
-    auto result = std::make_shared<ArrayTypeWrapper>(elementType, nullptr);
+    // 创建大小表达式
+    std::shared_ptr<Expression> sizeExpr = nullptr;
+    if (expr.arrayelements) {
+        if (expr.arrayelements->istwo) {
+            // 对于重复元素语法，使用第二个表达式作为大小
+            if (expr.arrayelements->expressions.size() >= 2) {
+                sizeExpr = expr.arrayelements->expressions[1];
+            }
+        } else {
+            // 对于逗号分隔语法，创建一个字面量表达式表示大小
+            auto literal = std::make_shared<LiteralExpression>(
+                std::to_string(expr.arrayelements->expressions.size()),
+                Token::kINTEGER_LITERAL
+            );
+            sizeExpr = literal;
+        }
+    }
+    
+    auto result = std::make_shared<ArrayTypeWrapper>(elementType, sizeExpr.get());
     nodeTypeMap[&expr] = result; // 替换占位符
     return result;
 }
@@ -946,7 +1075,25 @@ std::shared_ptr<SemanticType> TypeChecker::InferArrayExpressionTypeWithExpected(
         return nullptr;
     }
     
-    auto result = std::make_shared<ArrayTypeWrapper>(elementType, nullptr);
+    // 创建大小表达式
+    std::shared_ptr<Expression> sizeExpr = nullptr;
+    if (expr.arrayelements) {
+        if (expr.arrayelements->istwo) {
+            // 对于重复元素语法，使用第二个表达式作为大小
+            if (expr.arrayelements->expressions.size() >= 2) {
+                sizeExpr = expr.arrayelements->expressions[1];
+            }
+        } else {
+            // 对于逗号分隔语法，创建一个字面量表达式表示大小
+            auto literal = std::make_shared<LiteralExpression>(
+                std::to_string(expr.arrayelements->expressions.size()),
+                Token::kINTEGER_LITERAL
+            );
+            sizeExpr = literal;
+        }
+    }
+    
+    auto result = std::make_shared<ArrayTypeWrapper>(elementType, sizeExpr.get());
     nodeTypeMap[&expr] = result; // 替换占位符
     return result;
 }
@@ -1277,15 +1424,18 @@ void TypeChecker::visit(LetStatement& node) {
             // 推断初始化表达式的类型
             auto initType = InferExpressionType(*node.expression);
             
+            // 如果推断失败，但有声明类型，使用声明类型
             if (!initType) {
-                if (auto pattern = dynamic_cast<IdentifierPattern*>(node.patternnotopalt.get())) {
-                    ReportError("Unable to infer type for let statement initializer for variable: " + pattern->identifier);
-                } else {
-                    ReportError("Unable to infer type for let statement initializer");
+                initType = declaredType;
+                nodeTypeMap[node.expression.get()] = declaredType;
+            } else if (auto ifExpr = dynamic_cast<IfExpression*>(node.expression.get())) {
+                // 对于 if 表达式，如果推断失败但有声明类型，使用声明类型
+                if (!initType || initType->tostring() == "type_error") {
+                    nodeTypeMap[node.expression.get()] = declaredType;
+                    initType = declaredType;
                 }
-                PopNode();
-                return;
             }
+            
             // 检查类型兼容性
             if (!AreTypesCompatible(declaredType, initType)) {
                 ReportError("Type mismatch in let statement: expected '" + declaredType->tostring() +
@@ -1368,6 +1518,24 @@ void TypeChecker::CheckArraySizeMatch(ArrayTypeWrapper& declaredType, ArrayExpre
     if (declaredSize != actualSize) {
         ReportError("Array size mismatch: declared size " + std::to_string(declaredSize) +
                    ", but initializer has " + std::to_string(actualSize) + " elements");
+        return;
+    }
+    
+    // 对于多维数组，递归检查内部数组的大小
+    auto elementType = declaredType.GetElementType();
+    if (auto innerArrayType = dynamic_cast<ArrayTypeWrapper*>(elementType.get())) {
+        // 这是一个多维数组，需要检查每个内部数组的大小
+        for (const auto& element : arrayExpr.arrayelements->expressions) {
+            if (auto innerArrayExpr = dynamic_cast<ArrayExpression*>(element.get())) {
+                // 如果元素是数组表达式，递归检查
+                CheckArraySizeMatch(*innerArrayType, *innerArrayExpr);
+            } else {
+                // 如果元素不是数组表达式，我们跳过递归检查
+                // 这允许使用重复元素语法或其他表达式来初始化多维数组
+                // 只要它们的类型与期望的内部数组类型兼容
+                // 类型兼容性已经在之前的AreTypesCompatible检查中验证过了
+            }
+        }
     }
 }
 
@@ -1378,7 +1546,7 @@ int64_t TypeChecker::EvaluateArraySize(Expression& sizeExpr) {
                 std::string numStr = literal->literal;
                 if (numStr.length() >= 3) {
                     std::string suffix = numStr.substr(numStr.length() - 3);
-                    if (suffix == "u32" || suffix == "i32" || suffix == "u64" || suffix == "i64") {
+                    if (suffix == "u32" || suffix == "i32") {
                         numStr = numStr.substr(0, numStr.length() - 3);
                     }
                 }
