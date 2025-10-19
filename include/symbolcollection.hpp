@@ -113,11 +113,15 @@ private:
     
     std::shared_ptr<SemanticType> ResolveTypeFromNode(Type& node);
     std::shared_ptr<SemanticType> CreateSimpleType(const std::string& name);
+    
+    bool ValidateTypeExistence(const std::string& typeName);
+    bool ValidateTypeExistence(Type& typeNode);
+    void ReportError(const std::string& message);
 
     std::shared_ptr<SemanticType> GetImplTargetType(InherentImpl& node);
     std::string GetTraitNameFromImpl(InherentImpl& node);
 
-    void CollectAssociatedItem(AssociatedItem& item, std::shared_ptr<ImplSymbol> implSymbol);
-    void CollectAssociatedFunction(Function& function, std::shared_ptr<ImplSymbol> implSymbol);
-    void CollectAssociatedConstant(ConstantItem& constant, std::shared_ptr<ImplSymbol> implSymbol);
+    void CollectAssociatedItem(AssociatedItem& item, std::shared_ptr<ImplSymbol> implSymbol, std::shared_ptr<StructSymbol> structSymbol = nullptr);
+    void CollectAssociatedFunction(Function& function, std::shared_ptr<ImplSymbol> implSymbol, std::shared_ptr<StructSymbol> structSymbol = nullptr);
+    void CollectAssociatedConstant(ConstantItem& constant, std::shared_ptr<ImplSymbol> implSymbol, std::shared_ptr<StructSymbol> structSymbol = nullptr);
 };

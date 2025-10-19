@@ -47,7 +47,7 @@ std::shared_ptr<Symbol> Scope::Lookup(const std::string& name, bool iscurrent) {
 }
 
 std::shared_ptr<Scope> Scope::AddChild(bool isFunctionScope) {
-    auto child = std::make_shared<Scope>(GetParent(), isFunctionScope);
+    auto child = std::make_shared<Scope>(shared_from_this(), isFunctionScope);
     childrens.push_back(child);
     return child;
 }

@@ -290,11 +290,17 @@ void SymbolCollector::CollectParameterSymbols(Function& node) {
         if (auto identPattern = dynamic_cast<IdentifierPattern*>(param->patternnotopalt.get())) {
             std::string paramName = identPattern->identifier;
             auto paramType = ResolveTypeFromNode(*param->type);
+            // 检查参数模式是否是可变的
+            bool isMutable = identPattern->hasmut;
+            // 对于引用类型，需要检查引用本身是否可变
+            if (auto refType = dynamic_cast<ReferenceType*>(param->type.get())) {
+                isMutable = refType->ismut;
+            }
             auto paramSymbol = std::make_shared<Symbol>(
                 paramName,
                 SymbolKind::Variable,
                 paramType,
-                false,
+                isMutable,
                 &node
             );
             root->InsertSymbol(paramName, paramSymbol);
@@ -309,18 +315,36 @@ void SymbolCollector::CollectFieldSymbols(StructStruct& node) {
     auto fields = node.structfileds;
     if (!fields) return;
     
+    // 获取刚创建的StructSymbol
+    std::string structName = node.identifier;
+    auto structSymbol = std::dynamic_pointer_cast<StructSymbol>(root->LookupSymbol(structName));
+    if (!structSymbol) {
+        ReportError("Could not find struct symbol for " + structName);
+        return;
+    }
+    
     for (const auto& field : fields->structfields) {
         std::string fieldName = field->identifier;
+        
+        // 检查字段类型存在性
+        auto fieldType = ResolveTypeFromNode(*field->type);
+        if (!ValidateTypeExistence(*field->type)) {
+            ReportError("Field type '" + fieldType->tostring() + "' does not exist for field '" + fieldName + "' in struct '" + structName + "'");
+        }
         
         auto fieldSymbol = std::make_shared<Symbol>(
             fieldName,
             SymbolKind::Variable,
-            ResolveTypeFromNode(*field->type),
+            fieldType,
             false,
             &node
         );
         
+        // 插入到作用域
         root->InsertSymbol(fieldName, fieldSymbol);
+        
+        // 关键修复：添加到StructSymbol的fields列表
+        structSymbol->fields.push_back(fieldSymbol);
     }
 }
 
@@ -366,7 +390,7 @@ void SymbolCollector::CollectVariantSymbols(Enumeration& node) {
 void SymbolCollector::CollectImplSymbol(InherentImpl& node) {
     auto targetType = GetImplTargetType(node);
     std::string targetTypeName = targetType->tostring();
-    std::string implName = "impl_" + targetTypeName + "_" + 
+    std::string implName = "impl_" + targetTypeName + "_" +
                           std::to_string(reinterpret_cast<uintptr_t>(&node));
     auto implSymbol = std::make_shared<ImplSymbol>(implName, targetType);
     
@@ -376,6 +400,12 @@ void SymbolCollector::CollectImplSymbol(InherentImpl& node) {
         implSymbol->isTraitImpl = true;
     }
     root->InsertSymbol(implName, implSymbol);
+    
+    // 查找对应的StructSymbol
+    auto structSymbol = std::dynamic_pointer_cast<StructSymbol>(root->LookupSymbol(targetTypeName));
+    if (!structSymbol) {
+        ReportError("Cannot find struct '" + targetTypeName + "' for impl");
+    }
     
     root->EnterScope(Scope::ScopeType::Impl, &node);
     
@@ -387,7 +417,7 @@ void SymbolCollector::CollectImplSymbol(InherentImpl& node) {
     auto items = node.associateditems;
     for (const auto& item : items) {
         if (item) {
-            CollectAssociatedItem(*item, implSymbol);
+            CollectAssociatedItem(*item, implSymbol, structSymbol);
         }
     }
     
@@ -395,32 +425,49 @@ void SymbolCollector::CollectImplSymbol(InherentImpl& node) {
 }
 
 void SymbolCollector::CollectAssociatedItem(AssociatedItem& item,
-                                            std::shared_ptr<ImplSymbol> implSymbol) {
+                                            std::shared_ptr<ImplSymbol> implSymbol,
+                                            std::shared_ptr<StructSymbol> structSymbol) {
     if (!item.consttantitem_or_function) return;
 
     if (auto function = dynamic_cast<Function*>(item.consttantitem_or_function.get())) {
-        CollectAssociatedFunction(*function, implSymbol);
+        CollectAssociatedFunction(*function, implSymbol, structSymbol);
     } else if (auto constant = dynamic_cast<ConstantItem*>(item.consttantitem_or_function.get())) {
-        CollectAssociatedConstant(*constant, implSymbol);
+        CollectAssociatedConstant(*constant, implSymbol, structSymbol);
     }
 }
 
  void SymbolCollector::CollectAssociatedFunction(Function& function,
-                                                 std::shared_ptr<ImplSymbol> implSymbol) {
+                                                 std::shared_ptr<ImplSymbol> implSymbol,
+                                                 std::shared_ptr<StructSymbol> structSymbol) {
     std::string funcName = function.identifier_name;
+    
+    // 检查返回类型
+    std::shared_ptr<SemanticType> returnType;
+    if (function.functionreturntype && function.functionreturntype->type) {
+        returnType = ResolveTypeFromNode(*function.functionreturntype->type);
+    } else {
+        returnType = CreateSimpleType("unit");
+    }
+    
     auto funcSymbol = std::make_shared<FunctionSymbol>(
         funcName,
         std::vector<std::shared_ptr<Symbol>>{},
-        CreateSimpleType("unknown"),
-        true
+        returnType,
+        true  // 是方法
     );
     
     if (!root->InsertSymbol(funcName, funcSymbol)) {
-        // reportError("Method '" + funcName + "' is already defined in this impl");
+        ReportError("Method '" + funcName + "' is already defined in this impl");
         return;
     }
     
     implSymbol->items.push_back(funcSymbol);
+    
+    // 关键增强：如果有StructSymbol，也添加到其methods列表中
+    if (structSymbol) {
+        structSymbol->methods.push_back(funcSymbol);
+    }
+    
     root->EnterScope(Scope::ScopeType::Function, &function);
     if (function.functionparameters) {
         for (const auto& param : function.functionparameters->functionparams) {
@@ -431,7 +478,8 @@ void SymbolCollector::CollectAssociatedItem(AssociatedItem& item,
 }
 
 void SymbolCollector::CollectAssociatedConstant(ConstantItem& constant,
-                                                 std::shared_ptr<ImplSymbol> implSymbol) {
+                                                 std::shared_ptr<ImplSymbol> implSymbol,
+                                                 std::shared_ptr<StructSymbol> structSymbol) {
     std::string constName = constant.identifier;
     
     auto constSymbol = std::make_shared<ConstantSymbol>(
@@ -477,6 +525,11 @@ std::shared_ptr<SemanticType> SymbolCollector::ResolveTypeFromNode(Type& node) {
         if (typePath->simplepathsegement) {
             std::string typeName = typePath->simplepathsegement->identifier;
             if (!typeName.empty()) {
+                // 检查类型是否存在
+                if (!ValidateTypeExistence(typeName)) {
+                    ReportError("Type '" + typeName + "' does not exist in current scope");
+                    return CreateSimpleType("error_type");
+                }
                 return CreateSimpleType(typeName);
             }
         }
@@ -496,4 +549,24 @@ std::shared_ptr<SemanticType> SymbolCollector::ResolveTypeFromNode(Type& node) {
 
 std::shared_ptr<SemanticType> SymbolCollector::CreateSimpleType(const std::string& name) {
     return std::make_shared<SimpleType>(name);
+}
+
+bool SymbolCollector::ValidateTypeExistence(const std::string& typeName) {
+    auto symbol = root->LookupSymbol(typeName);
+    return symbol && (symbol->kind == SymbolKind::Struct ||
+                     symbol->kind == SymbolKind::Enum ||
+                     symbol->kind == SymbolKind::BuiltinType ||
+                     symbol->kind == SymbolKind::TypeAlias);
+}
+
+bool SymbolCollector::ValidateTypeExistence(Type& typeNode) {
+    auto type = ResolveTypeFromNode(typeNode);
+    if (!type) return false;
+    
+    std::string typeName = type->tostring();
+    return ValidateTypeExistence(typeName);
+}
+
+void SymbolCollector::ReportError(const std::string& message) {
+    std::cerr << "Symbol Collection Error: " << message << std::endl;
 }

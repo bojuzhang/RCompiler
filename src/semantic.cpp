@@ -33,12 +33,6 @@ bool CompleteSemanticAnalyzer::Analyze() {
         return false;
     }
     
-    // 第五步：类型推断
-    if (!RunTypeInference()) {
-        hasErrors = true;
-        return false;
-    }
-    
     std::cerr << "=== Complete Semantic Analysis Completed ===" << std::endl;
     return !hasErrors;
 }
@@ -84,14 +78,4 @@ bool CompleteSemanticAnalyzer::RunTypeChecking() {
     ast->accept(*typeChecker);
     
     return !typeChecker->HasTypeErrors();
-}
-
-bool CompleteSemanticAnalyzer::RunTypeInference() {
-    std::cerr << "Step 5: Type Inference" << std::endl;
-    
-    typeInferenceChecker = std::make_shared<TypeInferenceChecker>(
-        scopeTree, controlFlowAnalyzer, constantEvaluator);
-    ast->accept(*typeInferenceChecker);
-    
-    return !typeInferenceChecker->HasInferenceErrors();
 }

@@ -14,7 +14,6 @@ private:
     std::shared_ptr<ConstantEvaluator> constantEvaluator;
     std::shared_ptr<ControlFlowAnalyzer> controlFlowAnalyzer;
     std::shared_ptr<TypeChecker> typeChecker;
-    std::shared_ptr<TypeInferenceChecker> typeInferenceChecker;
     
     bool hasErrors = false;
 
@@ -29,5 +28,4 @@ private:
     bool RunConstantEvaluation();
     bool RunControlFlowAnalysis();
     bool RunTypeChecking();
-    bool RunTypeInference();
 };

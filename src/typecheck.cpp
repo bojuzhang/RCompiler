@@ -67,8 +67,9 @@ void TypeChecker::visit(Function& node) {
     // 检查函数签名
     // checkFunctionSignature(node);
     
-    // 不进入函数作用域，保持在全局作用域中进行类型检查
-    // 这样可以确保能够找到全局作用域中的函数符号
+    // 进入函数作用域，这样可以在函数体内找到参数符号
+    scopeTree->EnterScope(Scope::ScopeType::Function, &node);
+    
     if (node.functionparameters) {
         CheckFunctionParameters(*node.functionparameters);
     }
@@ -80,6 +81,9 @@ void TypeChecker::visit(Function& node) {
     
     // 检查函数体
     CheckFunctionBody(node);
+    
+    // 退出函数作用域
+    scopeTree->ExitScope();
     
     PopNode();
 }
@@ -521,6 +525,8 @@ std::shared_ptr<SemanticType> TypeChecker::InferExpressionType(Expression& expr)
         type = InferCallExpressionType(*call);
     } else if (auto arrayExpr = dynamic_cast<ArrayExpression*>(&expr)) {
         type = InferArrayExpressionType(*arrayExpr);
+    } else if (auto indexExpr = dynamic_cast<IndexExpression*>(&expr)) {
+        type = InferIndexExpressionType(*indexExpr);
     } else if (auto pathExpr = dynamic_cast<PathExpression*>(&expr)) {
         if (pathExpr->simplepath && !pathExpr->simplepath->simplepathsegements.empty()) {
             std::string varName = pathExpr->simplepath->simplepathsegements[0]->identifier;
@@ -628,6 +634,28 @@ std::shared_ptr<SemanticType> TypeChecker::InferCallExpressionType(CallExpressio
 std::shared_ptr<SemanticType> TypeChecker::InferMethodCallExpressionType(MethodCallExpression& expr) {
     // 方法调用：需要查找方法定义并返回其返回类型
     return std::make_shared<SimpleType>("unknown");
+}
+
+std::shared_ptr<SemanticType> TypeChecker::InferIndexExpressionType(IndexExpression& expr) {
+    // 推断数组表达式的类型
+    if (expr.expressionout) {
+        auto arrayType = InferExpressionType(*expr.expressionout);
+        if (arrayType) {
+            // 如果是数组类型，返回元素类型
+            if (auto arrayTypeWrapper = dynamic_cast<ArrayTypeWrapper*>(arrayType.get())) {
+                return arrayTypeWrapper->GetElementType();
+            }
+            // 如果是引用类型，需要解引用
+            else if (auto refType = dynamic_cast<ReferenceTypeWrapper*>(arrayType.get())) {
+                auto derefType = refType->getTargetType();
+                if (auto innerArrayType = dynamic_cast<ArrayTypeWrapper*>(derefType.get())) {
+                    return innerArrayType->GetElementType();
+                }
+            }
+        }
+    }
+    
+    return nullptr;
 }
 
 std::shared_ptr<SemanticType> TypeChecker::InferLiteralExpressionType(LiteralExpression& expr) {
@@ -1091,7 +1119,16 @@ void TypeChecker::CheckVariableMutability(PathExpression& pathExpr) {
         return;
     }
     
-    if (!symbol->ismutable) {
+    // 特殊处理：如果变量是引用类型，检查引用本身是否可变
+    bool isMutable = symbol->ismutable;
+    if (symbol->type) {
+        if (auto refType = dynamic_cast<ReferenceTypeWrapper*>(symbol->type.get())) {
+            // 对于引用类型，可变性由引用本身决定
+            isMutable = refType->GetIsMutable();
+        }
+    }
+    
+    if (!isMutable) {
         ReportMutabilityError(varName, "variable", &pathExpr);
     }
 }
@@ -1476,6 +1513,3 @@ void TypeChecker::visit(IfExpression& node) {
     
     PopNode();
 }
-
-
-

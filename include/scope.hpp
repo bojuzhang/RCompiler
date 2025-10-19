@@ -6,7 +6,7 @@
 #include <vector>
 #include "symbol.hpp"
 
-class Scope {
+class Scope : public std::enable_shared_from_this<Scope> {
 public:
     std::unordered_map<std::string, std::shared_ptr<Symbol>> symbols;
     std::shared_ptr<Scope> parent;

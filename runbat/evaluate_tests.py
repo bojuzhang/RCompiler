@@ -15,7 +15,7 @@ from typing import Dict, List, Tuple, Optional
 from collections import defaultdict
 
 class TestEvaluator:
-    def __init__(self, test_dir: str = "../RCompiler-Testcases/semantic-1", compiler_path: str = "../build/code", timeout: int = 60):
+    def __init__(self, test_dir: str = "../RCompiler-Testcases/semantic-1", compiler_path: str = "../build/code", timeout: int = 30):
         self.test_dir = Path(test_dir)
         self.compiler_path = Path(compiler_path)
         self.timeout = timeout

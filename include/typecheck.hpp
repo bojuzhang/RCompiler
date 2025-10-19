@@ -149,6 +149,7 @@ private:
     std::shared_ptr<SemanticType> InferBinaryExpressionType(BinaryExpression& expr);
     std::shared_ptr<SemanticType> InferCallExpressionType(CallExpression& expr);
     std::shared_ptr<SemanticType> InferMethodCallExpressionType(MethodCallExpression& expr);
+    std::shared_ptr<SemanticType> InferIndexExpressionType(IndexExpression& expr);
     std::shared_ptr<SemanticType> InferArrayExpressionType(ArrayExpression& expr);
     std::shared_ptr<SemanticType> InferConstantExpressionType(Expression& expr, std::shared_ptr<SemanticType> expectedType);
     std::shared_ptr<SemanticType> InferArrayExpressionTypeWithExpected(ArrayExpression& expr, std::shared_ptr<SemanticType> expectedType);

@@ -68,6 +68,7 @@ public:
 class StructSymbol : public Symbol {
 public:
     std::vector<std::shared_ptr<Symbol>> fields;
+    std::vector<std::shared_ptr<FunctionSymbol>> methods;
     
     StructSymbol(const std::string& name);
 };
