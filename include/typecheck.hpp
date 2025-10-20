@@ -68,15 +68,15 @@ public:
     void visit(UnderscoreExpression& node) override {}
     void visit(BlockExpression& node) override;
     void visit(ConstBlockExpression& node) override {}
-    void visit(InfiniteLoopExpression& node) override {}
-    void visit(PredicateLoopExpression& node) override {}
+    void visit(InfiniteLoopExpression& node) override;
+    void visit(PredicateLoopExpression& node) override;
     void visit(IfExpression& node) override;
     void visit(MatchExpression& node) override {}
     void visit(TypeCastExpression& node) override {}
     void visit(AssignmentExpression& node) override;
     void visit(CompoundAssignmentExpression& node) override;
     void visit(UnaryExpression& node) override {}
-    void visit(BinaryExpression& node) override {}
+    void visit(BinaryExpression& node) override;
     void visit(BorrowExpression& node) override {}
     void visit(DereferenceExpression& node) override {}
     

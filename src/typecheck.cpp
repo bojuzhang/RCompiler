@@ -23,9 +23,6 @@ bool TypeChecker::HasTypeErrors() const {
 
 void TypeChecker::visit(Crate& node) {
     PushNode(node);
-    
-    // 添加调试输出
-    std::cerr << "TypeChecker: Visiting Crate with " << node.items.size() << " items" << std::endl;
         
     for (const auto& item : node.items) {
         if (item) {
@@ -104,7 +101,16 @@ void TypeChecker::visit(ConstantItem& node) {
     
     // 检查常量表达式类型兼容性
     if (node.expression) {
-        auto exprType = InferExpressionType(*node.expression);
+        // 对于常量项，使用期望类型来推断表达式类型，这样可以正确处理隐式类型转换
+        std::shared_ptr<SemanticType> exprType = nullptr;
+        
+        // 如果是数组表达式，使用带期望类型的推断方法
+        if (auto arrayExpr = dynamic_cast<ArrayExpression*>(node.expression.get())) {
+            exprType = InferArrayExpressionTypeWithExpected(*arrayExpr, type);
+        } else {
+            exprType = InferConstantExpressionType(*node.expression, type);
+        }
+        
         // std::cerr << "TypeChecker: Constant " << node.identifier << " expected type: " << type->tostring()
         //           << ", actual type: " << (exprType ? exprType->tostring() : "null") << std::endl;
         if (exprType && !AreTypesCompatible(type, exprType)) {
@@ -717,6 +723,13 @@ std::shared_ptr<SemanticType> TypeChecker::InferIndexExpressionType(IndexExpress
                 if (auto innerArrayType = dynamic_cast<ArrayTypeWrapper*>(derefType.get())) {
                     return innerArrayType->GetElementType();
                 }
+                // 如果解引用后仍然是引用类型，继续解引用
+                else if (auto innerRefType = dynamic_cast<ReferenceTypeWrapper*>(derefType.get())) {
+                    auto innerDerefType = innerRefType->getTargetType();
+                    if (auto innerArrayType2 = dynamic_cast<ArrayTypeWrapper*>(innerDerefType.get())) {
+                        return innerArrayType2->GetElementType();
+                    }
+                }
             }
         }
     }
@@ -956,10 +969,24 @@ std::shared_ptr<SemanticType> TypeChecker::InferConstantExpressionType(Expressio
     
     if (auto literalExpr = dynamic_cast<LiteralExpression*>(&expr)) {
         result = InferLiteralExpressionType(*literalExpr);
+        // 如果有期望类型，检查是否可以应用隐式类型转换
+        if (expectedType && result && AreTypesCompatible(expectedType, result)) {
+            // 如果类型兼容但不同，使用期望类型（应用隐式转换）
+            if (result->tostring() != expectedType->tostring()) {
+                result = expectedType;
+            }
+        }
     } else if (auto arrayExpr = dynamic_cast<ArrayExpression*>(&expr)) {
         result = InferArrayExpressionTypeWithExpected(*arrayExpr, expectedType);
     } else if (auto binaryExpr = dynamic_cast<BinaryExpression*>(&expr)) {
         result = InferBinaryExpressionType(*binaryExpr);
+        // 如果有期望类型，检查是否可以应用隐式类型转换
+        if (expectedType && result && AreTypesCompatible(expectedType, result)) {
+            // 如果类型兼容但不同，使用期望类型（应用隐式转换）
+            if (result->tostring() != expectedType->tostring()) {
+                result = expectedType;
+            }
+        }
     } else {
         result = expectedType;
     }
@@ -994,8 +1021,12 @@ std::shared_ptr<SemanticType> TypeChecker::InferArrayExpressionTypeWithExpected(
     nodeTypeMap[&expr] = placeholder;
     
     std::shared_ptr<SemanticType> expectedElementType = nullptr;
+    Expression* expectedSizeExpr = nullptr;
+    
+    // 从期望类型中提取元素类型和大小表达式
     if (auto arrayTypeWrapper = dynamic_cast<ArrayTypeWrapper*>(expectedType.get())) {
         expectedElementType = arrayTypeWrapper->GetElementType();
+        expectedSizeExpr = arrayTypeWrapper->GetSizeExpression();
     }
     
     if (!expr.arrayelements) {
@@ -1083,9 +1114,46 @@ std::shared_ptr<SemanticType> TypeChecker::InferArrayExpressionTypeWithExpected(
         return nullptr;
     }
     
-    // 创建大小表达式
+    // 对于多维数组，需要正确处理大小表达式
     std::shared_ptr<Expression> sizeExpr = nullptr;
-    if (expr.arrayelements) {
+    
+    // 检查是否是内层数组（多维数组的情况）
+    // 只有当元素类型是数组类型，并且当前数组表达式是某个数组的元素时，才是内层数组
+    bool isInnerArray = false;
+    if (expectedElementType) {
+        if (auto innerArrayType = dynamic_cast<ArrayTypeWrapper*>(expectedElementType.get())) {
+            // 检查当前数组表达式是否是某个数组的元素
+            // 这需要检查调用栈或者上下文，这里简化处理
+            // 如果期望类型是数组类型，并且当前数组表达式的元素类型与期望元素类型匹配，
+            // 那么当前数组表达式可能是内层数组
+            if (expr.arrayelements && !expr.arrayelements->expressions.empty()) {
+                auto firstElement = expr.arrayelements->expressions[0];
+                if (firstElement) {
+                    auto firstElementType = InferExpressionType(*firstElement);
+                    if (firstElementType && firstElementType->tostring() == innerArrayType->GetElementType()->tostring()) {
+                        isInnerArray = true;
+                    }
+                }
+            }
+            
+            if (isInnerArray) {
+                // 这是多维数组的内层数组，使用内层数组自己的大小表达式
+                auto innerSizeExpr = innerArrayType->GetSizeExpression();
+                if (innerSizeExpr) {
+                    sizeExpr = std::shared_ptr<Expression>(innerSizeExpr, [](Expression*){});
+                }
+            } else {
+                // 这不是内层数组，使用期望类型中的大小表达式
+                sizeExpr = std::shared_ptr<Expression>(expectedSizeExpr, [](Expression*){});
+            }
+        } else {
+            // 这不是内层数组，使用期望类型中的大小表达式
+            sizeExpr = std::shared_ptr<Expression>(expectedSizeExpr, [](Expression*){});
+        }
+    } else if (expectedSizeExpr) {
+        // 没有期望元素类型，使用期望类型中的大小表达式
+        sizeExpr = std::shared_ptr<Expression>(expectedSizeExpr, [](Expression*){});
+    } else if (expr.arrayelements) {
         if (expr.arrayelements->istwo) {
             // 对于重复元素语法，使用第二个表达式作为大小
             if (expr.arrayelements->expressions.size() >= 2) {
@@ -1376,6 +1444,15 @@ void TypeChecker::visit(IndexExpression& node) {
             if (auto arrayTypeWrapper = dynamic_cast<ArrayTypeWrapper*>(arrayType.get())) {
                 auto elementType = arrayTypeWrapper->GetElementType();
                 nodeTypeMap[&node] = elementType;
+            } else if (auto refType = dynamic_cast<ReferenceTypeWrapper*>(arrayType.get())) {
+                // 如果是引用类型，需要解引用
+                auto derefType = refType->getTargetType();
+                if (auto innerArrayType = dynamic_cast<ArrayTypeWrapper*>(derefType.get())) {
+                    auto elementType = innerArrayType->GetElementType();
+                    nodeTypeMap[&node] = elementType;
+                } else {
+                    ReportError("Cannot index into non-array type: " + arrayType->tostring());
+                }
             } else {
                 ReportError("Cannot index into non-array type: " + arrayType->tostring());
             }
@@ -1430,7 +1507,14 @@ void TypeChecker::visit(LetStatement& node) {
         if (declaredType) {
             // 对于有明确类型声明的let语句，进行完整的类型检查，包括数组长度验证
             // 推断初始化表达式的类型
-            auto initType = InferExpressionType(*node.expression);
+            std::shared_ptr<SemanticType> initType = nullptr;
+            
+            // 如果是数组表达式，使用带期望类型的推断方法
+            if (auto arrayExpr = dynamic_cast<ArrayExpression*>(node.expression.get())) {
+                initType = InferArrayExpressionTypeWithExpected(*arrayExpr, declaredType);
+            } else {
+                initType = InferExpressionType(*node.expression);
+            }
             
             // 如果推断失败，但有声明类型，使用声明类型
             if (!initType) {
@@ -1649,6 +1733,25 @@ void TypeChecker::visit(BlockExpression& node) {
     // 退出作用域
     scopeTree->ExitScope();
     
+    // 推断块表达式的类型（基于最后一条语句）
+    if (!node.statements.empty()) {
+        auto lastStmt = node.statements.back();
+        if (auto exprStmt = dynamic_cast<ExpressionStatement*>(lastStmt.get())) {
+            if (exprStmt->astnode) {
+                auto lastExprType = InferExpressionType(*exprStmt->astnode);
+                if (lastExprType) {
+                    nodeTypeMap[&node] = lastExprType;
+                }
+            }
+        } else {
+            // 如果最后一条语句不是表达式语句，块表达式类型为 unit
+            nodeTypeMap[&node] = std::make_shared<SimpleType>("()");
+        }
+    } else {
+        // 空块表达式的类型为 unit
+        nodeTypeMap[&node] = std::make_shared<SimpleType>("()");
+    }
+    
     PopNode();
 }
 
@@ -1690,54 +1793,82 @@ void TypeChecker::visit(IfExpression& node) {
     PopNode();
 }
 
+
 void TypeChecker::visit(ReturnExpression& node) {
     PushNode(node);
-    
-    // 添加调试输出
-    std::cerr << "TypeChecker: Visiting ReturnExpression" << std::endl;
     
     // 检查返回表达式类型与函数返回类型是否兼容
     if (node.expression) {
         auto exprType = InferExpressionType(*node.expression);
-        std::cerr << "TypeChecker: Return expression type: " << (exprType ? exprType->tostring() : "null") << std::endl;
         
         if (exprType) {
-            // 获取当前函数的返回类型
-            // 这里简化处理，假设我们可以从上下文中获取函数返回类型
-            // 在实际实现中，可能需要维护一个当前函数的返回类型栈
+            // 查找当前函数的返回类型
+            std::stack<ASTNode*> tempStack = nodeStack;
             std::shared_ptr<SemanticType> expectedReturnType = nullptr;
             
-            // 在 basic12.rx 中，draw 函数应该返回 Card 类型，但返回了整数 0
-            // 我们可以检查函数签名来确定期望的返回类型
-            // 这里简化处理，直接检查是否是返回了整数但期望的是结构体
+            while (!tempStack.empty()) {
+                auto topNode = tempStack.top();
+                tempStack.pop();
+                if (auto funcNode = dynamic_cast<Function*>(topNode)) {
+                    if (funcNode->functionreturntype && funcNode->functionreturntype->type) {
+                        expectedReturnType = CheckType(*funcNode->functionreturntype->type);
+                    }
+                    break;
+                }
+            }
             
-            // 检查是否是返回了整数但期望的是结构体类型
-            if (exprType->tostring() == "Int" || exprType->tostring() == "SignedInt" ||
-                exprType->tostring() == "UnsignedInt" || exprType->tostring() == "i32" ||
-                exprType->tostring() == "u32" || exprType->tostring() == "isize" ||
-                exprType->tostring() == "usize") {
-                
-                // 查找当前函数的返回类型
-                // 这里简化处理，假设我们可以从节点栈中找到函数节点
-                std::stack<ASTNode*> tempStack = nodeStack;
-                while (!tempStack.empty()) {
-                    auto topNode = tempStack.top();
-                    tempStack.pop();
-                    if (auto funcNode = dynamic_cast<Function*>(topNode)) {
-                        if (funcNode->functionreturntype && funcNode->functionreturntype->type) {
-                            auto returnType = CheckType(*funcNode->functionreturntype->type);
-                            std::cerr << "TypeChecker: Function return type: " << (returnType ? returnType->tostring() : "null") << std::endl;
-                            if (returnType && returnType->tostring() != "()" &&
-                                returnType->tostring() != exprType->tostring()) {
-                                ReportError("Type mismatch in return expression: expected '" + returnType->tostring() +
-                                           "', found '" + exprType->tostring() + "'");
-                            }
-                        }
-                        break;
+            // 如果找到了期望的返回类型，检查类型兼容性
+            if (expectedReturnType) {
+                // 如果函数返回类型不是 unit 类型，进行类型检查
+                if (expectedReturnType->tostring() != "()") {
+                    if (!AreTypesCompatible(expectedReturnType, exprType)) {
+                        ReportError("Type mismatch in return expression: expected '" + expectedReturnType->tostring() +
+                                   "', found '" + exprType->tostring() + "'");
                     }
                 }
             }
         }
+    }
+    
+    PopNode();
+}
+
+void TypeChecker::visit(InfiniteLoopExpression& node) {
+    PushNode(node);
+    
+    // 访问循环体
+    if (node.blockexpression) {
+        node.blockexpression->accept(*this);
+    }
+    
+    PopNode();
+}
+
+void TypeChecker::visit(PredicateLoopExpression& node) {
+    PushNode(node);
+    
+    // 访问条件表达式
+    if (node.conditions && node.conditions->expression) {
+        node.conditions->expression->accept(*this);
+    }
+    
+    // 访问循环体
+    if (node.blockexpression) {
+        node.blockexpression->accept(*this);
+    }
+    
+    PopNode();
+}
+
+void TypeChecker::visit(BinaryExpression& node) {
+    PushNode(node);
+    
+    // 访问左表达式和右表达式
+    if (node.leftexpression) {
+        node.leftexpression->accept(*this);
+    }
+    if (node.rightexpression) {
+        node.rightexpression->accept(*this);
     }
     
     PopNode();
