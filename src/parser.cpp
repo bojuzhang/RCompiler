@@ -95,10 +95,10 @@ std::shared_ptr<Expression> Parser::parsePrefixPratt() {
         }
         case Token::kreturn:
             return parseReturnExpression();
-        case Token::kUnderscore:  {
-            advance();
-            return std::make_shared<UnderscoreExpression>();
-        }
+        // case Token::kUnderscore:  {
+        //     advance();
+        //     return std::make_shared<UnderscoreExpression>();
+        // }
         
         case Token::kPathSep:
         case Token::kIDENTIFIER: 
@@ -146,6 +146,10 @@ std::shared_ptr<Expression> Parser::parseInfixPratt(std::shared_ptr<Expression> 
             // std::cerr << "INFIX: Parsing binary expression with rightbp=" << getRightTokenBP(type) << std::endl;
             int rightbp = getRightTokenBP(type);
             auto rhs = parseExpressionPratt(rightbp);
+            if (rhs == nullptr) {
+                std::cerr << "Error: no expression after operand\n";
+                return nullptr; 
+            }
             switch (type) {
                 case Token::kEq: {
                     lhs = std::make_shared<AssignmentExpression>(std::move(lhs), std::move(rhs));
@@ -176,11 +180,12 @@ std::shared_ptr<Expression> Parser::parseInfixPratt(std::shared_ptr<Expression> 
 }
 
 std::shared_ptr<BlockExpression> Parser::parseBlockExpression() {
-    if (match(Token::kleftCurly)) {
-        advance();
+    if (!match(Token::kleftCurly)) {
+        return nullptr;
     }
+    advance();
     std::vector<std::shared_ptr<Statement>> statements;
-    while (!match(Token::krightCurly)) {
+    while (pos < tokens.size() && !match(Token::krightCurly)) {
         auto tmp = pos;
         auto statement = parseStatement();
         if (statement != nullptr) {
@@ -189,12 +194,25 @@ std::shared_ptr<BlockExpression> Parser::parseBlockExpression() {
         } 
         pos = tmp;
         auto expression = parseExpression();
-        if (dynamic_cast<IfExpression*>(expression.get()) != nullptr
-         && dynamic_cast<BlockExpression*>(expression.get()) != nullptr
-         && dynamic_cast<InfiniteLoopExpression*>(expression.get()) != nullptr
-         && dynamic_cast<PredicateLoopExpression*>(expression.get()) != nullptr) {
+        if (expression == nullptr) {
+            std::cerr << "Error: not statement nor expression in blockexpression body\n";
+            return nullptr;
+        }
+        if (dynamic_cast<IfExpression*>(expression.get()) == nullptr
+         && dynamic_cast<BlockExpression*>(expression.get()) == nullptr
+         && dynamic_cast<InfiniteLoopExpression*>(expression.get()) == nullptr
+         && dynamic_cast<PredicateLoopExpression*>(expression.get()) == nullptr) {
+            if (!match(Token::krightCurly)) {
+                std::cerr << "Error: no } after tail expression\n";
+                return nullptr;
+            }
+            advance();
             return std::make_shared<BlockExpression>(std::move(statements), std::move(expression));
         }
+    }
+    if (!match(Token::krightCurly)) {
+        std::cerr << "Error: miss } after blockexpression\n";
+        return nullptr;
     }
     advance();
     return std::make_shared<BlockExpression>(std::move(statements), nullptr);
@@ -245,7 +263,12 @@ std::shared_ptr<IfExpression> Parser::parseIfExpression() {
 // }
 
 std::shared_ptr<PathExpression> Parser::parsePathExpression() {
-    return std::make_shared<PathExpression>(std::move(parseSimplePath()));
+    auto simplepath = std::move(parseSimplePath());
+    if (simplepath == nullptr) {
+        std::cerr << "Error: illegal simplepath\n";
+        return nullptr;
+    }
+    return std::make_shared<PathExpression>(simplepath);
 }
 std::shared_ptr<GroupedExpression> Parser::parseGroupedExpression() {
     if (match(Token::kleftParenthe)) {
@@ -410,7 +433,12 @@ std::shared_ptr<Statement> Parser::parseStatement() {
         return nullptr;
     }
     if (match(Token::klet)) {
-        return std::make_shared<Statement>(std::move(parseLetStatement()));
+        auto letstatement = std::move(parseLetStatement());
+        if (letstatement == nullptr) {
+            std::cerr << "Error: illegal Letstatement in statement\n";
+            return nullptr;
+        }
+        return std::make_shared<Statement>(letstatement);
     }
     if (match(Token::kconst)) {
         // 检查是否是 const 语句（在函数内部）
@@ -467,7 +495,12 @@ std::shared_ptr<SimplePath> Parser::parseSimplePath() {
     vec.push_back(std::move(parseSimplePathSegment()));
     while (match(Token::kPathSep)) {
         advance();
-        vec.push_back(std::move(parseSimplePathSegment()));
+        auto pathsegment = std::move(parseSimplePathSegment());
+        if (pathsegment == nullptr) {
+            std::cerr << "Error: illegal simplepathsegment\n";
+            return nullptr;
+        }
+        vec.push_back(pathsegment);
     }
     return std::make_shared<SimplePath>(std::move(vec));
 }
@@ -578,29 +611,34 @@ std::shared_ptr<Crate> Parser::parseCrate() {
     while (pos < tokens.size()) {
         auto item = parseItem();
         if (item == nullptr) {
-            break;
+            return nullptr;
         }
         items.push_back(std::move(item));
     }
     return std::make_shared<Crate>(std::move(items));
 }
 std::shared_ptr<Item> Parser::parseItem() {
+    std::shared_ptr<ASTNode> astnode = nullptr;
     if (match(Token::kstruct)) {
-        return std::make_shared<Item>(std::move(parseStruct()));
+        astnode = parseStruct();
     } else if (match(Token::kenum)) {
-        return std::make_shared<Item>(std::move(parseEnumeration()));
+        astnode = parseEnumeration();
     } else if (match(Token::kimpl)) {
-        return std::make_shared<Item>(std::move(parseInherentImpl()));
+        astnode = parseInherentImpl();
     } else if (match(Token::kfn)) {
-        return std::make_shared<Item>(std::move(parseFunction()));
+        astnode = parseFunction();
     } else if (match(Token::kconst)) {
         if (pos + 1 < tokens.size() && tokens[pos + 1].first == Token::kfn) {
-            return std::make_shared<Item>(std::move(parseFunction()));
+            astnode = parseFunction();
         } else {
-            return std::make_shared<Item>(std::move(parseConstantItem()));
+            astnode = parseConstantItem();
         }
     }
-    return nullptr;
+    if (astnode == nullptr) {
+        // std::cerr << "Error: illegal item\n";
+        return nullptr;
+    }
+    return std::make_shared<Item>(astnode);
 }
 
 std::shared_ptr<Function> Parser::parseFunction() {
@@ -634,6 +672,10 @@ std::shared_ptr<Function> Parser::parseFunction() {
     std::shared_ptr<BlockExpression> expression = nullptr;
     if (!match(Token::kSemi)) {
         expression = std::move(parseBlockExpression());
+        if (expression == nullptr) {
+            std::cerr << "Error: illegal blockexpression in function\n"; 
+            return nullptr;
+        }
     } else {
         advance();
     }
