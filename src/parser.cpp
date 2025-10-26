@@ -40,12 +40,11 @@ std::shared_ptr<Expression> Parser::parseExpression() {
         return parsePredicateLoopExpression();
     } else if (type == Token::kif) {
         return parseIfExpression();
-    } 
+    }
     // else if (type == Token::kmatch) {
     //     return parseMatchExpression();
-    // } 
+    // }
     else {
-        // std::cerr << "expression pratt\n";
         return parseExpressionPratt(0);
     }
 }
@@ -58,9 +57,18 @@ std::shared_ptr<Expression> Parser::parseExpressionPratt(int minbp) {
 }
 std::shared_ptr<Expression> Parser::parsePrefixPratt() {
     auto type = peek();
-    // std::cerr << "prefix: " << to_string(type) << " " << pos << "\n";
     // advance();
     switch (type) {
+        case Token::kif:
+            return parseIfExpression();
+        case Token::kwhile:
+            return parsePredicateLoopExpression();
+        case Token::kloop:
+            return parseInfiniteLoopExpression();
+        case Token::kleftCurly:
+            return parseBlockExpression();
+        case Token::kconst:
+            return parseConstBlockExpression();
         case Token::kINTEGER_LITERAL:
         case Token::kCHAR_LITERAL:
         case Token::kSTRING_LITERAL:
@@ -101,8 +109,8 @@ std::shared_ptr<Expression> Parser::parsePrefixPratt() {
         // }
         
         case Token::kPathSep:
-        case Token::kIDENTIFIER: 
-            return parsePathExpression();            
+        case Token::kIDENTIFIER:
+            return parsePathExpression();
 
         case Token::kEnd: {
             advance();
@@ -116,39 +124,34 @@ std::shared_ptr<Expression> Parser::parsePrefixPratt() {
 std::shared_ptr<Expression> Parser::parseInfixPratt(std::shared_ptr<Expression> lhs, int minbp) {
     while (true) {
         auto type = peek();
-        // std::cerr << "INFIX: " << to_string(type) << " at position " << pos << " minbp=" << minbp << std::endl;
         if (type == Token::kEnd || type == Token::krightParenthe || type == Token::krightCurly || type == Token::kRightSquare) {
-            // std::cerr << "INFIX: Breaking due to terminator: " << to_string(type) << std::endl;
             break;
         }
 
         int leftbp = getLeftTokenBP(type);
-        // std::cerr << "INFIX: leftbp for " << to_string(type) << " is " << leftbp << std::endl;
         if (leftbp < minbp) {
-            // std::cerr << "INFIX: Breaking due to precedence: leftbp " << leftbp << " < minbp " << minbp << std::endl;
             break;
         }
         advance();
 
         if (type == Token::kleftParenthe) {
-            // std::cerr << "INFIX: Parsing call expression" << std::endl;
             lhs = parseCallExpressionFromInfix(std::move(lhs));
         } else if (type == Token::kleftSquare) {
-            // std::cerr << "INFIX: Parsing index expression" << std::endl;
             lhs = parseIndexExpressionFromInfix(std::move(lhs));
+        } else if (type == Token::kleftCurly) {
+            lhs = parseStructExpressionFromInfix(std::move(lhs));
         }
         // else if (type == Token::kDot) {
         //     lhs = parseMethodCallExpression();
         // }
         else if (type == Token::kas) {
-            lhs = parseTypeCastExpression();
+            lhs = parseTypeCastExpressionFromInfix(std::move(lhs));
         } else {
-            // std::cerr << "INFIX: Parsing binary expression with rightbp=" << getRightTokenBP(type) << std::endl;
             int rightbp = getRightTokenBP(type);
             auto rhs = parseExpressionPratt(rightbp);
             if (rhs == nullptr) {
                 std::cerr << "Error: no expression after operand\n";
-                return nullptr; 
+                return nullptr;
             }
             switch (type) {
                 case Token::kEq: {
@@ -416,6 +419,12 @@ std::shared_ptr<TypeCastExpression> Parser::parseTypeCastExpression() {
     advance();
     auto typenobounds = parseType();
     return std::make_shared<TypeCastExpression>(std::move(expression), std::move(typenobounds));
+}
+
+std::shared_ptr<TypeCastExpression> Parser::parseTypeCastExpressionFromInfix(std::shared_ptr<Expression> lhs) {
+    // 此时 'as' token 已经被 advance() 消费了
+    auto typenobounds = parseType();
+    return std::make_shared<TypeCastExpression>(std::move(lhs), std::move(typenobounds));
 }
 // std::unique_ptr<MethodCallExpression> Parser::parseMethodCallExpression() {
 //     // auto expression = parseExpression();
@@ -907,11 +916,17 @@ std::shared_ptr<LetStatement> Parser::parseLetStatement() {
     }
     advance();
     auto pattern = parsePattern();
+    if (pattern == nullptr) {
+        return nullptr;
+    }
     if (!match(Token::kColon)) {
         return nullptr;
     }
     advance();
     auto type = parseType();
+    if (type == nullptr) {
+        return nullptr;
+    }
     std::shared_ptr<Expression> expression = nullptr;
     if (match(Token::kEq)) {
         advance();
@@ -1067,3 +1082,89 @@ std::shared_ptr<IdentifierPattern> Parser::parseIdentifierPattern() {
 //     }
 //     return std::make_unique<PathPattern>(std::move(expression));
 // }
+
+// 新增：结构体表达式解析方法
+std::shared_ptr<StructExpression> Parser::parseStructExpressionFromInfix(std::shared_ptr<Expression> path) {
+    // 此时左大括号已经被 advance() 消费了
+    // 检查是否有结构体字段
+    std::shared_ptr<StructExprFields> structExprFields = nullptr;
+    
+    // 检查是否为空的结构体表达式 {}
+    if (match(Token::krightCurly)) {
+        advance();
+        auto pathInExpr = std::make_shared<PathInExpression>();
+        return std::make_shared<StructExpression>(pathInExpr, nullptr);
+    }
+    
+    // 解析结构体字段
+    structExprFields = parseStructExprFields();
+    if (structExprFields == nullptr) {
+        return nullptr;
+    }
+    
+    // 检查右大括号
+    if (!match(Token::krightCurly)) {
+        return nullptr;
+    }
+    advance();
+    
+    auto pathInExpr = std::make_shared<PathInExpression>();
+    return std::make_shared<StructExpression>(pathInExpr, structExprFields);
+}
+
+std::shared_ptr<StructExprFields> Parser::parseStructExprFields() {
+    std::vector<std::shared_ptr<StructExprField>> fields;
+    
+    // 解析第一个字段
+    auto field = parseStructExprField();
+    if (field == nullptr) {
+        return nullptr;
+    }
+    fields.push_back(std::move(field));
+    
+    // 解析后续字段
+    while (match(Token::kComma)) {
+        advance();
+        
+        // 检查是否是末尾的逗号
+        if (match(Token::krightCurly)) {
+            break;
+        }
+        
+        auto nextField = parseStructExprField();
+        if (nextField == nullptr) {
+            return nullptr;
+        }
+        fields.push_back(std::move(nextField));
+    }
+    
+    return std::make_shared<StructExprFields>(std::move(fields), nullptr);
+}
+
+std::shared_ptr<StructExprField> Parser::parseStructExprField() {
+    // 解析标识符
+    if (!match(Token::kIDENTIFIER)) {
+        return nullptr;
+    }
+    auto identifier = getstring();
+    advance();
+    
+    // 解析冒号
+    if (!match(Token::kColon)) {
+        return nullptr;
+    }
+    advance();
+    
+    // 解析表达式
+    auto expression = parseExpression();
+    if (expression == nullptr) {
+        return nullptr;
+    }
+    
+    return std::make_shared<StructExprField>(identifier, -1, std::move(expression));
+}
+
+std::shared_ptr<StructBase> Parser::parseStructBase() {
+    // 暂时不实现结构体基础表达式
+    return nullptr;
+}

@@ -14,6 +14,7 @@ private:
     enum BindingPower {
         PATH_ACCESS = 200,
         CALL_INDEX = 190,
+        STRUCT_EXPR = 185,  // Added for struct expressions
         UNARY = 180,
         CAST = 170,
         MULT_DIV_MOD = 160,
@@ -37,6 +38,9 @@ private:
             case Token::kleftParenthe:
             case Token::kleftSquare:
                 return CALL_INDEX;
+                
+            case Token::kleftCurly:
+                return STRUCT_EXPR;
                 
             case Token::kas:
                 return CAST;
@@ -155,8 +159,12 @@ public:
     std::shared_ptr<IndexExpression> parseIndexExpression();
     std::shared_ptr<IndexExpression> parseIndexExpressionFromInfix(std::shared_ptr<Expression> lhs);
     std::shared_ptr<TypeCastExpression> parseTypeCastExpression();
+    std::shared_ptr<TypeCastExpression> parseTypeCastExpressionFromInfix(std::shared_ptr<Expression> lhs);
     std::shared_ptr<MethodCallExpression> parseMethodCallExpression();
-    
+    std::shared_ptr<StructExpression> parseStructExpressionFromInfix(std::shared_ptr<Expression> path);
+    std::shared_ptr<StructExprFields> parseStructExprFields();
+    std::shared_ptr<StructExprField> parseStructExprField();
+    std::shared_ptr<StructBase> parseStructBase();
     
     std::shared_ptr<Crate> parseCrate();
     std::shared_ptr<Item> parseItem();
