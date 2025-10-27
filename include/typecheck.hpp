@@ -183,5 +183,10 @@ private:
     void ReportMutabilityError(const std::string& name, const std::string& errorType, ASTNode* context);
     
     void CheckArraySizeMatch(ArrayTypeWrapper& declaredType, ArrayExpression& arrayExpr);
+    void CheckArraySizeMatchForAnyExpression(ArrayTypeWrapper& declaredType, Expression& initExpr);
     int64_t EvaluateArraySize(Expression& sizeExpr);
+    
+    // 二元运算符类型检查辅助函数
+    bool CanPerformBinaryOperation(std::shared_ptr<SemanticType> leftType, std::shared_ptr<SemanticType> rightType, Token op);
+    std::shared_ptr<SemanticType> GetBinaryOperationResultType(std::shared_ptr<SemanticType> leftType, std::shared_ptr<SemanticType> rightType, Token op);
 };

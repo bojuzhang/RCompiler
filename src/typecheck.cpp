@@ -572,6 +572,86 @@ bool TypeChecker::AreTypesCompatible(std::shared_ptr<SemanticType> expected, std
     return false;
 }
 
+bool TypeChecker::CanPerformBinaryOperation(std::shared_ptr<SemanticType> leftType, std::shared_ptr<SemanticType> rightType, Token op) {
+    if (!leftType || !rightType) return false;
+    
+    // 对于算术运算符、比较运算符和位运算符，使用 AreTypesCompatible 检查双向兼容性
+    if (op == Token::kPlus || op == Token::kMinus || op == Token::kStar || op == Token::kSlash ||
+        op == Token::kEqEq || op == Token::kNe || op == Token::kLt || op == Token::kGt ||
+        op == Token::kLe || op == Token::kGe ||
+        op == Token::kAnd || op == Token::kOr || op == Token::kCaret ||
+        op == Token::kShl || op == Token::kShr) {
+        // 检查左操作数是否可以与右操作数运算，或者右操作数是否可以与左操作数运算
+        return AreTypesCompatible(leftType, rightType) || AreTypesCompatible(rightType, leftType);
+    }
+    
+    // 逻辑运算符要求布尔类型
+    if (op == Token::kAndAnd || op == Token::kOrOr) {
+        return leftType->tostring() == "bool" && rightType->tostring() == "bool";
+    }
+    
+    return false;
+}
+
+std::shared_ptr<SemanticType> TypeChecker::GetBinaryOperationResultType(std::shared_ptr<SemanticType> leftType, std::shared_ptr<SemanticType> rightType, Token op) {
+    if (!leftType || !rightType) return nullptr;
+    
+    std::string leftStr = leftType->tostring();
+    std::string rightStr = rightType->tostring();
+    
+    // 对于比较运算符和逻辑运算符，结果是布尔类型
+    if (op == Token::kEqEq || op == Token::kNe || op == Token::kLt || op == Token::kGt ||
+        op == Token::kLe || op == Token::kGe || op == Token::kAndAnd || op == Token::kOrOr) {
+        return std::make_shared<SimpleType>("bool");
+    }
+    
+    // 对于算术运算符，返回限制更强的类型
+    if (op == Token::kPlus || op == Token::kMinus || op == Token::kStar || op == Token::kSlash) {
+        // 如果类型相同，返回该类型
+        if (leftStr == rightStr) {
+            return leftType;
+        }
+        
+        // 定义类型强度顺序（限制更强的类型排在后面）
+        // Int < SignedInt/UnsignedInt < 具体类型(i32, u32, isize, usize)
+        
+        // 如果其中一个是 Int，返回另一个类型（因为另一个更具体）
+        if (leftStr == "Int") return rightType;
+        if (rightStr == "Int") return leftType;
+        
+        // 如果其中一个是 SignedInt，返回另一个类型（如果另一个是具体类型）
+        if (leftStr == "SignedInt") {
+            if (rightStr == "i32" || rightStr == "isize") return rightType;
+            return leftType; // 否则返回 SignedInt
+        }
+        if (rightStr == "SignedInt") {
+            if (leftStr == "i32" || leftStr == "isize") return leftType;
+            return rightType; // 否则返回 SignedInt
+        }
+        
+        // 如果其中一个是 UnsignedInt，返回另一个类型（如果另一个是具体类型）
+        if (leftStr == "UnsignedInt") {
+            if (rightStr == "u32" || rightStr == "usize") return rightType;
+            return leftType; // 否则返回 UnsignedInt
+        }
+        if (rightStr == "UnsignedInt") {
+            if (leftStr == "u32" || leftStr == "usize") return leftType;
+            return rightType; // 否则返回 UnsignedInt
+        }
+        
+        // 如果都是具体类型但不相同，这种情况应该在前面的检查中被拒绝
+        // 但为了安全起见，返回左操作数类型
+        return leftType;
+    }
+    
+    // 对于位运算符，返回左操作数类型
+    if (op == Token::kAnd || op == Token::kOr || op == Token::kCaret || op == Token::kShl || op == Token::kShr) {
+        return leftType;
+    }
+    
+    return nullptr;
+}
+
 std::shared_ptr<SemanticType> TypeChecker::InferExpressionType(Expression& expr) {
     // 检查缓存
     auto nodeIt = nodeTypeMap.find(&expr);
@@ -638,35 +718,15 @@ std::shared_ptr<SemanticType> TypeChecker::InferBinaryExpressionType(BinaryExpre
 
     // std::cerr << "test binary " << leftType->tostring() << " " << rightType->tostring() << " " << to_string(expr.binarytype) << "\n";
     
-    switch (expr.binarytype) {
-        case Token::kPlus:
-        case Token::kMinus:
-        case Token::kStar:
-        case Token::kSlash:
-            return leftType;
-            
-        case Token::kShl:
-        case Token::kShr:
-        case Token::kAnd:
-        case Token::kOr:
-        case Token::kCaret:
-            return leftType;
-            
-        case Token::kEqEq:
-        case Token::kNe:
-        case Token::kLt:
-        case Token::kGt:
-        case Token::kLe:
-        case Token::kGe:
-            return std::make_shared<SimpleType>("bool");
-            
-        case Token::kAndAnd:
-        case Token::kOrOr:
-            return std::make_shared<SimpleType>("bool");
-            
-        default:
-            return nullptr;
+    // 检查是否可以进行二元运算
+    if (!CanPerformBinaryOperation(leftType, rightType, expr.binarytype)) {
+        ReportError("Cannot perform binary operation '" + to_string(expr.binarytype) +
+                   "' between types '" + leftType->tostring() + "' and '" + rightType->tostring() + "'");
+        return nullptr;
     }
+    
+    // 返回运算结果类型
+    return GetBinaryOperationResultType(leftType, rightType, expr.binarytype);
 }
 
 std::shared_ptr<SemanticType> TypeChecker::InferCallExpressionType(CallExpression& expr) {
@@ -1537,9 +1597,7 @@ void TypeChecker::visit(LetStatement& node) {
             }
             // 特殊处理数组类型：进行大小验证
             if (auto arrayType = dynamic_cast<ArrayTypeWrapper*>(declaredType.get())) {
-                if (auto arrayExpr = dynamic_cast<ArrayExpression*>(node.expression.get())) {
-                    CheckArraySizeMatch(*arrayType, *arrayExpr);
-                }
+                CheckArraySizeMatchForAnyExpression(*arrayType, *node.expression);
             }
         } else {
             // 没有声明类型，使用普通推断
@@ -1628,6 +1686,97 @@ void TypeChecker::CheckArraySizeMatch(ArrayTypeWrapper& declaredType, ArrayExpre
                 // 类型兼容性已经在之前的AreTypesCompatible检查中验证过了
             }
         }
+    }
+}
+
+void TypeChecker::CheckArraySizeMatchForAnyExpression(ArrayTypeWrapper& declaredType, Expression& initExpr) {
+    // 获取声明的数组大小
+    auto sizeExpr = declaredType.GetSizeExpression();
+    if (!sizeExpr) {
+        return;
+    }
+    
+    int64_t declaredSize = EvaluateArraySize(*sizeExpr);
+    if (declaredSize < 0) {
+        ReportError("Invalid array size expression in declaration");
+        return;
+    }
+    
+    // 获取初始化表达式的实际大小
+    int64_t actualSize = -1;
+    
+    if (auto arrayExpr = dynamic_cast<ArrayExpression*>(&initExpr)) {
+        // 如果是数组表达式，复用原有的 CheckArraySizeMatch 函数
+        // 这样可以保留原有实现对于多维数组的递归检查
+        CheckArraySizeMatch(declaredType, *arrayExpr);
+        return;
+    } else if (auto pathExpr = dynamic_cast<PathExpression*>(&initExpr)) {
+        // 如果是路径表达式（变量引用），获取变量的类型
+        std::string varName;
+        if (pathExpr->simplepath && !pathExpr->simplepath->simplepathsegements.empty()) {
+            varName = pathExpr->simplepath->simplepathsegements[0]->identifier;
+        }
+        
+        if (varName.empty()) {
+            ReportError("Invalid variable name in array initialization");
+            return;
+        }
+        
+        auto symbol = FindSymbol(varName);
+        if (!symbol) {
+            ReportError("Undefined variable: " + varName);
+            return;
+        }
+        
+        if (!symbol->type) {
+            ReportError("Variable '" + varName + "' has no type information");
+            return;
+        }
+        
+        // 检查变量类型是否为数组
+        if (auto varArrayType = dynamic_cast<ArrayTypeWrapper*>(symbol->type.get())) {
+            auto varSizeExpr = varArrayType->GetSizeExpression();
+            if (varSizeExpr) {
+                actualSize = EvaluateArraySize(*varSizeExpr);
+                if (actualSize < 0) {
+                    ReportError("Cannot evaluate size of array variable: " + varName);
+                    return;
+                }
+            } else {
+                ReportError("Array variable '" + varName + "' has no size information");
+                return;
+            }
+        } else {
+            ReportError("Variable '" + varName + "' is not an array type");
+            return;
+        }
+    } else {
+        // 对于其他类型的表达式，目前不支持数组大小检查
+        // 但我们可以尝试推断表达式类型，如果是数组类型则检查大小
+        auto exprType = InferExpressionType(initExpr);
+        if (exprType) {
+            auto exprArrayType = dynamic_cast<ArrayTypeWrapper*>(exprType.get());
+            if (exprArrayType) {
+                auto exprSizeExpr = exprArrayType->GetSizeExpression();
+                if (exprSizeExpr) {
+                    actualSize = EvaluateArraySize(*exprSizeExpr);
+                    if (actualSize < 0) {
+                        ReportError("Cannot evaluate size of array expression");
+                        return;
+                    }
+                }
+            } else {
+                // 不是数组表达式，无法进行大小检查
+                return;
+            }
+        }
+    }
+    
+    // 比较大小
+    if (actualSize >= 0 && declaredSize != actualSize) {
+        ReportError("Array size mismatch: declared size " + std::to_string(declaredSize) +
+                   ", but initializer has " + std::to_string(actualSize) + " elements");
+        return;
     }
 }
 
