@@ -1,0 +1,68 @@
+
+Builtin methods
+Builtin methods are provided by the compiler on specific receiver types. They are always available and require no trait imports or declarations.
+
+to_string
+fn to_string(&self) -> String
+Available on: u32, usize
+
+Returns the decimal string representation of the receiver value. Does not allocate beyond the returned String; does not modify the receiver. This method can be called on both immutable and mutable references.
+
+let x: u32 = 10;
+let sx: String = x.to_string();
+let y: usize = 42;
+let sy: String = y.to_string();
+
+let mut z: u32 = 15;
+let sz: String = z.to_string(); // works on mutable values too
+
+println(sx.as_str());
+println(sy.as_str());
+println(sz.as_str());
+as_str and as_mut_str
+impl String {
+  fn as_str(&self) -> &str
+  fn as_mut_str(&mut self) -> &mut str
+}
+Available on: String
+
+Returns a string slice view (&str for as_str while &mut str for as_mut_str) of the same underlying buffer; no allocation. The returned slice is valid as long as the original String is valid and not mutated in a way that would reallocate. Note that as_mut_str only accepts mutable references.
+
+let s: String = getString();
+let p: &str = s.as_str();
+let mut s_mut: String = getString();
+let p_mut: &mut str = s_mut.as_mut_str();
+println(p);
+println(p_mut);
+len
+fn len(&self) -> usize
+Available on: [T; N], &[T; N], &mut [T; N], String, &str, &mut str
+
+For String, &str, and &mut str, returns the number of bytes of the string (not character count). For arrays [T; N] and array references &[T; N], &mut [T; N], returns the number of elements.
+
+For compile-time known sizes (e.g., arrays), the call is required to have no runtime overhead.
+
+For array references and strings, the operation is constant time.
+
+let a: [i32; 3] = [1, 2, 3];
+let n: usize = a.len();           // 3
+
+let s: String = getString();
+let bytes: usize = s.len();       // byte length of the string
+
+let p: &str = "hello";
+let k: usize = p.len();           // 5
+
+let a_ref: &[i32; 3] = &a;
+let m: usize = a_ref.len();       // 3
+
+let mut a_mut: [i32; 3] = [1, 2, 3];
+let a_mut_ref: &mut [i32; 3] = &mut a_mut;
+let m_mut: usize = a_mut_ref.len(); // 3
+
+let mut s_mut: String = getString();
+let p_mut: &mut str = s_mut.as_mut_str();
+let k_mut: usize = p_mut.len();  // byte length of the mutable string slice
+
+// Printing a usize requires an explicit cast to i32 for the builtin printInt/printlnInt
+printlnInt(n as i32);

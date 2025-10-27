@@ -37,11 +37,31 @@ void SymbolCollector::BeginCollection() {
 
 void SymbolCollector::visit(Crate& node) {
     PushNode(node);
+    
+    // 第一遍：收集所有结构体、枚举、函数等符号
     for (const auto& item : node.items) {
         if (item) {
-            item->accept(*this);
+            if (auto structItem = dynamic_cast<StructStruct*>(item->item.get())) {
+                structItem->accept(*this);
+            } else if (auto enumItem = dynamic_cast<Enumeration*>(item->item.get())) {
+                enumItem->accept(*this);
+            } else if (auto funcItem = dynamic_cast<Function*>(item->item.get())) {
+                funcItem->accept(*this);
+            } else if (auto constItem = dynamic_cast<ConstantItem*>(item->item.get())) {
+                constItem->accept(*this);
+            }
         }
     }
+    
+    // 第二遍：处理 impl 块
+    for (const auto& item : node.items) {
+        if (item) {
+            if (auto implItem = dynamic_cast<InherentImpl*>(item->item.get())) {
+                implItem->accept(*this);
+            }
+        }
+    }
+    
     PopNode();
 }
 
@@ -89,8 +109,10 @@ void SymbolCollector::visit(ConstantItem& node) {
 void SymbolCollector::visit(StructStruct& node) {
     PushNode(node);
     
-    root->EnterScope(Scope::ScopeType::Struct, &node);
+    // 修复：先在全局作用域中插入结构体符号，然后再进入结构体作用域
     CollectStructSymbol(node);
+    
+    root->EnterScope(Scope::ScopeType::Struct, &node);
     CollectFieldSymbols(node);
     
     root->ExitScope();
@@ -390,6 +412,11 @@ void SymbolCollector::CollectVariantSymbols(Enumeration& node) {
 
 void SymbolCollector::CollectImplSymbol(InherentImpl& node) {
     auto targetType = GetImplTargetType(node);
+    if (!targetType) {
+        ReportError("Invalid target type in impl");
+        return;
+    }
+    
     std::string targetTypeName = targetType->tostring();
     std::string implName = "impl_" + targetTypeName + "_" +
                           std::to_string(reinterpret_cast<uintptr_t>(&node));
@@ -402,14 +429,17 @@ void SymbolCollector::CollectImplSymbol(InherentImpl& node) {
     }
     root->InsertSymbol(implName, implSymbol);
     
-    // 查找对应的StructSymbol
-    auto structSymbol = std::dynamic_pointer_cast<StructSymbol>(root->LookupSymbol(targetTypeName));
+    // 修复：在全局作用域中查找对应的StructSymbol
+    auto globalScope = root->GetRootScope();
+    auto structSymbol = std::dynamic_pointer_cast<StructSymbol>(globalScope->Lookup(targetTypeName));
     if (!structSymbol) {
         ReportError("Cannot find struct '" + targetTypeName + "' for impl");
+        return;
     }
     
     root->EnterScope(Scope::ScopeType::Impl, &node);
     
+    // 修复：创建 Self 类型别名，指向目标类型
     auto selfTypeSymbol = std::make_shared<Symbol>(
         "Self", SymbolKind::TypeAlias, targetType
     );
@@ -457,6 +487,26 @@ void SymbolCollector::CollectAssociatedItem(AssociatedItem& item,
         true  // 是方法
     );
     
+    // 修复：检查第一个参数是否为 self 参数
+    if (function.functionparameters && !function.functionparameters->functionparams.empty()) {
+        auto firstParam = function.functionparameters->functionparams[0];
+        if (auto identPattern = dynamic_cast<IdentifierPattern*>(firstParam->patternnotopalt.get())) {
+            if (identPattern->identifier == "self") {
+                // 这是 self 参数，标记为方法
+                funcSymbol->isMethod = true;
+                // self 参数的类型应该是 impl 的目标类型
+                auto selfType = GetImplTargetType(*static_cast<InherentImpl*>(GetCurrentNode()));
+                if (selfType) {
+                    auto selfSymbol = std::make_shared<Symbol>(
+                        "self", SymbolKind::Variable, selfType, false, &function
+                    );
+                    funcSymbol->parameters.push_back(selfSymbol);
+                    funcSymbol->parameterTypes.push_back(selfType);
+                }
+            }
+        }
+    }
+    
     if (!root->InsertSymbol(funcName, funcSymbol)) {
         ReportError("Method '" + funcName + "' is already defined in this impl");
         return;
@@ -497,8 +547,10 @@ void SymbolCollector::CollectAssociatedConstant(ConstantItem& constant,
 
 std::shared_ptr<SemanticType> SymbolCollector::GetImplTargetType(InherentImpl& node) {
     // 从impl节点中提取目标类型
-    // 简化实现：假设可以从node中获取类型信息
-    return CreateSimpleType("UnknownType");
+    if (node.type) {
+        return ResolveTypeFromNode(*node.type);
+    }
+    return nullptr;
 }
 
 std::string SymbolCollector::GetTraitNameFromImpl(InherentImpl& node) {
@@ -526,11 +578,7 @@ std::shared_ptr<SemanticType> SymbolCollector::ResolveTypeFromNode(Type& node) {
         if (typePath->simplepathsegement) {
             std::string typeName = typePath->simplepathsegement->identifier;
             if (!typeName.empty()) {
-                // 检查类型是否存在
-                if (!ValidateTypeExistence(typeName)) {
-                    ReportError("Type '" + typeName + "' does not exist in current scope");
-                    return CreateSimpleType("error_type");
-                }
+                // 修复：在符号收集阶段，不要检查类型是否存在，因为可能正在收集中
                 return CreateSimpleType(typeName);
             }
         }

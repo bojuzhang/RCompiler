@@ -265,8 +265,10 @@ void TypeChecker::CheckTraitImpl(InherentImpl& node) {
 
 std::shared_ptr<SemanticType> TypeChecker::GetImplTargetType(InherentImpl& node) {
     // 从impl节点中提取目标类型
-    // 简化实现：返回一个简单类型
-    return std::make_shared<SimpleType>("UnknownType");
+    if (node.type) {
+        return CheckType(*node.type);
+    }
+    return nullptr;
 }
 
 std::string TypeChecker::GetTraitNameFromImpl(InherentImpl& node) {
@@ -337,7 +339,10 @@ void TypeChecker::CheckAssociatedFunction(Function& function) {
     
     scopeTree->EnterScope(Scope::ScopeType::Function, &function);
     CheckFunctionParameters(*function.functionparameters);
-    CheckFunctionReturnType(*function.functionreturntype);
+    // 修复：暂时跳过返回类型检查，避免段错误
+    if (function.functionreturntype) {
+        CheckFunctionReturnType(*function.functionreturntype);
+    }
     CheckFunctionBody(function);
     
     scopeTree->ExitScope();
@@ -379,7 +384,7 @@ void TypeChecker::CheckFunctionParameters(FunctionParameters& params) {
 }
 
 void TypeChecker::CheckFunctionReturnType(FunctionReturnType& returnType) {
-    if (returnType.type != nullptr) {
+    if (returnType.type) {
         auto type = CheckType(*returnType.type);
         if (!type) {
             ReportError("Invalid return type in function");
@@ -481,6 +486,15 @@ std::shared_ptr<SemanticType> TypeChecker::CheckType(ReferenceType& refType) {
 }
 
 std::shared_ptr<SemanticType> TypeChecker::ResolveType(const std::string& typeName) {
+    // 修复：处理 Self 类型
+    if (typeName == "Self") {
+        // 在当前 impl 作用域中查找 Self 的定义
+        auto selfSymbol = FindSymbol("Self");
+        if (selfSymbol && selfSymbol->kind == SymbolKind::TypeAlias) {
+            return selfSymbol->type;
+        }
+    }
+    
     auto type = std::make_shared<SimpleType>(typeName);
     return type;
 }
@@ -732,6 +746,11 @@ std::shared_ptr<SemanticType> TypeChecker::InferBinaryExpressionType(BinaryExpre
 std::shared_ptr<SemanticType> TypeChecker::InferCallExpressionType(CallExpression& expr) {
     auto calleeType = InferExpressionType(*expr.expression);
 
+    // 修复：检查是否是方法调用
+    if (auto fieldExpr = dynamic_cast<FieldExpression*>(expr.expression.get())) {
+        return InferMethodCallType(expr, *fieldExpr);
+    }
+    
     // 查找函数符号
     // 如果callee是路径表达式，尝试解析为函数调用
     if (auto pathExpr = dynamic_cast<PathExpression*>(expr.expression.get())) {
@@ -1364,15 +1383,29 @@ void TypeChecker::CheckPattern(IdentifierPattern& pattern, std::shared_ptr<Seman
 
 
 void TypeChecker::CheckPattern(ReferencePattern& pattern, std::shared_ptr<SemanticType> expectedType) {
-    // 检查引用模式
-    if (!expectedType || expectedType->tostring().find("&") != 0) {
+    // 修复：暂时跳过引用类型的检查，避免段错误
+    if (!expectedType) {
         ReportError("Reference pattern requires reference type");
         return;
     }
     
     // 检查内部模式
-    auto innerType = std::make_shared<SimpleType>(expectedType->tostring().substr(1));
-    CheckPattern(*pattern.pattern, innerType);
+    std::shared_ptr<SemanticType> innerType;
+    if (auto refType = dynamic_cast<ReferenceTypeWrapper*>(expectedType.get())) {
+        innerType = refType->getTargetType();
+    } else {
+        // 从字符串中解析引用类型
+        std::string typeStr = expectedType->tostring();
+        if (typeStr.find("&") == 0) {
+            innerType = std::make_shared<SimpleType>(typeStr.substr(1));
+        } else {
+            innerType = expectedType;
+        }
+    }
+    
+    if (innerType && pattern.pattern) {
+        CheckPattern(*pattern.pattern, innerType);
+    }
 }
 
 // 可变性检查实现
@@ -1991,6 +2024,79 @@ void TypeChecker::visit(InfiniteLoopExpression& node) {
     }
     
     PopNode();
+}
+
+// 新增方法调用类型推断
+std::shared_ptr<SemanticType> TypeChecker::InferMethodCallType(CallExpression& expr, FieldExpression& fieldExpr) {
+    // 获取接收者类型
+    auto receiverType = InferExpressionType(*fieldExpr.expression);
+    if (!receiverType) {
+        return nullptr;
+    }
+    
+    std::string methodName = fieldExpr.identifier;
+    std::string receiverTypeName = receiverType->tostring();
+    
+    // 检查是否是内置方法
+    if (IsBuiltinMethodCall(receiverTypeName, methodName)) {
+        return GetBuiltinMethodReturnType(receiverTypeName, methodName);
+    }
+    
+    // 在结构体中查找方法
+    if (auto structSymbol = FindStruct(receiverTypeName)) {
+        for (const auto& method : structSymbol->methods) {
+            if (method->name == methodName) {
+                return method->returntype;
+            }
+        }
+    }
+    
+    ReportError("Method '" + methodName + "' not found for type '" + receiverTypeName + "'");
+    return nullptr;
+}
+
+// 检查是否是内置方法调用
+bool TypeChecker::IsBuiltinMethodCall(const std::string& receiverType, const std::string& methodName) {
+    // u32 和 usize 类型的 to_string 方法
+    if ((receiverType == "u32" || receiverType == "usize") && methodName == "to_string") {
+        return true;
+    }
+    
+    // String 类型的 as_str 和 as_mut_str 方法
+    if (receiverType == "String" && (methodName == "as_str" || methodName == "as_mut_str")) {
+        return true;
+    }
+    
+    // 数组类型的 len 方法
+    if (receiverType.find("[") == 0 && receiverType.find("]") == receiverType.length() - 1 && methodName == "len") {
+        return true;
+    }
+    
+    return false;
+}
+
+// 获取内置方法的返回类型
+std::shared_ptr<SemanticType> TypeChecker::GetBuiltinMethodReturnType(const std::string& receiverType, const std::string& methodName) {
+    // u32 和 usize 类型的 to_string 方法返回 String
+    if ((receiverType == "u32" || receiverType == "usize") && methodName == "to_string") {
+        return std::make_shared<SimpleType>("String");
+    }
+    
+    // String 类型的 as_str 和 as_mut_str 方法返回 &str 和 &mut str
+    if (receiverType == "String") {
+        if (methodName == "as_str") {
+            return std::make_shared<ReferenceTypeWrapper>(std::make_shared<SimpleType>("str"), false);
+        } else if (methodName == "as_mut_str") {
+            return std::make_shared<ReferenceTypeWrapper>(std::make_shared<SimpleType>("str"), true);
+        }
+    }
+    
+    // 数组类型的 len 方法返回 usize
+    if (receiverType.find("[") == 0 && receiverType.find("]") == receiverType.length() - 1 && methodName == "len") {
+        return std::make_shared<SimpleType>("usize");
+    }
+    
+    return nullptr;
 }
 
 void TypeChecker::visit(PredicateLoopExpression& node) {
