@@ -145,6 +145,9 @@ public:
 class FunctionParameters : public ASTNode {
 public:
     std::vector<std::shared_ptr<FunctionParam>> functionparams;
+    bool hasSelfParam = false;
+    bool selfIsRef = false;
+    bool selfIsMut = false;
 public:
     explicit FunctionParameters(std::vector<std::shared_ptr<FunctionParam>>&& functionparams);
     

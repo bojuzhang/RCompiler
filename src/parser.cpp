@@ -110,6 +110,7 @@ std::shared_ptr<Expression> Parser::parsePrefixPratt() {
         
         case Token::kPathSep:
         case Token::kIDENTIFIER:
+        case Token::kself:
             return parsePathExpression();
 
         case Token::kEnd: {
@@ -140,10 +141,15 @@ std::shared_ptr<Expression> Parser::parseInfixPratt(std::shared_ptr<Expression> 
             lhs = parseIndexExpressionFromInfix(std::move(lhs));
         } else if (type == Token::kleftCurly) {
             lhs = parseStructExpressionFromInfix(std::move(lhs));
+        } else if (type == Token::kDot) {
+            // 处理字段访问表达式
+            if (!match(Token::kIDENTIFIER)) {
+                return nullptr;
+            }
+            auto identifier = getstring();
+            advance();
+            lhs = std::make_shared<FieldExpression>(std::move(lhs), identifier);
         }
-        // else if (type == Token::kDot) {
-        //     lhs = parseMethodCallExpression();
-        // }
         else if (type == Token::kas) {
             lhs = parseTypeCastExpressionFromInfix(std::move(lhs));
         } else {
@@ -278,6 +284,9 @@ std::shared_ptr<GroupedExpression> Parser::parseGroupedExpression() {
         advance();
     }
     auto expression = parseExpression();
+    if (expression == nullptr) {
+        return nullptr;
+    }
     if (!match(Token::krightParenthe)) {
         return nullptr;
     }
@@ -467,16 +476,20 @@ std::shared_ptr<Statement> Parser::parseStatement() {
         // 如果不是 const 语句，回退
         pos = tmp;
     }
+    
+    // 先尝试解析表达式语句，因为像 while、if、loop 等都是表达式
+    auto expressionstatement = parseExpressionStatement();
+    if (expressionstatement != nullptr) {
+        return std::make_shared<Statement>(std::move(expressionstatement));
+    }
+    
+    // 只有在表达式解析失败时，才尝试解析 item
     size_t tmp = pos;
     auto item = parseItem();
     if (item != nullptr) {
         return std::make_shared<Statement>(std::move(item));
     }
     pos = tmp;
-    auto expressionstatement = parseExpressionStatement();
-    if (expressionstatement != nullptr) {
-        return std::make_shared<Statement>(std::move(expressionstatement));
-    }
     return nullptr;
 }
 std::shared_ptr<Conditions> Parser::parseConditions() {
@@ -643,8 +656,12 @@ std::shared_ptr<Item> Parser::parseItem() {
             astnode = parseConstantItem();
         }
     }
+    // 如果遇到 }，说明块结束，不应该报错
+    if (match(Token::krightCurly)) {
+        return nullptr;
+    }
     if (astnode == nullptr) {
-        // std::cerr << "Error: illegal item\n";
+        std::cerr << "Error: illegal item at pos " << pos << ", token: " << (pos < tokens.size() ? tokens[pos].second : "EOF") << "\n";
         return nullptr;
     }
     return std::make_shared<Item>(astnode);
@@ -682,7 +699,7 @@ std::shared_ptr<Function> Parser::parseFunction() {
     if (!match(Token::kSemi)) {
         expression = std::move(parseBlockExpression());
         if (expression == nullptr) {
-            std::cerr << "Error: illegal blockexpression in function\n"; 
+            std::cerr << "Error: illegal blockexpression in function\n";
             return nullptr;
         }
     } else {
@@ -773,6 +790,9 @@ std::shared_ptr<InherentImpl> Parser::parseInherentImpl() {
     }
     advance();
     auto type = parseType();
+    if (type == nullptr) {
+        return nullptr;
+    }
     if (!match(Token::kleftCurly)) {
         return nullptr;
     }
@@ -781,6 +801,10 @@ std::shared_ptr<InherentImpl> Parser::parseInherentImpl() {
     while (!match(Token::krightCurly)) {
         auto item = parseAssociatedItem();
         if (item == nullptr) {
+            // 如果遇到 }，说明 impl 块结束，不应该报错
+            if (match(Token::krightCurly)) {
+                break;
+            }
             return nullptr;
         }
         items.push_back(std::move(item));
@@ -791,11 +815,36 @@ std::shared_ptr<InherentImpl> Parser::parseInherentImpl() {
 
 std::shared_ptr<FunctionParameters> Parser::parseFunctionParameters() {
     std::vector<std::shared_ptr<FunctionParam>> vec;
+    bool hasSelf = false;
+    bool selfIsRef = false;
+    bool selfIsMut = false;
+    
     auto param = parseFunctionParam();
     if (param == nullptr) {
         return nullptr;
     }
+    
+    // 检查是否是 self 参数
+    auto refPattern = dynamic_cast<ReferencePattern*>(param->patternnotopalt.get());
+    auto identPattern = dynamic_cast<IdentifierPattern*>(param->patternnotopalt.get());
+    
+    if (refPattern != nullptr) {
+        auto innerPattern = refPattern->pattern;
+        if (innerPattern != nullptr) {
+            auto innerIdentPattern = dynamic_cast<IdentifierPattern*>(innerPattern.get());
+            if (innerIdentPattern != nullptr && innerIdentPattern->identifier == "self") {
+                hasSelf = true;
+                selfIsRef = true;
+                selfIsMut = refPattern->hasmut;
+            }
+        }
+    } else if (identPattern != nullptr && identPattern->identifier == "self") {
+        hasSelf = true;
+        selfIsMut = identPattern->hasmut;
+    }
+    
     vec.push_back(std::move(param));
+    
     while (match(Token::kComma)) {
         advance();
         auto param = parseFunctionParam();
@@ -807,7 +856,13 @@ std::shared_ptr<FunctionParameters> Parser::parseFunctionParameters() {
     if (match(Token::kComma)) {
         advance();
     }
-    return std::make_shared<FunctionParameters>(std::move(vec));
+    
+    auto functionParams = std::make_shared<FunctionParameters>(std::move(vec));
+    functionParams->hasSelfParam = hasSelf;
+    functionParams->selfIsRef = selfIsRef;
+    functionParams->selfIsMut = selfIsMut;
+    
+    return functionParams;
 }
 std::shared_ptr<FunctionReturnType> Parser::parseFunctionReturnType() {
     if (!match(Token::kRArrow)) {
@@ -822,6 +877,33 @@ std::shared_ptr<FunctionParam> Parser::parseFunctionParam() {
     if (pattern == nullptr) {
         return nullptr;
     }
+    
+    // 检查是否是特殊的 self 模式（&self, &mut self, self, mut self）
+    // 这些模式不需要类型注解
+    auto refPattern = dynamic_cast<ReferencePattern*>(pattern.get());
+    auto identPattern = dynamic_cast<IdentifierPattern*>(pattern.get());
+    bool isSpecialSelfPattern = false;
+    
+    if (refPattern != nullptr) {
+        auto innerPattern = refPattern->pattern;
+        if (innerPattern != nullptr) {
+            auto innerIdentPattern = dynamic_cast<IdentifierPattern*>(innerPattern.get());
+            if (innerIdentPattern != nullptr && innerIdentPattern->identifier == "self") {
+                isSpecialSelfPattern = true;
+            }
+        }
+    } else if (identPattern != nullptr && identPattern->identifier == "self") {
+        isSpecialSelfPattern = true;
+    }
+    
+    if (isSpecialSelfPattern) {
+        // 对于特殊的 self 模式，不需要类型注解
+        // 创建一个虚拟的类型，因为 FunctionParam 需要类型
+        auto dummyType = std::make_shared<TypePath>(std::make_shared<SimplePathSegment>("", false, false));
+        return std::make_shared<FunctionParam>(std::move(pattern), std::move(dummyType));
+    }
+    
+    // 对于普通参数，需要类型注解
     if (!match(Token::kColon)) {
         return nullptr;
     }
@@ -835,11 +917,18 @@ std::shared_ptr<FunctionParam> Parser::parseFunctionParam() {
 
 std::shared_ptr<StructFields> Parser::parseStructFields() {
     std::vector<std::shared_ptr<StructField>> vec;
+    
+    // 检查是否为空的结构体
+    if (match(Token::krightCurly)) {
+        return std::make_shared<StructFields>(std::move(vec));
+    }
+    
     auto field = parseStructField();
     if (field == nullptr) {
         return nullptr;
     }
     vec.push_back(std::move(field));
+    
     while (match(Token::kComma)) {
         advance();
         auto field = parseStructField();
@@ -862,6 +951,7 @@ std::shared_ptr<StructField> Parser::parseStructField() {
     if (!match(Token::kColon)) {
         return nullptr;
     }
+    advance();
     auto type = parseType();
     if (!type) {
         return nullptr;
@@ -901,11 +991,15 @@ std::shared_ptr<AssociatedItem> Parser::parseAssociatedItem() {
     if (match(Token::kfn)) {
         return std::make_shared<AssociatedItem>(std::move(parseFunction()));
     } else if (match(Token::kconst)) {
-        if (tokens[pos + 1].first == Token::kfn) {
+        if (pos + 1 < tokens.size() && tokens[pos + 1].first == Token::kfn) {
             return std::make_shared<AssociatedItem>(std::move(parseFunction()));
         } else {
             return std::make_shared<AssociatedItem>(std::move(parseConstantItem()));
         }
+    }
+    // 如果遇到 }，说明 impl 块结束，不应该报错
+    if (match(Token::krightCurly)) {
+        return nullptr;
     }
     return nullptr;
 }
@@ -999,7 +1093,7 @@ std::shared_ptr<Pattern> Parser::parsePattern() {
         return std::make_shared<WildcardPattern>();
     } else if (match(Token::kAnd) || match(Token::kAndAnd)) {
         return parseReferencePattern();
-    } else if (match(Token::kref) || match(Token::kmut) || match(Token::kIDENTIFIER)) {
+    } else if (match(Token::kref) || match(Token::kmut) || match(Token::kIDENTIFIER) || match(Token::kself)) {
         return parseIdentifierPattern();
     } else if (match(Token::kMinus)) {
         return parseLiteralPattern();
@@ -1030,6 +1124,9 @@ std::shared_ptr<ReferencePattern> Parser::parseReferencePattern() {
         advance();
     }
     auto pattern = parsePattern();
+    if (pattern == nullptr) {
+        return nullptr;
+    }
     return std::make_shared<ReferencePattern>(singleordouble, ismut, std::move(pattern));
 }
 std::shared_ptr<LiteralPattern> Parser::parseLiteralPattern() {
@@ -1058,6 +1155,9 @@ std::shared_ptr<IdentifierPattern> Parser::parseIdentifierPattern() {
     if (match(Token::kmut)) {
         ismut = true;
         advance();
+    }
+    if (!match(Token::kIDENTIFIER) && !match(Token::kself)) {
+        return nullptr;
     }
     auto identifier = getstring();
     advance();
