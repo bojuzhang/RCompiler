@@ -29,24 +29,7 @@ std::string Parser::getstring() {
 
 // Pratt parser
 std::shared_ptr<Expression> Parser::parseExpression() {
-    auto type = peek();
-    if (type == Token::kleftCurly) {
-        return parseBlockExpression();
-    } else if (type == Token::kconst) {
-        return parseConstBlockExpression();
-    } else if (type == Token::kloop) {
-        return parseInfiniteLoopExpression();
-    } else if (type == Token::kwhile) {
-        return parsePredicateLoopExpression();
-    } else if (type == Token::kif) {
-        return parseIfExpression();
-    }
-    // else if (type == Token::kmatch) {
-    //     return parseMatchExpression();
-    // }
-    else {
-        return parseExpressionPratt(0);
-    }
+    return parseExpressionPratt(0);
 }
 std::shared_ptr<Expression> Parser::parseExpressionPratt(int minbp) {
     auto lhs = parsePrefixPratt();
@@ -200,27 +183,38 @@ std::shared_ptr<BlockExpression> Parser::parseBlockExpression() {
         if (statement != nullptr) {
             statements.push_back(std::move(statement));
             continue;
-        } 
+        }
         pos = tmp;
         auto expression = parseExpression();
         if (expression == nullptr) {
-            std::cerr << "Error: not statement nor expression in blockexpression body\n";
+            std::cerr << "Error: not statement nor expression in blockexpression body at pos " << pos << "\n";
             return nullptr;
         }
         if (dynamic_cast<IfExpression*>(expression.get()) == nullptr
          && dynamic_cast<BlockExpression*>(expression.get()) == nullptr
          && dynamic_cast<InfiniteLoopExpression*>(expression.get()) == nullptr
          && dynamic_cast<PredicateLoopExpression*>(expression.get()) == nullptr) {
-            if (!match(Token::krightCurly)) {
-                std::cerr << "Error: no } after tail expression\n";
-                return nullptr;
+            // 这是一个普通表达式，可能是尾部表达式
+            // 检查下一个token是否是}，如果是，则这是尾部表达式
+            if (match(Token::krightCurly)) {
+                advance();
+                return std::make_shared<BlockExpression>(std::move(statements), std::move(expression));
+            } else {
+                // 不是}，说明这个表达式不是尾部表达式，而是语句
+                // 将其作为表达式语句处理，然后继续解析
+                statements.push_back(std::make_shared<Statement>(std::make_shared<ExpressionStatement>(std::move(expression), true)));
+                // 检查是否有分号
+                if (match(Token::kSemi)) {
+                    advance();
+                }
             }
-            advance();
-            return std::make_shared<BlockExpression>(std::move(statements), std::move(expression));
+        } else {
+            // 这是一个特殊表达式（if、loop等），作为语句处理
+            statements.push_back(std::make_shared<Statement>(std::make_shared<ExpressionStatement>(std::move(expression), false)));
         }
     }
     if (!match(Token::krightCurly)) {
-        std::cerr << "Error: miss } after blockexpression\n";
+        std::cerr << "Error: miss } after blockexpression at pos " << pos << "\n";
         return nullptr;
     }
     advance();
@@ -498,7 +492,12 @@ std::shared_ptr<Conditions> Parser::parseConditions() {
     }
     advance();
     auto expression = parseExpression();
+    if (expression == nullptr) {
+        std::cerr << "Error: failed to parse expression in conditions\n";
+        return nullptr;
+    }
     if (!match(Token::krightParenthe)) {
+        std::cerr << "Error: expected ) after expression in conditions, but found: " << tokens[pos].second << " at pos " << pos << "\n";
         return nullptr;
     }
     advance();
