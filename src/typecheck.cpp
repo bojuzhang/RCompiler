@@ -394,14 +394,42 @@ void TypeChecker::CheckFunctionReturnType(FunctionReturnType& returnType) {
 
 void TypeChecker::CheckFunctionBody(Function& function) {
     if (function.blockexpression) {
+        // 获取函数声明的返回类型
+        std::shared_ptr<SemanticType> declaredReturnType = nullptr;
         if (function.functionreturntype != nullptr && function.functionreturntype->type != nullptr) {
-            PushExpectedType(CheckType(*function.functionreturntype->type));
+            declaredReturnType = CheckType(*function.functionreturntype->type);
         } else {
             // 如果没有显式返回类型，设置默认的unit类型
-            PushExpectedType(std::make_shared<SimpleType>("unit"));
+            declaredReturnType = std::make_shared<SimpleType>("()");
         }
         
+        PushExpectedType(declaredReturnType);
+        
+        // 访问函数体
         function.blockexpression->accept(*this);
+        
+        // 在访问函数体后，从 nodeTypeMap 中获取函数体的类型
+        // 这样可以确保使用在 BlockExpression::visit 中设置的类型
+        auto bodyTypeIt = nodeTypeMap.find(function.blockexpression.get());
+        std::shared_ptr<SemanticType> bodyType = nullptr;
+        if (bodyTypeIt != nodeTypeMap.end()) {
+            bodyType = bodyTypeIt->second;
+        }
+        
+        if (bodyType && declaredReturnType) {
+            // 检查函数体类型与声明的返回类型是否匹配
+            // 注意：如果函数体类型是 !（never），说明函数总是发散，不需要检查
+            if (bodyType->tostring() != "!") {
+                // 如果声明的返回类型不是 unit，或者函数体类型不是 unit，进行类型检查
+                if (declaredReturnType->tostring() != "()" || bodyType->tostring() != "()") {
+                    if (!AreTypesCompatible(declaredReturnType, bodyType)) {
+                        ReportError("Function '" + function.identifier_name + "' return type mismatch: expected '" +
+                                   declaredReturnType->tostring() + "', found '" + bodyType->tostring() + "'");
+                    }
+                }
+            }
+        }
+        
         PopExpectedType();
     }
 }
@@ -456,7 +484,7 @@ std::shared_ptr<SemanticType> TypeChecker::CheckType(ArrayType& arrayType) {
         }
     }
     
-    auto result = std::make_shared<ArrayTypeWrapper>(elementType, arrayType.expression.get());
+    auto result = std::make_shared<ArrayTypeWrapper>(elementType, arrayType.expression.get(), constantEvaluator.get());
     nodeTypeMap[&arrayType] = result; // 替换占位符
     return result;
 }
@@ -590,7 +618,8 @@ bool TypeChecker::CanPerformBinaryOperation(std::shared_ptr<SemanticType> leftTy
     if (!leftType || !rightType) return false;
     
     // 对于算术运算符、比较运算符和位运算符，使用 AreTypesCompatible 检查双向兼容性
-    if (op == Token::kPlus || op == Token::kMinus || op == Token::kStar || op == Token::kSlash ||
+    if (op == Token::kPlus || op == Token::kMinus || op == Token::kStar || op == Token::kSlash || 
+        op == Token::kPercent || 
         op == Token::kEqEq || op == Token::kNe || op == Token::kLt || op == Token::kGt ||
         op == Token::kLe || op == Token::kGe ||
         op == Token::kAnd || op == Token::kOr || op == Token::kCaret ||
@@ -697,6 +726,7 @@ std::shared_ptr<SemanticType> TypeChecker::InferExpressionType(Expression& expr)
         if (pathExpr->simplepath && !pathExpr->simplepath->simplepathsegements.empty()) {
             std::string varName = pathExpr->simplepath->simplepathsegements[0]->identifier;
             auto symbol = FindSymbol(varName);
+            
             if (symbol && symbol->type) {
                 type = symbol->type;
             } else {
@@ -1912,27 +1942,49 @@ void TypeChecker::visit(BlockExpression& node) {
     for (const auto &stmt : node.statements) {
         stmt->accept(*this);
     }
-    // 退出作用域
-    scopeTree->ExitScope();
     
-    // 推断块表达式的类型（基于最后一条语句）
-    if (!node.statements.empty()) {
+    // 推断块表达式的类型（按照语义规范优先级）
+    // 1. 首先检查是否有尾表达式（expressionwithoutblock）
+    if (node.expressionwithoutblock) {
+        // 在作用域内访问尾表达式并推断其类型
+        node.expressionwithoutblock->accept(*this);
+        auto tailExprType = InferExpressionType(*node.expressionwithoutblock);
+        
+        if (tailExprType) {
+            nodeTypeMap[&node] = tailExprType;
+        } else {
+            // 如果尾表达式类型推断失败，默认为 unit
+            nodeTypeMap[&node] = std::make_shared<SimpleType>("()");
+        }
+    } else if (!node.statements.empty()) {
+        // 2. 如果没有尾表达式，检查最后一条语句是否是不带分号的表达式语句
         auto lastStmt = node.statements.back();
         if (auto exprStmt = dynamic_cast<ExpressionStatement*>(lastStmt.get())) {
-            if (exprStmt->astnode) {
+            // 检查是否为不带分号的表达式语句（expressionstatement without semi）
+            if (!exprStmt->hassemi && exprStmt->astnode) {
+                // 不带分号的表达式语句，作为尾表达式处理
                 auto lastExprType = InferExpressionType(*exprStmt->astnode);
                 if (lastExprType) {
                     nodeTypeMap[&node] = lastExprType;
+                } else {
+                    // 如果表达式类型推断失败，默认为 unit
+                    nodeTypeMap[&node] = std::make_shared<SimpleType>("()");
                 }
+            } else {
+                // 带分号的表达式语句或其他情况，块表达式类型为 unit
+                nodeTypeMap[&node] = std::make_shared<SimpleType>("()");
             }
         } else {
             // 如果最后一条语句不是表达式语句，块表达式类型为 unit
             nodeTypeMap[&node] = std::make_shared<SimpleType>("()");
         }
     } else {
-        // 空块表达式的类型为 unit
+        // 3. 空块表达式的类型为 unit
         nodeTypeMap[&node] = std::make_shared<SimpleType>("()");
     }
+    
+    // 退出作用域
+    scopeTree->ExitScope();
     
     PopNode();
 }
@@ -1994,6 +2046,9 @@ void TypeChecker::visit(ReturnExpression& node) {
                 if (auto funcNode = dynamic_cast<Function*>(topNode)) {
                     if (funcNode->functionreturntype && funcNode->functionreturntype->type) {
                         expectedReturnType = CheckType(*funcNode->functionreturntype->type);
+                    } else {
+                        // 如果没有显式返回类型，默认为 unit
+                        expectedReturnType = std::make_shared<SimpleType>("()");
                     }
                     break;
                 }
@@ -2001,14 +2056,39 @@ void TypeChecker::visit(ReturnExpression& node) {
             
             // 如果找到了期望的返回类型，检查类型兼容性
             if (expectedReturnType) {
-                // 如果函数返回类型不是 unit 类型，进行类型检查
-                if (expectedReturnType->tostring() != "()") {
+                // 对于所有返回类型（包括 unit），都进行类型检查
+                // 但如果是 unit 类型且返回表达式也是 unit，则跳过检查
+                if (expectedReturnType->tostring() != "()" || exprType->tostring() != "()") {
                     if (!AreTypesCompatible(expectedReturnType, exprType)) {
                         ReportError("Type mismatch in return expression: expected '" + expectedReturnType->tostring() +
                                    "', found '" + exprType->tostring() + "'");
                     }
                 }
             }
+        }
+    } else {
+        // 没有表达式的 return 语句，检查函数是否应该返回 unit
+        std::stack<ASTNode*> tempStack = nodeStack;
+        std::shared_ptr<SemanticType> expectedReturnType = nullptr;
+        
+        while (!tempStack.empty()) {
+            auto topNode = tempStack.top();
+            tempStack.pop();
+            if (auto funcNode = dynamic_cast<Function*>(topNode)) {
+                if (funcNode->functionreturntype && funcNode->functionreturntype->type) {
+                    expectedReturnType = CheckType(*funcNode->functionreturntype->type);
+                } else {
+                    // 如果没有显式返回类型，默认为 unit
+                    expectedReturnType = std::make_shared<SimpleType>("()");
+                }
+                break;
+            }
+        }
+        
+        // 如果函数期望返回非 unit 类型，但没有返回表达式，报错
+        if (expectedReturnType && expectedReturnType->tostring() != "()") {
+            ReportError("Return expression expected value of type '" + expectedReturnType->tostring() +
+                       "', but found no expression");
         }
     }
     

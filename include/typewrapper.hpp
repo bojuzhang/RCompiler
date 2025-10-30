@@ -2,16 +2,18 @@
 
 #include "symbol.hpp"
 #include "astnodes.hpp"
+#include "constevaluator.hpp"
 #include <memory>
 
 class ArrayTypeWrapper : public SemanticType {
 private:
     std::shared_ptr<SemanticType> elementType;
     Expression* sizeExpression;
+    ConstantEvaluator* constantEvaluator; // 添加常量求值器引用
     
 public:
-    ArrayTypeWrapper(std::shared_ptr<SemanticType> elementType, Expression* sizeExpr = nullptr)
-        : elementType(elementType), sizeExpression(sizeExpr) {}
+    ArrayTypeWrapper(std::shared_ptr<SemanticType> elementType, Expression* sizeExpr = nullptr, ConstantEvaluator* constEval = nullptr)
+        : elementType(elementType), sizeExpression(sizeExpr), constantEvaluator(constEval) {}
     
     std::string tostring() const override {
         std::string result = "[" + elementType->tostring();
@@ -20,6 +22,23 @@ public:
             // 尝试获取大小值
             if (auto literal = dynamic_cast<LiteralExpression*>(sizeExpression)) {
                 result += literal->literal;
+            } else if (constantEvaluator) {
+                // 尝试使用常量求值器获取大小
+                if (auto pathExpr = dynamic_cast<PathExpression*>(sizeExpression)) {
+                    if (pathExpr->simplepath && !pathExpr->simplepath->simplepathsegements.empty()) {
+                        std::string constName = pathExpr->simplepath->simplepathsegements[0]->identifier;
+                        auto constValue = constantEvaluator->GetConstantValue(constName);
+                        if (auto intConst = dynamic_cast<IntConstant*>(constValue.get())) {
+                            result += std::to_string(intConst->getValue());
+                        } else {
+                            result += "?"; // 无法求值
+                        }
+                    } else {
+                        result += "?"; // 复杂表达式
+                    }
+                } else {
+                    result += "?"; // 其他类型的表达式
+                }
             } else {
                 result += "?"; // 未知大小
             }
@@ -30,6 +49,7 @@ public:
     
     std::shared_ptr<SemanticType> GetElementType() const { return elementType; }
     Expression* GetSizeExpression() const { return sizeExpression; }
+    void SetConstantEvaluator(ConstantEvaluator* eval) { constantEvaluator = eval; }
 };
 
 class ReferenceTypeWrapper : public SemanticType {

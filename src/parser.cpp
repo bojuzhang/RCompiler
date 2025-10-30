@@ -194,23 +194,12 @@ std::shared_ptr<BlockExpression> Parser::parseBlockExpression() {
          && dynamic_cast<BlockExpression*>(expression.get()) == nullptr
          && dynamic_cast<InfiniteLoopExpression*>(expression.get()) == nullptr
          && dynamic_cast<PredicateLoopExpression*>(expression.get()) == nullptr) {
-            // 这是一个普通表达式，可能是尾部表达式
-            // 检查下一个token是否是}，如果是，则这是尾部表达式
             if (match(Token::krightCurly)) {
                 advance();
                 return std::make_shared<BlockExpression>(std::move(statements), std::move(expression));
-            } else {
-                // 不是}，说明这个表达式不是尾部表达式，而是语句
-                // 将其作为表达式语句处理，然后继续解析
-                statements.push_back(std::make_shared<Statement>(std::make_shared<ExpressionStatement>(std::move(expression), true)));
-                // 检查是否有分号
-                if (match(Token::kSemi)) {
-                    advance();
-                }
             }
-        } else {
-            // 这是一个特殊表达式（if、loop等），作为语句处理
-            statements.push_back(std::make_shared<Statement>(std::make_shared<ExpressionStatement>(std::move(expression), false)));
+            std::cerr << "Error: neither statement nor expressionwithoutblock in blockexpression.\n";
+            return nullptr;
         }
     }
     if (!match(Token::krightCurly)) {
@@ -476,14 +465,14 @@ std::shared_ptr<Statement> Parser::parseStatement() {
     if (expressionstatement != nullptr) {
         return std::make_shared<Statement>(std::move(expressionstatement));
     }
-    
-    // 只有在表达式解析失败时，才尝试解析 item
-    size_t tmp = pos;
-    auto item = parseItem();
-    if (item != nullptr) {
-        return std::make_shared<Statement>(std::move(item));
-    }
-    pos = tmp;
+
+    // // 只有在表达式解析失败时，才尝试解析 item
+    // size_t tmp = pos;
+    // auto item = parseItem();
+    // if (item != nullptr) {
+    //     return std::make_shared<Statement>(std::move(item));
+    // }
+    // pos = tmp;
     return nullptr;
 }
 std::shared_ptr<Conditions> Parser::parseConditions() {
