@@ -7,6 +7,7 @@
 #include <utility>
 #include <unordered_map>
 #include <algorithm>
+#include <typeinfo>
 
 TypeChecker::TypeChecker(std::shared_ptr<ScopeTree> scopeTree, std::shared_ptr<ConstantEvaluator> constantEvaluator)
     : scopeTree(scopeTree), constantEvaluator(constantEvaluator) {}
@@ -408,23 +409,33 @@ void TypeChecker::CheckFunctionBody(Function& function) {
         // 访问函数体
         function.blockexpression->accept(*this);
         
-        // 在访问函数体后，从 nodeTypeMap 中获取函数体的类型
-        // 这样可以确保使用在 BlockExpression::visit 中设置的类型
-        auto bodyTypeIt = nodeTypeMap.find(function.blockexpression.get());
-        std::shared_ptr<SemanticType> bodyType = nullptr;
-        if (bodyTypeIt != nodeTypeMap.end()) {
-            bodyType = bodyTypeIt->second;
-        }
+        // 分析返回语句
+        ReturnAnalysisResult returnAnalysis = AnalyzeReturnStatements(*function.blockexpression);
         
-        if (bodyType && declaredReturnType) {
-            // 检查函数体类型与声明的返回类型是否匹配
-            // 注意：如果函数体类型是 !（never），说明函数总是发散，不需要检查
-            if (bodyType->tostring() != "!") {
-                // 如果声明的返回类型不是 unit，或者函数体类型不是 unit，进行类型检查
-                if (declaredReturnType->tostring() != "()" || bodyType->tostring() != "()") {
-                    if (!AreTypesCompatible(declaredReturnType, bodyType)) {
-                        ReportError("Function '" + function.identifier_name + "' return type mismatch: expected '" +
-                                   declaredReturnType->tostring() + "', found '" + bodyType->tostring() + "'");
+        if (returnAnalysis.hasCertainReturn) {
+            // 如果有确定执行的返回语句，只需要检查返回语句的类型是否匹配
+            if (returnAnalysis.certainReturnType && !AreTypesCompatible(declaredReturnType, returnAnalysis.certainReturnType)) {
+                ReportError("Function '" + function.identifier_name + "' return type mismatch: expected '" +
+                           declaredReturnType->tostring() + "', found '" + returnAnalysis.certainReturnType->tostring() + "'");
+            }
+        } else {
+            // 如果没有确定执行的返回语句，需要像现有的一样对于函数的尾表达式类型进行匹配分析
+            auto bodyTypeIt = nodeTypeMap.find(function.blockexpression.get());
+            std::shared_ptr<SemanticType> bodyType = nullptr;
+            if (bodyTypeIt != nodeTypeMap.end()) {
+                bodyType = bodyTypeIt->second;
+            }
+            
+            if (bodyType && declaredReturnType) {
+                // 检查函数体类型与声明的返回类型是否匹配
+                // 注意：如果函数体类型是 !（never），说明函数总是发散，不需要检查
+                if (bodyType->tostring() != "!") {
+                    // 如果声明的返回类型不是 unit，或者函数体类型不是 unit，进行类型检查
+                    if (declaredReturnType->tostring() != "()" || bodyType->tostring() != "()") {
+                        if (!AreTypesCompatible(declaredReturnType, bodyType)) {
+                            ReportError("Function '" + function.identifier_name + "' return type mismatch: expected '" +
+                                       declaredReturnType->tostring() + "', found '" + bodyType->tostring() + "'");
+                        }
                     }
                 }
             }
@@ -2208,3 +2219,148 @@ void TypeChecker::visit(BinaryExpression& node) {
     
     PopNode();
 }
+
+
+// 返回语句分析实现
+TypeChecker::ReturnAnalysisResult TypeChecker::AnalyzeReturnStatements(BlockExpression& blockExpr) {
+    ReturnAnalysisResult result;
+    
+    // 由于没有 deadcode，只需要分析最后一个 statement 或尾表达式
+    if (!blockExpr.statements.empty()) {
+        // 检查最后一个语句
+        const auto& lastStmt = blockExpr.statements.back();
+        if (lastStmt) {
+            AnalyzeReturnStatementsInStatement(*lastStmt, result);
+        }
+    }
+    
+    // 检查尾表达式是否是返回语句
+    if (blockExpr.expressionwithoutblock) {
+        AnalyzeReturnStatementsInExpression(*blockExpr.expressionwithoutblock, result);
+    }
+    
+    return result;
+}
+
+void TypeChecker::AnalyzeReturnStatementsInStatement(Statement& stmt, ReturnAnalysisResult& result) {
+    // Statement 的 astnode 只可能为 item, letstatement, expressionstatement
+    // 我们只关心 expressionstatement，它的 astnode 可能为 returnexpression
+    
+    // 首先检查 stmt 本身是否是 ExpressionStatement
+    if (auto exprStmt = dynamic_cast<ExpressionStatement*>(&stmt)) {
+        if (exprStmt->astnode) {
+            // 检查是否是 return 语句
+            if (auto returnExpr = dynamic_cast<ReturnExpression*>(exprStmt->astnode.get())) {
+                // 找到 return 语句
+                if (returnExpr->expression) {
+                    auto returnType = InferExpressionType(*returnExpr->expression);
+                    result.hasCertainReturn = true;
+                    result.certainReturnType = returnType;
+                } else {
+                    // 无表达式的 return 语句
+                    result.hasCertainReturn = true;
+                    result.certainReturnType = std::make_shared<SimpleType>("()");
+                }
+            } else {
+                // 其他类型的表达式，递归分析
+                AnalyzeReturnStatementsInExpression(*exprStmt->astnode, result);
+            }
+        }
+    } else if (auto letStmt = dynamic_cast<LetStatement*>(&stmt)) {
+        // let 语句中的表达式可能包含 return
+        if (letStmt->expression) {
+            AnalyzeReturnStatementsInExpression(*letStmt->expression, result);
+        }
+    } else if (stmt.astnode) {
+        // 检查 stmt.astnode 是否是 ExpressionStatement
+        if (auto exprStmt = dynamic_cast<ExpressionStatement*>(stmt.astnode.get())) {
+            if (exprStmt->astnode) {
+                // 检查是否是 return 语句
+                if (auto returnExpr = dynamic_cast<ReturnExpression*>(exprStmt->astnode.get())) {
+                    // 找到 return 语句
+                    if (returnExpr->expression) {
+                        auto returnType = InferExpressionType(*returnExpr->expression);
+                        result.hasCertainReturn = true;
+                        result.certainReturnType = returnType;
+                    } else {
+                        // 无表达式的 return 语句
+                        result.hasCertainReturn = true;
+                        result.certainReturnType = std::make_shared<SimpleType>("()");
+                    }
+                } else {
+                    // 其他类型的表达式，递归分析
+                    AnalyzeReturnStatementsInExpression(*exprStmt->astnode, result);
+                }
+            }
+        } else if (auto letStmt = dynamic_cast<LetStatement*>(stmt.astnode.get())) {
+            // let 语句中的表达式可能包含 return
+            if (letStmt->expression) {
+                AnalyzeReturnStatementsInExpression(*letStmt->expression, result);
+            }
+        }
+    }
+}
+
+void TypeChecker::AnalyzeReturnStatementsInExpression(Expression& expr, ReturnAnalysisResult& result) {
+    if (auto returnExpr = dynamic_cast<ReturnExpression*>(&expr)) {
+        // 直接在表达式中的 return 语句（如作为尾表达式）
+        result.hasCertainReturn = true;
+        if (returnExpr->expression) {
+            result.certainReturnType = InferExpressionType(*returnExpr->expression);
+        } else {
+            result.certainReturnType = std::make_shared<SimpleType>("()");
+        }
+    } else if (auto ifExpr = dynamic_cast<IfExpression*>(&expr)) {
+        // if 表达式中的 return 语句是不确定执行的
+        if (ifExpr->ifblockexpression) {
+            auto ifResult = AnalyzeReturnStatements(*ifExpr->ifblockexpression);
+            result.hasUncertainReturn = result.hasUncertainReturn || ifResult.hasUncertainReturn || ifResult.hasCertainReturn;
+        }
+        if (ifExpr->elseexpression) {
+            if (auto elseBlock = dynamic_cast<BlockExpression*>(ifExpr->elseexpression.get())) {
+                auto elseResult = AnalyzeReturnStatements(*elseBlock);
+                result.hasUncertainReturn = result.hasUncertainReturn || elseResult.hasUncertainReturn || elseResult.hasCertainReturn;
+            } else {
+                AnalyzeReturnStatementsInExpression(*ifExpr->elseexpression, result);
+            }
+        }
+    } else if (auto loopExpr = dynamic_cast<InfiniteLoopExpression*>(&expr)) {
+        // 无限循环中的 return 语句是不确定执行的（因为可能永远不会执行到）
+        if (loopExpr->blockexpression) {
+            auto loopResult = AnalyzeReturnStatements(*loopExpr->blockexpression);
+            result.hasUncertainReturn = result.hasUncertainReturn || loopResult.hasUncertainReturn || loopResult.hasCertainReturn;
+        }
+    } else if (auto whileExpr = dynamic_cast<PredicateLoopExpression*>(&expr)) {
+        // while 循环中的 return 语句是不确定执行的
+        if (whileExpr->blockexpression) {
+            auto whileResult = AnalyzeReturnStatements(*whileExpr->blockexpression);
+            result.hasUncertainReturn = result.hasUncertainReturn || whileResult.hasUncertainReturn || whileResult.hasCertainReturn;
+        }
+    } else if (auto blockExpr = dynamic_cast<BlockExpression*>(&expr)) {
+        // 嵌套的块表达式
+        auto blockResult = AnalyzeReturnStatements(*blockExpr);
+        if (blockResult.hasCertainReturn) {
+            result.hasCertainReturn = true;
+            result.certainReturnType = blockResult.certainReturnType;
+        }
+        result.hasUncertainReturn = result.hasUncertainReturn || blockResult.hasUncertainReturn;
+    } else if (auto binaryExpr = dynamic_cast<BinaryExpression*>(&expr)) {
+        // 二元表达式的左右操作数可能包含 return 语句
+        if (binaryExpr->leftexpression) {
+            AnalyzeReturnStatementsInExpression(*binaryExpr->leftexpression, result);
+        }
+        if (binaryExpr->rightexpression) {
+            AnalyzeReturnStatementsInExpression(*binaryExpr->rightexpression, result);
+        }
+    } else if (auto assignmentExpr = dynamic_cast<AssignmentExpression*>(&expr)) {
+        // 赋值表达式的左右操作数可能包含 return 语句
+        if (assignmentExpr->leftexpression) {
+            AnalyzeReturnStatementsInExpression(*assignmentExpr->leftexpression, result);
+        }
+        if (assignmentExpr->rightexpression) {
+            AnalyzeReturnStatementsInExpression(*assignmentExpr->rightexpression, result);
+        }
+    }
+    // 其他类型的表达式不需要特殊处理
+}
+

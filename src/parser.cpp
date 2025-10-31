@@ -116,6 +116,12 @@ std::shared_ptr<Expression> Parser::parseInfixPratt(std::shared_ptr<Expression> 
         if (leftbp < minbp) {
             break;
         }
+        
+        // 特殊处理：return、break 等控制流语句不应该作为中缀运算符
+        if (type == Token::kreturn || type == Token::kbreak) {
+            break;
+        }
+        
         advance();
 
         if (type == Token::kleftParenthe) {
@@ -1038,7 +1044,8 @@ std::shared_ptr<ExpressionStatement> Parser::parseExpressionStatement() {
      || dynamic_cast<ConstBlockExpression*>(ptr) != nullptr
      || dynamic_cast<InfiniteLoopExpression*>(ptr) != nullptr
      || dynamic_cast<PredicateLoopExpression*>(ptr) != nullptr
-     || dynamic_cast<IfExpression*>(ptr) != nullptr) {
+     || dynamic_cast<IfExpression*>(ptr) != nullptr
+     || dynamic_cast<ReturnExpression*>(ptr) != nullptr) {
         return std::make_shared<ExpressionStatement>(std::move(expression), false);
     }
     return nullptr;

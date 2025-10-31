@@ -145,6 +145,19 @@ private:
     void CheckFunctionReturnType(FunctionReturnType& returnType);
     void CheckFunctionBody(Function& function);
     
+    // 新增的返回语句分析函数
+    struct ReturnAnalysisResult {
+        bool hasCertainReturn = false;        // 是否有确定执行的返回语句
+        bool hasUncertainReturn = false;      // 是否有不确定执行的返回语句
+        std::shared_ptr<SemanticType> certainReturnType; // 确定执行的返回语句的类型
+    };
+    
+    ReturnAnalysisResult AnalyzeReturnStatements(BlockExpression& blockExpr);
+    void AnalyzeReturnStatementsInStatement(Statement& stmt, ReturnAnalysisResult& result);
+    void AnalyzeReturnStatementsInExpression(Expression& expr, ReturnAnalysisResult& result);
+    bool IsReturnStatementCertainReachable(Statement& stmt);
+    bool IsExpressionStatementCertainReachable(ExpressionStatement& exprStmt);
+    
     std::shared_ptr<SemanticType> InferExpressionType(Expression& expr);
     std::shared_ptr<SemanticType> InferBinaryExpressionType(BinaryExpression& expr);
     std::shared_ptr<SemanticType> InferCallExpressionType(CallExpression& expr);
