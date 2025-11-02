@@ -453,6 +453,9 @@ std::shared_ptr<SemanticType> TypeChecker::CheckType(Type& typeNode) {
         return CheckType(*arrayType);
     } else if (auto refType = dynamic_cast<ReferenceType*>(&typeNode)) {
         return CheckType(*refType);
+    } else if (auto unitType = dynamic_cast<UnitType*>(&typeNode)) {
+        // 特殊处理 UnitType，直接创建 SimpleType("()")
+        return std::make_shared<SimpleType>("()");
     }
 
     return nullptr;
@@ -535,14 +538,24 @@ std::shared_ptr<SemanticType> TypeChecker::ResolveType(const std::string& typeNa
         }
     }
     
+    // 特殊处理 unit 类型 ()，确保它总是被认为是有效的
+    if (typeName == "()") {
+        return std::make_shared<SimpleType>("()");
+    }
+    
     auto type = std::make_shared<SimpleType>(typeName);
     return type;
 }
 
 bool TypeChecker::TypeExists(const std::string& typeName) {
+    // 特殊处理 unit 类型 ()，它总是被认为是有效的
+    if (typeName == "()") {
+        return true;
+    }
+    
     auto symbol = FindSymbol(typeName);
-    return symbol && (symbol->kind == SymbolKind::Struct || 
-                     symbol->kind == SymbolKind::Enum || 
+    return symbol && (symbol->kind == SymbolKind::Struct ||
+                     symbol->kind == SymbolKind::Enum ||
                      symbol->kind == SymbolKind::BuiltinType ||
                      symbol->kind == SymbolKind::TypeAlias);
 }
@@ -745,7 +758,8 @@ std::shared_ptr<SemanticType> TypeChecker::InferExpressionType(Expression& expr)
             if (symbol && symbol->type) {
                 type = symbol->type;
             } else {
-                // 如果找不到符号或符号没有类型信息，返回错误
+                // 如果找不到符号或符号没有类型信息，直接报错
+                ReportError("Undefined variable: " + varName);
                 type = nullptr;
             }
         } else {
@@ -817,6 +831,7 @@ std::shared_ptr<SemanticType> TypeChecker::InferBinaryExpressionType(BinaryExpre
     auto rightType = InferExpressionType(*expr.rightexpression);
     
     if (!leftType || !rightType) {
+        // 如果类型推断失败，错误已经在 InferExpressionType 中报告了
         return nullptr;
     }
     
@@ -864,6 +879,9 @@ std::shared_ptr<SemanticType> TypeChecker::InferCallExpressionType(CallExpressio
                     return functionSymbol->type;
                 }
             }
+            
+            // 如果找不到函数符号，直接报错
+            ReportError("Undefined function: " + functionName);
         }
     }
     
@@ -994,7 +1012,7 @@ std::shared_ptr<SemanticType> TypeChecker::InferLiteralExpressionType(LiteralExp
             return std::make_shared<SimpleType>("char");
         case Token::kSTRING_LITERAL:
         case Token::kRAW_STRING_LITERAL:
-            return std::make_shared<SimpleType>("str");
+            return std::make_shared<ReferenceTypeWrapper>(std::make_shared<SimpleType>("str"), false);
         case Token::ktrue:
         case Token::kfalse:
             return std::make_shared<SimpleType>("bool");
@@ -1567,6 +1585,12 @@ void TypeChecker::visit(AssignmentExpression& node) {
     // 检查左值的可变性
     if (node.leftexpression) {
         CheckAssignmentMutability(*node.leftexpression);
+    }
+    
+    // 检查右值的类型
+    if (node.rightexpression) {
+        auto rightType = InferExpressionType(*node.rightexpression);
+        // 类型推断失败时，错误已经在 InferExpressionType 中报告了
     }
     
     PopNode();
@@ -2247,6 +2271,12 @@ void TypeChecker::visit(PredicateLoopExpression& node) {
     // 访问条件表达式
     if (node.conditions && node.conditions->expression) {
         node.conditions->expression->accept(*this);
+        
+        // 检查条件表达式类型必须是布尔类型
+        auto condType = InferExpressionType(*node.conditions->expression);
+        if (condType && condType->tostring() != "bool") {
+            ReportError("While condition must be of type bool, found " + condType->tostring());
+        }
     }
     
     // 访问循环体
