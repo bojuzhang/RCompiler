@@ -148,9 +148,9 @@ TupleExpression::TupleExpression(std::shared_ptr<TupleElements> tupleelements)
 TupleIndexingExpression::TupleIndexingExpression(std::shared_ptr<Expression> expression, int tupleindex)
     : expression(std::move(expression)), tupleindex(tupleindex) {}
 
-StructExpression::StructExpression(std::shared_ptr<PathInExpression> pathinexpression,
+StructExpression::StructExpression(std::shared_ptr<PathExpression> pathexpression,
                                    std::shared_ptr<ASTNode> structinfo)
-    : pathinexpression(std::move(pathinexpression)),
+    : pathexpression(std::move(pathexpression)),
       structinfo(std::move(structinfo)) {}
 
 CallExpression::CallExpression(std::shared_ptr<Expression> expression,
@@ -300,5 +300,3 @@ SimplePath::SimplePath(std::vector<std::shared_ptr<SimplePathSegment>>&& simplep
 
 SimplePathSegment::SimplePathSegment(std::string identifier, bool isself, bool isSelf)
     : identifier(std::move(identifier)), isself(isself), isSelf(isSelf) {}
-
-PathInExpression::PathInExpression() = default;

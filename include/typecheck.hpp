@@ -58,7 +58,7 @@ public:
     void visit(ArrayExpression& node) override {}
     void visit(IndexExpression& node) override;
     void visit(TupleExpression& node) override {}
-    void visit(StructExpression& node) override {}
+    void visit(StructExpression& node) override;
     void visit(CallExpression& node) override {}
     void visit(MethodCallExpression& node) override {}
     void visit(FieldExpression& node) override;
@@ -106,7 +106,6 @@ public:
     void visit(EnumVariant& node) override {}
 
     void visit(AssociatedItem& node) override {}
-    void visit(PathInExpression& node) override {}
 
 private:
     void PushNode(ASTNode& node);
@@ -152,11 +151,22 @@ private:
         std::shared_ptr<SemanticType> certainReturnType; // 确定执行的返回语句的类型
     };
     
+    // break 表达式分析结果
+    struct BreakAnalysisResult {
+        bool hasBreak = false;                // 是否有 break 语句
+        std::vector<std::shared_ptr<SemanticType>> breakTypes; // 所有 break 表达式的类型
+    };
+    
     ReturnAnalysisResult AnalyzeReturnStatements(BlockExpression& blockExpr);
     void AnalyzeReturnStatementsInStatement(Statement& stmt, ReturnAnalysisResult& result);
     void AnalyzeReturnStatementsInExpression(Expression& expr, ReturnAnalysisResult& result);
     bool IsReturnStatementCertainReachable(Statement& stmt);
     bool IsExpressionStatementCertainReachable(ExpressionStatement& exprStmt);
+    
+    // break 表达式分析函数
+    BreakAnalysisResult AnalyzeBreakExpressions(BlockExpression& blockExpr);
+    void AnalyzeBreakExpressionsInStatement(Statement& stmt, BreakAnalysisResult& result);
+    void AnalyzeBreakExpressionsInExpression(Expression& expr, BreakAnalysisResult& result);
     
     std::shared_ptr<SemanticType> InferExpressionType(Expression& expr);
     std::shared_ptr<SemanticType> InferBinaryExpressionType(BinaryExpression& expr);
@@ -167,6 +177,11 @@ private:
     std::shared_ptr<SemanticType> InferConstantExpressionType(Expression& expr, std::shared_ptr<SemanticType> expectedType);
     std::shared_ptr<SemanticType> InferArrayExpressionTypeWithExpected(ArrayExpression& expr, std::shared_ptr<SemanticType> expectedType);
     std::shared_ptr<SemanticType> InferLiteralExpressionType(LiteralExpression& expr);
+    std::shared_ptr<SemanticType> InferIfExpressionType(IfExpression& expr);
+    std::shared_ptr<SemanticType> InferInfiniteLoopExpressionType(InfiniteLoopExpression& expr);
+    std::shared_ptr<SemanticType> InferPredicateLoopExpressionType(PredicateLoopExpression& expr);
+    std::shared_ptr<SemanticType> InferBlockExpressionType(BlockExpression& expr);
+    std::shared_ptr<SemanticType> InferTypeCastExpressionType(TypeCastExpression& expr);
     
     void ReportError(const std::string& message);
     void ReportUndefinedType(const std::string& typeName, ASTNode* context);

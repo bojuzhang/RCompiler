@@ -113,7 +113,6 @@ public:
     void visit(EnumVariant& node) override {}
 
     void visit(AssociatedItem& node) override {}
-    void visit(PathInExpression& node) override {}
 
 private:
     void PushNode(ASTNode& node);

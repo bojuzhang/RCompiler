@@ -1184,11 +1184,17 @@ std::shared_ptr<StructExpression> Parser::parseStructExpressionFromInfix(std::sh
     // 检查是否有结构体字段
     std::shared_ptr<StructExprFields> structExprFields = nullptr;
     
+    // 将传入的 path 转换为 PathExpression
+    auto pathExpr = std::dynamic_pointer_cast<PathExpression>(path);
+    if (pathExpr == nullptr) {
+        std::cerr << "Error: path in struct expression must be a PathExpression\n";
+        return nullptr;
+    }
+    
     // 检查是否为空的结构体表达式 {}
     if (match(Token::krightCurly)) {
         advance();
-        auto pathInExpr = std::make_shared<PathInExpression>();
-        return std::make_shared<StructExpression>(pathInExpr, nullptr);
+        return std::make_shared<StructExpression>(pathExpr, nullptr);
     }
     
     // 解析结构体字段
@@ -1203,8 +1209,7 @@ std::shared_ptr<StructExpression> Parser::parseStructExpressionFromInfix(std::sh
     }
     advance();
     
-    auto pathInExpr = std::make_shared<PathInExpression>();
-    return std::make_shared<StructExpression>(pathInExpr, structExprFields);
+    return std::make_shared<StructExpression>(pathExpr, structExprFields);
 }
 
 std::shared_ptr<StructExprFields> Parser::parseStructExprFields() {

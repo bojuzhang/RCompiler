@@ -101,7 +101,6 @@ class UnitType;
 // PATH Syntax
 class SimplePath;
 class SimplePathSegment;
-class PathInExpression;
 
 
 

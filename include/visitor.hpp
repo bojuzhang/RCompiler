@@ -74,5 +74,4 @@ public:
     virtual void visit(EnumVariant& node) = 0;
 
     virtual void visit(AssociatedItem& node) = 0;
-    virtual void visit(PathInExpression& node) = 0;
 };

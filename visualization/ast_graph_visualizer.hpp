@@ -98,7 +98,6 @@ public:
     // Visitor接口实现 - Path节点
     void visit(SimplePath& node) override;
     void visit(SimplePathSegment& node) override;
-    void visit(PathInExpression& node) override;
     
     // Visitor接口实现 - 其他节点
     void visit(FunctionParameters& node) override;

@@ -1,0 +1,16 @@
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+fn create_point() -> Point {
+    Point {
+        x: 10,
+        y: 20,
+    }
+}
+
+fn main() {
+    let p: Point = create_point();
+    exit(0);
+}

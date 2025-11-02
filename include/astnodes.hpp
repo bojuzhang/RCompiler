@@ -272,7 +272,13 @@ public:
 // STATEMENT Syntax
 class Statement : public ASTNode{
 public:
-    std::shared_ptr<ASTNode> astnode; // item or letstatement or expressionstatement
+    // 注意：Statement 使用组合模式而不是继承
+    // astnode 存储的是实际的语句类型，可能是：
+    // - Item (函数、结构体等定义)
+    // - LetStatement (let 绑定语句)
+    // - ExpressionStatement (表达式语句)
+    // 要判断具体类型，需要检查 astnode 的动态类型
+    std::shared_ptr<ASTNode> astnode;
 public:
     explicit Statement(std::shared_ptr<ASTNode> astnode);
     
@@ -389,10 +395,10 @@ public:
 };
 class StructExpression : public Expression {
 public:
-    std::shared_ptr<PathInExpression> pathinexpression;
+    std::shared_ptr<PathExpression> pathexpression;
     std::shared_ptr<ASTNode> structinfo; // exprfields or base
 public:
-    StructExpression(std::shared_ptr<PathInExpression> pathinexpression,
+    StructExpression(std::shared_ptr<PathExpression> pathexpression,
                      std::shared_ptr<ASTNode> structinfo);
                      
     void accept(ASTVisitor& visitor) override {
@@ -839,16 +845,6 @@ public:
     bool isself, isSelf;
 public:
     SimplePathSegment(std::string identifier, bool isself, bool isSelf);
-    
-    void accept(ASTVisitor& visitor) override {
-        visitor.visit(*this);
-    }
-};
-class PathInExpression : public ASTNode {
-public:
-    // temporary nothing
-public:
-    PathInExpression();
     
     void accept(ASTVisitor& visitor) override {
         visitor.visit(*this);

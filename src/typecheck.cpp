@@ -425,6 +425,7 @@ void TypeChecker::CheckFunctionBody(Function& function) {
             if (bodyTypeIt != nodeTypeMap.end()) {
                 bodyType = bodyTypeIt->second;
             }
+
             
             if (bodyType && declaredReturnType) {
                 // 检查函数体类型与声明的返回类型是否匹配
@@ -601,8 +602,10 @@ bool TypeChecker::AreTypesCompatible(std::shared_ptr<SemanticType> expected, std
     auto actualArray = dynamic_cast<ArrayTypeWrapper*>(actual.get());
     
     if (expectedArray && actualArray) {
-        // 检查元素类型是否兼容
-        if (!AreTypesCompatible(expectedArray->GetElementType(), actualArray->GetElementType())) {
+        // 检查元素类型是否兼容（支持双向隐式转换）
+        // 不仅要检查 expected -> actual，还要检查 actual -> expected
+        if (!AreTypesCompatible(expectedArray->GetElementType(), actualArray->GetElementType()) &&
+            !AreTypesCompatible(actualArray->GetElementType(), expectedArray->GetElementType())) {
             return false;
         }
         
@@ -660,7 +663,7 @@ std::shared_ptr<SemanticType> TypeChecker::GetBinaryOperationResultType(std::sha
     }
     
     // 对于算术运算符，返回限制更强的类型
-    if (op == Token::kPlus || op == Token::kMinus || op == Token::kStar || op == Token::kSlash) {
+    if (op == Token::kPlus || op == Token::kMinus || op == Token::kStar || op == Token::kSlash || op == Token::kPercent) {
         // 如果类型相同，返回该类型
         if (leftStr == rightStr) {
             return leftType;
@@ -722,6 +725,7 @@ std::shared_ptr<SemanticType> TypeChecker::InferExpressionType(Expression& expr)
     auto placeholder = std::make_shared<SimpleType>("inferring");
     nodeTypeMap[&expr] = placeholder;
     
+    
     std::shared_ptr<SemanticType> type;
     if (auto literal = dynamic_cast<LiteralExpression*>(&expr)) {
         type = InferLiteralExpressionType(*literal);
@@ -747,6 +751,50 @@ std::shared_ptr<SemanticType> TypeChecker::InferExpressionType(Expression& expr)
         } else {
             type = nullptr;
         }
+    } else if (auto groupedExpr = dynamic_cast<GroupedExpression*>(&expr)) {
+        // GroupedExpression 的类型为其内部 expression 的类型
+        if (groupedExpr->expression) {
+            type = InferExpressionType(*groupedExpr->expression);
+        } else {
+            type = nullptr;
+        }
+    } else if (auto unaryExpr = dynamic_cast<UnaryExpression*>(&expr)) {
+        // UnaryExpression 的类型为其内部 expression 的类型
+        if (unaryExpr->expression) {
+            type = InferExpressionType(*unaryExpr->expression);
+        } else {
+            type = nullptr;
+        }
+    } else if (auto ifExpr = dynamic_cast<IfExpression*>(&expr)) {
+        // IfExpression 类型推断
+        type = InferIfExpressionType(*ifExpr);
+    } else if (auto loopExpr = dynamic_cast<InfiniteLoopExpression*>(&expr)) {
+        // InfiniteLoopExpression (loop) 类型推断
+        type = InferInfiniteLoopExpressionType(*loopExpr);
+    } else if (auto whileExpr = dynamic_cast<PredicateLoopExpression*>(&expr)) {
+        // PredicateLoopExpression (while) 类型推断
+        type = InferPredicateLoopExpressionType(*whileExpr);
+    } else if (auto blockExpr = dynamic_cast<BlockExpression*>(&expr)) {
+        // BlockExpression 类型推断
+        type = InferBlockExpressionType(*blockExpr);
+    } else if (auto typeCastExpr = dynamic_cast<TypeCastExpression*>(&expr)) {
+        // TypeCastExpression 类型推断
+        type = InferTypeCastExpressionType(*typeCastExpr);
+    } else if (auto structExpr = dynamic_cast<StructExpression*>(&expr)) {
+        // StructExpression 类型推断
+        // 根据任务描述，StructExpression 的类型为其对应的 struct 的类型，
+        // 对应其存储的 pathexpression.simplepath.simplepathsegements[0] 存储的 identifier（即结构体名）
+        if (structExpr->pathexpression &&
+            structExpr->pathexpression->simplepath &&
+            !structExpr->pathexpression->simplepath->simplepathsegements.empty()) {
+            std::string structName = structExpr->pathexpression->simplepath->simplepathsegements[0]->identifier;
+            type = std::make_shared<SimpleType>(structName);
+        } else {
+            type = nullptr;
+        }
+    } else {
+        // 未知表达式类型
+        type = nullptr;
     }
     // else if (auto methodCall = dynamic_cast<MethodCallExpression*>(&expr)) {
     //     type = inferMethodCallExpressionType(*methodCall);
@@ -760,6 +808,7 @@ std::shared_ptr<SemanticType> TypeChecker::InferExpressionType(Expression& expr)
         nodeTypeMap.erase(&expr);
     }
     
+    
     return type;
 }
 
@@ -770,8 +819,6 @@ std::shared_ptr<SemanticType> TypeChecker::InferBinaryExpressionType(BinaryExpre
     if (!leftType || !rightType) {
         return nullptr;
     }
-
-    // std::cerr << "test binary " << leftType->tostring() << " " << rightType->tostring() << " " << to_string(expr.binarytype) << "\n";
     
     // 检查是否可以进行二元运算
     if (!CanPerformBinaryOperation(leftType, rightType, expr.binarytype)) {
@@ -1020,6 +1067,7 @@ std::shared_ptr<SemanticType> TypeChecker::InferArrayExpressionType(ArrayExpress
                 } else {
                     // 对于其他类型的表达式，递归推断（但要避免对数组表达式递归）
                     if (auto innerArrayExpr = dynamic_cast<ArrayExpression*>(element.get())) {
+                        // 对于内层数组，需要独立推断其类型，不受外层数组影响
                         elemType = InferArrayExpressionType(*innerArrayExpr);
                     } else {
                         elemType = InferExpressionType(*element);
@@ -1031,7 +1079,15 @@ std::shared_ptr<SemanticType> TypeChecker::InferArrayExpressionType(ArrayExpress
                     return nullptr;
                 }
                 if (!elementType) {
-                    elementType = elemType;
+                    // 创建元素类型的深拷贝，避免共享
+                    if (auto arrayType = dynamic_cast<ArrayTypeWrapper*>(elemType.get())) {
+                        // 如果是数组类型，创建新的数组类型包装器
+                        auto newElementType = arrayType->GetElementType();
+                        auto newSizeExpr = arrayType->GetSizeExpression();
+                        elementType = std::make_shared<ArrayTypeWrapper>(newElementType, newSizeExpr, constantEvaluator.get());
+                    } else {
+                        elementType = elemType;
+                    }
                 } else if (!AreTypesCompatible(elementType, elemType)) {
                     ReportError("Array elements must have the same type");
                     nodeTypeMap.erase(&expr);
@@ -1057,6 +1113,7 @@ std::shared_ptr<SemanticType> TypeChecker::InferArrayExpressionType(ArrayExpress
             }
         } else {
             // 对于逗号分隔语法，创建一个字面量表达式表示大小
+            // 注意：这里必须使用当前数组表达式的元素数量，而不是期望类型的大小
             auto literal = std::make_shared<LiteralExpression>(
                 std::to_string(expr.arrayelements->expressions.size()),
                 Token::kINTEGER_LITERAL
@@ -1065,8 +1122,21 @@ std::shared_ptr<SemanticType> TypeChecker::InferArrayExpressionType(ArrayExpress
         }
     }
     
-    auto result = std::make_shared<ArrayTypeWrapper>(elementType, sizeExpr.get());
+    // 创建数组类型，确保大小表达式是独立的
+    // 创建一个新的LiteralExpression来避免共享指针
+    Expression* independentSizeExpr = nullptr;
+    if (sizeExpr) {
+        if (auto literal = dynamic_cast<LiteralExpression*>(sizeExpr.get())) {
+            independentSizeExpr = new LiteralExpression(literal->literal, literal->tokentype);
+        } else {
+            independentSizeExpr = sizeExpr.get();
+        }
+    }
+    
+    auto result = std::make_shared<ArrayTypeWrapper>(elementType, independentSizeExpr);
     nodeTypeMap[&expr] = result; // 替换占位符
+    
+    
     return result;
 }
 
@@ -1154,7 +1224,7 @@ std::shared_ptr<SemanticType> TypeChecker::InferArrayExpressionTypeWithExpected(
         return nullptr;
     }
     
-    std::shared_ptr<SemanticType> elementType = expectedElementType;
+    std::shared_ptr<SemanticType> elementType = nullptr;
     
     // 检查是否是重复元素语法 [value; count]
     if (expr.arrayelements->istwo) {
@@ -1200,11 +1270,9 @@ std::shared_ptr<SemanticType> TypeChecker::InferArrayExpressionTypeWithExpected(
                 std::shared_ptr<SemanticType> elemType;
                 // 如果元素是数组表达式（用于多维数组），递归处理
                 if (auto innerArrayExpr = dynamic_cast<ArrayExpression*>(element.get())) {
-                    if (expectedElementType) {
-                        elemType = InferArrayExpressionTypeWithExpected(*innerArrayExpr, expectedElementType);
-                    } else {
-                        elemType = InferArrayExpressionType(*innerArrayExpr);
-                    }
+                    // 对于内层数组，不要传递期望类型，让它独立推断
+                    // 这样可以避免大小表达式被错误地覆盖
+                    elemType = InferArrayExpressionType(*innerArrayExpr);
                 } else {
                     // 非数组元素，使用期望类型推断
                     if (expectedElementType) {
@@ -1237,43 +1305,7 @@ std::shared_ptr<SemanticType> TypeChecker::InferArrayExpressionTypeWithExpected(
     // 对于多维数组，需要正确处理大小表达式
     std::shared_ptr<Expression> sizeExpr = nullptr;
     
-    // 检查是否是内层数组（多维数组的情况）
-    // 只有当元素类型是数组类型，并且当前数组表达式是某个数组的元素时，才是内层数组
-    bool isInnerArray = false;
-    if (expectedElementType) {
-        if (auto innerArrayType = dynamic_cast<ArrayTypeWrapper*>(expectedElementType.get())) {
-            // 检查当前数组表达式是否是某个数组的元素
-            // 这需要检查调用栈或者上下文，这里简化处理
-            // 如果期望类型是数组类型，并且当前数组表达式的元素类型与期望元素类型匹配，
-            // 那么当前数组表达式可能是内层数组
-            if (expr.arrayelements && !expr.arrayelements->expressions.empty()) {
-                auto firstElement = expr.arrayelements->expressions[0];
-                if (firstElement) {
-                    auto firstElementType = InferExpressionType(*firstElement);
-                    if (firstElementType && firstElementType->tostring() == innerArrayType->GetElementType()->tostring()) {
-                        isInnerArray = true;
-                    }
-                }
-            }
-            
-            if (isInnerArray) {
-                // 这是多维数组的内层数组，使用内层数组自己的大小表达式
-                auto innerSizeExpr = innerArrayType->GetSizeExpression();
-                if (innerSizeExpr) {
-                    sizeExpr = std::shared_ptr<Expression>(innerSizeExpr, [](Expression*){});
-                }
-            } else {
-                // 这不是内层数组，使用期望类型中的大小表达式
-                sizeExpr = std::shared_ptr<Expression>(expectedSizeExpr, [](Expression*){});
-            }
-        } else {
-            // 这不是内层数组，使用期望类型中的大小表达式
-            sizeExpr = std::shared_ptr<Expression>(expectedSizeExpr, [](Expression*){});
-        }
-    } else if (expectedSizeExpr) {
-        // 没有期望元素类型，使用期望类型中的大小表达式
-        sizeExpr = std::shared_ptr<Expression>(expectedSizeExpr, [](Expression*){});
-    } else if (expr.arrayelements) {
+    if (expr.arrayelements) {
         if (expr.arrayelements->istwo) {
             // 对于重复元素语法，使用第二个表达式作为大小
             if (expr.arrayelements->expressions.size() >= 2) {
@@ -1409,6 +1441,7 @@ void TypeChecker::CheckPattern(Pattern& pattern, std::shared_ptr<SemanticType> e
 
 void TypeChecker::CheckPattern(IdentifierPattern& pattern, std::shared_ptr<SemanticType> expectedType) {
     std::string varName = pattern.identifier;
+    
     auto varSymbol = std::make_shared<Symbol>(
         varName,
         SymbolKind::Variable,
@@ -1596,6 +1629,28 @@ void TypeChecker::visit(IndexExpression& node) {
     PopNode();
 }
 
+void TypeChecker::visit(StructExpression& node) {
+    PushNode(node);
+    
+    // 访问路径表达式
+    if (node.pathexpression) {
+        node.pathexpression->accept(*this);
+    }
+    
+    // 访问结构体信息（字段或基础结构体）
+    if (node.structinfo) {
+        node.structinfo->accept(*this);
+    }
+    
+    // 推断 StructExpression 的类型并设置到 nodeTypeMap
+    auto structType = InferExpressionType(node);
+    if (structType) {
+        nodeTypeMap[&node] = structType;
+    }
+    
+    PopNode();
+}
+
 void TypeChecker::visit(FieldExpression& node) {
     PushNode(node);
     if (node.expression) {
@@ -1650,6 +1705,7 @@ void TypeChecker::visit(LetStatement& node) {
                 initType = InferExpressionType(*node.expression);
             }
             
+            
             // 如果推断失败，但有声明类型，使用声明类型
             if (!initType) {
                 initType = declaredType;
@@ -1677,7 +1733,6 @@ void TypeChecker::visit(LetStatement& node) {
             // 没有声明类型，使用普通推断
             auto initType = InferExpressionType(*node.expression);
             if (!initType) {
-                // 添加调试信息
                 if (auto pattern = dynamic_cast<IdentifierPattern*>(node.patternnotopalt.get())) {
                     ReportError("Unable to infer type for let statement for variable: " + pattern->identifier);
                 } else {
@@ -1970,7 +2025,8 @@ void TypeChecker::visit(BlockExpression& node) {
     } else if (!node.statements.empty()) {
         // 2. 如果没有尾表达式，检查最后一条语句是否是不带分号的表达式语句
         auto lastStmt = node.statements.back();
-        if (auto exprStmt = dynamic_cast<ExpressionStatement*>(lastStmt.get())) {
+        // Statement 使用组合模式，需要检查其 astnode 的类型
+        if (auto exprStmt = dynamic_cast<ExpressionStatement*>(lastStmt->astnode.get())) {
             // 检查是否为不带分号的表达式语句（expressionstatement without semi）
             if (!exprStmt->hassemi && exprStmt->astnode) {
                 // 不带分号的表达式语句，作为尾表达式处理
@@ -1993,6 +2049,7 @@ void TypeChecker::visit(BlockExpression& node) {
         // 3. 空块表达式的类型为 unit
         nodeTypeMap[&node] = std::make_shared<SimpleType>("()");
     }
+    
     
     // 退出作用域
     scopeTree->ExitScope();
@@ -2021,18 +2078,12 @@ void TypeChecker::visit(IfExpression& node) {
     // 检查else分支（如果有）
     if (node.elseexpression) {
         node.elseexpression->accept(*this);
-        // 检查两个分支的类型兼容性
-        auto ifType = InferExpressionType(*node.ifblockexpression);
-        auto elseType = InferExpressionType(*node.elseexpression);
-        if (ifType && elseType) {
-            // 如果两个分支都不是!类型，检查类型兼容性
-            if (ifType->tostring() != "!" && elseType->tostring() != "!") {
-                if (!AreTypesCompatible(ifType, elseType)) {
-                    ReportError("If expression branches have incompatible types: " +
-                               ifType->tostring() + " vs " + elseType->tostring());
-                }
-            }
-        }
+    }
+    
+    // 使用 InferIfExpressionType 函数来推断和设置类型（无论是否有 else 分支）
+    auto ifExprType = InferIfExpressionType(node);
+    if (ifExprType) {
+        nodeTypeMap[&node] = ifExprType;
     }
     
     PopNode();
@@ -2243,11 +2294,11 @@ TypeChecker::ReturnAnalysisResult TypeChecker::AnalyzeReturnStatements(BlockExpr
 }
 
 void TypeChecker::AnalyzeReturnStatementsInStatement(Statement& stmt, ReturnAnalysisResult& result) {
-    // Statement 的 astnode 只可能为 item, letstatement, expressionstatement
+    // Statement 使用组合模式，astnode 存储的是实际的语句类型
     // 我们只关心 expressionstatement，它的 astnode 可能为 returnexpression
     
-    // 首先检查 stmt 本身是否是 ExpressionStatement
-    if (auto exprStmt = dynamic_cast<ExpressionStatement*>(&stmt)) {
+    // 检查 stmt.astnode 是否是 ExpressionStatement
+    if (auto exprStmt = dynamic_cast<ExpressionStatement*>(stmt.astnode.get())) {
         if (exprStmt->astnode) {
             // 检查是否是 return 语句
             if (auto returnExpr = dynamic_cast<ReturnExpression*>(exprStmt->astnode.get())) {
@@ -2266,39 +2317,13 @@ void TypeChecker::AnalyzeReturnStatementsInStatement(Statement& stmt, ReturnAnal
                 AnalyzeReturnStatementsInExpression(*exprStmt->astnode, result);
             }
         }
-    } else if (auto letStmt = dynamic_cast<LetStatement*>(&stmt)) {
+    } else if (auto letStmt = dynamic_cast<LetStatement*>(stmt.astnode.get())) {
         // let 语句中的表达式可能包含 return
         if (letStmt->expression) {
             AnalyzeReturnStatementsInExpression(*letStmt->expression, result);
         }
-    } else if (stmt.astnode) {
-        // 检查 stmt.astnode 是否是 ExpressionStatement
-        if (auto exprStmt = dynamic_cast<ExpressionStatement*>(stmt.astnode.get())) {
-            if (exprStmt->astnode) {
-                // 检查是否是 return 语句
-                if (auto returnExpr = dynamic_cast<ReturnExpression*>(exprStmt->astnode.get())) {
-                    // 找到 return 语句
-                    if (returnExpr->expression) {
-                        auto returnType = InferExpressionType(*returnExpr->expression);
-                        result.hasCertainReturn = true;
-                        result.certainReturnType = returnType;
-                    } else {
-                        // 无表达式的 return 语句
-                        result.hasCertainReturn = true;
-                        result.certainReturnType = std::make_shared<SimpleType>("()");
-                    }
-                } else {
-                    // 其他类型的表达式，递归分析
-                    AnalyzeReturnStatementsInExpression(*exprStmt->astnode, result);
-                }
-            }
-        } else if (auto letStmt = dynamic_cast<LetStatement*>(stmt.astnode.get())) {
-            // let 语句中的表达式可能包含 return
-            if (letStmt->expression) {
-                AnalyzeReturnStatementsInExpression(*letStmt->expression, result);
-            }
-        }
     }
+    // 注意：stmt 本身不会是 ExpressionStatement 或 LetStatement，因为 Statement 使用组合模式
 }
 
 void TypeChecker::AnalyzeReturnStatementsInExpression(Expression& expr, ReturnAnalysisResult& result) {
@@ -2362,5 +2387,298 @@ void TypeChecker::AnalyzeReturnStatementsInExpression(Expression& expr, ReturnAn
         }
     }
     // 其他类型的表达式不需要特殊处理
+}
+
+// 实现 IfExpression 类型推断
+std::shared_ptr<SemanticType> TypeChecker::InferIfExpressionType(IfExpression& expr) {
+    // 检查条件表达式类型
+    if (expr.conditions && expr.conditions->expression) {
+        auto condType = InferExpressionType(*expr.conditions->expression);
+        if (condType && condType->tostring() != "bool") {
+            ReportError("If condition must be of type bool, found " + condType->tostring());
+        }
+    }
+    
+    // 推断 if 分支类型
+    std::shared_ptr<SemanticType> ifType = nullptr;
+    if (expr.ifblockexpression) {
+        ifType = InferExpressionType(*expr.ifblockexpression);
+    }
+    
+    // 推断 else 分支类型
+    std::shared_ptr<SemanticType> elseType = nullptr;
+    if (expr.elseexpression) {
+        elseType = InferExpressionType(*expr.elseexpression);
+    }
+    
+    // 根据 Rx 语言规范进行类型推断
+    if (!elseType) {
+        // 没有 else 分支，类型为 unit
+        return ifType ? ifType : std::make_shared<SimpleType>("()");
+    }
+    
+    // 有 else 分支的情况
+    if (!ifType || !elseType) {
+        return nullptr;
+    }
+    
+    // 检查是否有一个分支是 ! 类型（never type）
+    bool ifIsNever = ifType->tostring() == "!";
+    bool elseIsNever = elseType->tostring() == "!";
+    
+    if (ifIsNever && elseIsNever) {
+        // 两个分支都是 ! 类型，结果为 !
+        return std::make_shared<SimpleType>("!");
+    } else if (ifIsNever) {
+        // if 分支是 ! 类型，结果为 else 分支类型
+        return elseType;
+    } else if (elseIsNever) {
+        // else 分支是 ! 类型，结果为 if 分支类型
+        return ifType;
+    } else {
+        // 两个分支都不是 ! 类型，检查类型兼容性
+        if (!AreTypesCompatible(ifType, elseType)) {
+            ReportError("If expression branches have incompatible types: " +
+                       ifType->tostring() + " vs " + elseType->tostring());
+            return nullptr;
+        }
+        // 返回 if 分支类型（两个分支兼容）
+        return ifType;
+    }
+}
+
+// 实现 InfiniteLoopExpression (loop) 类型推断
+std::shared_ptr<SemanticType> TypeChecker::InferInfiniteLoopExpressionType(InfiniteLoopExpression& expr) {
+    // 根据 Rx 语言规范，loop 表达式的类型取决于其中的 break 表达式
+    // 如果没有 break，类型为 !（never）
+    // 如果有 break 表达式，类型为所有 break 表达式类型的统一
+    
+    if (expr.blockexpression) {
+        // 推断循环体类型，但 loop 的类型由 break 决定
+        InferExpressionType(*expr.blockexpression);
+        
+        // 分析循环体中的 break 表达式
+        auto breakAnalysis = AnalyzeBreakExpressions(*expr.blockexpression);
+        
+        if (!breakAnalysis.hasBreak) {
+            // 没有 break 表达式，类型为 !（never）
+            return std::make_shared<SimpleType>("!");
+        }
+        
+        if (breakAnalysis.breakTypes.empty()) {
+            // 有 break 但没有类型信息，返回 unit
+            return std::make_shared<SimpleType>("()");
+        }
+        
+        // 检查所有 break 表达式的类型是否一致
+        auto firstBreakType = breakAnalysis.breakTypes[0];
+        for (size_t i = 1; i < breakAnalysis.breakTypes.size(); ++i) {
+            auto currentBreakType = breakAnalysis.breakTypes[i];
+            if (!AreTypesCompatible(firstBreakType, currentBreakType)) {
+                ReportError("Break expressions in loop have incompatible types: " +
+                           firstBreakType->tostring() + " vs " + currentBreakType->tostring());
+                return nullptr;
+            }
+        }
+        
+        // 返回第一个 break 表达式的类型（所有 break 类型都兼容）
+        return firstBreakType;
+    }
+    
+    // 没有循环体，返回 ! 类型（死循环）
+    return std::make_shared<SimpleType>("!");
+}
+
+// 实现 break 表达式分析
+TypeChecker::BreakAnalysisResult TypeChecker::AnalyzeBreakExpressions(BlockExpression& blockExpr) {
+    BreakAnalysisResult result;
+    
+    // 遍历块中的所有语句
+    for (const auto& stmt : blockExpr.statements) {
+        if (stmt) {
+            AnalyzeBreakExpressionsInStatement(*stmt, result);
+        }
+    }
+    
+    // 检查尾表达式是否包含 break
+    if (blockExpr.expressionwithoutblock) {
+        AnalyzeBreakExpressionsInExpression(*blockExpr.expressionwithoutblock, result);
+    }
+    
+    return result;
+}
+
+void TypeChecker::AnalyzeBreakExpressionsInStatement(Statement& stmt, BreakAnalysisResult& result) {
+    // Statement 使用组合模式，astnode 存储的是实际的语句类型
+    if (auto exprStmt = dynamic_cast<ExpressionStatement*>(stmt.astnode.get())) {
+        if (exprStmt->astnode) {
+            AnalyzeBreakExpressionsInExpression(*exprStmt->astnode, result);
+        }
+    } else if (auto letStmt = dynamic_cast<LetStatement*>(stmt.astnode.get())) {
+        // let 语句中的表达式可能包含 break
+        if (letStmt->expression) {
+            AnalyzeBreakExpressionsInExpression(*letStmt->expression, result);
+        }
+    }
+}
+
+void TypeChecker::AnalyzeBreakExpressionsInExpression(Expression& expr, BreakAnalysisResult& result) {
+    if (auto breakExpr = dynamic_cast<BreakExpression*>(&expr)) {
+        // 找到 break 表达式
+        result.hasBreak = true;
+        
+        if (breakExpr->expression) {
+            // break 有表达式，推断其类型
+            auto breakType = InferExpressionType(*breakExpr->expression);
+            if (breakType) {
+                result.breakTypes.push_back(breakType);
+            } else {
+                // 如果类型推断失败，使用 unit 类型
+                result.breakTypes.push_back(std::make_shared<SimpleType>("()"));
+            }
+        } else {
+            // break 没有表达式，类型为 unit
+            result.breakTypes.push_back(std::make_shared<SimpleType>("()"));
+        }
+    } else if (auto ifExpr = dynamic_cast<IfExpression*>(&expr)) {
+        // if 表达式中的 break
+        if (ifExpr->ifblockexpression) {
+            auto ifResult = AnalyzeBreakExpressions(*ifExpr->ifblockexpression);
+            result.hasBreak = result.hasBreak || ifResult.hasBreak;
+            result.breakTypes.insert(result.breakTypes.end(),
+                                  ifResult.breakTypes.begin(),
+                                  ifResult.breakTypes.end());
+        }
+        if (ifExpr->elseexpression) {
+            if (auto elseBlock = dynamic_cast<BlockExpression*>(ifExpr->elseexpression.get())) {
+                auto elseResult = AnalyzeBreakExpressions(*elseBlock);
+                result.hasBreak = result.hasBreak || elseResult.hasBreak;
+                result.breakTypes.insert(result.breakTypes.end(),
+                                      elseResult.breakTypes.begin(),
+                                      elseResult.breakTypes.end());
+            } else {
+                AnalyzeBreakExpressionsInExpression(*ifExpr->elseexpression, result);
+            }
+        }
+    } else if (auto loopExpr = dynamic_cast<InfiniteLoopExpression*>(&expr)) {
+        // 嵌套的 loop 表达式中的 break（不影响外层 loop）
+        if (loopExpr->blockexpression) {
+            // 递归分析内层 loop，但不将其 break 类型添加到外层结果中
+            AnalyzeBreakExpressions(*loopExpr->blockexpression);
+        }
+    } else if (auto whileExpr = dynamic_cast<PredicateLoopExpression*>(&expr)) {
+        // while 循环中的 break（不影响外层 loop）
+        if (whileExpr->blockexpression) {
+            // 递归分析内层 while，但不将其 break 类型添加到外层结果中
+            AnalyzeBreakExpressions(*whileExpr->blockexpression);
+        }
+    } else if (auto blockExpr = dynamic_cast<BlockExpression*>(&expr)) {
+        // 嵌套的块表达式
+        auto blockResult = AnalyzeBreakExpressions(*blockExpr);
+        result.hasBreak = result.hasBreak || blockResult.hasBreak;
+        result.breakTypes.insert(result.breakTypes.end(),
+                              blockResult.breakTypes.begin(),
+                              blockResult.breakTypes.end());
+    } else if (auto binaryExpr = dynamic_cast<BinaryExpression*>(&expr)) {
+        // 二元表达式的左右操作数可能包含 break
+        if (binaryExpr->leftexpression) {
+            AnalyzeBreakExpressionsInExpression(*binaryExpr->leftexpression, result);
+        }
+        if (binaryExpr->rightexpression) {
+            AnalyzeBreakExpressionsInExpression(*binaryExpr->rightexpression, result);
+        }
+    } else if (auto assignmentExpr = dynamic_cast<AssignmentExpression*>(&expr)) {
+        // 赋值表达式的左右操作数可能包含 break
+        if (assignmentExpr->leftexpression) {
+            AnalyzeBreakExpressionsInExpression(*assignmentExpr->leftexpression, result);
+        }
+        if (assignmentExpr->rightexpression) {
+            AnalyzeBreakExpressionsInExpression(*assignmentExpr->rightexpression, result);
+        }
+    }
+    // 其他类型的表达式不需要特殊处理
+}
+
+// 实现 PredicateLoopExpression (while) 类型推断
+std::shared_ptr<SemanticType> TypeChecker::InferPredicateLoopExpressionType(PredicateLoopExpression& expr) {
+    // 根据 Rx 语言规范，while 表达式的类型总是 unit
+    
+    // 检查条件表达式类型
+    if (expr.conditions && expr.conditions->expression) {
+        auto condType = InferExpressionType(*expr.conditions->expression);
+        if (condType && condType->tostring() != "bool") {
+            ReportError("While condition must be of type bool, found " + condType->tostring());
+        }
+    }
+    
+    // 推断循环体类型（虽然不影响 while 的类型）
+    if (expr.blockexpression) {
+        InferExpressionType(*expr.blockexpression);
+    }
+    
+    // while 表达式的类型总是 unit
+    return std::make_shared<SimpleType>("()");
+}
+
+// 实现 BlockExpression 类型推断
+std::shared_ptr<SemanticType> TypeChecker::InferBlockExpressionType(BlockExpression& expr) {
+    // 根据 Rx 语言规范，BlockExpression 的类型推断规则：
+    // 1. 有尾表达式的情况，使用该表达式的类型
+    // 2. 没有尾表达式的情况，如果所有控制流都会遇到 return/break/continue，使用 !
+    // 3. 否则类型为 unit
+    
+    // 重要：在推断类型之前，先访问所有语句以确保变量被注册到符号表中
+    for (const auto& stmt : expr.statements) {
+        if (stmt) {
+            stmt->accept(*this);
+        }
+    }
+    
+    // 1. 首先检查是否有尾表达式（expressionwithoutblock）
+    if (expr.expressionwithoutblock) {
+        // 推断尾表达式的类型
+        auto tailExprType = InferExpressionType(*expr.expressionwithoutblock);
+        if (tailExprType) {
+            return tailExprType;
+        } else {
+            // 如果尾表达式类型推断失败，默认为 unit
+            return std::make_shared<SimpleType>("()");
+        }
+    } else if (!expr.statements.empty()) {
+        // 2. 如果没有尾表达式，检查最后一条语句是否是不带分号的表达式语句
+        auto lastStmt = expr.statements.back();
+        // Statement 使用组合模式，需要检查其 astnode 的类型
+        if (auto exprStmt = dynamic_cast<ExpressionStatement*>(lastStmt->astnode.get())) {
+            // 检查是否为不带分号的表达式语句（expressionstatement without semi）
+            if (!exprStmt->hassemi && exprStmt->astnode) {
+                // 不带分号的表达式语句，作为尾表达式处理
+                auto lastExprType = InferExpressionType(*exprStmt->astnode);
+                if (lastExprType) {
+                    return lastExprType;
+                } else {
+                    // 如果表达式类型推断失败，默认为 unit
+                    return std::make_shared<SimpleType>("()");
+                }
+            } else {
+                // 带分号的表达式语句或其他情况，块表达式类型为 unit
+                return std::make_shared<SimpleType>("()");
+            }
+        } else {
+            // 如果最后一条语句不是表达式语句，块表达式类型为 unit
+            return std::make_shared<SimpleType>("()");
+        }
+    } else {
+        // 3. 空块表达式的类型为 unit
+        return std::make_shared<SimpleType>("()");
+    }
+}
+
+// 实现 TypeCastExpression 类型推断
+std::shared_ptr<SemanticType> TypeChecker::InferTypeCastExpressionType(TypeCastExpression& expr) {
+    // TypeCastExpression 的类型为其转化后 as 对应的类型，对应其存储的 typenobounds
+    if (expr.typenobounds) {
+        return CheckType(*expr.typenobounds);
+    }
+    return nullptr;
 }
 

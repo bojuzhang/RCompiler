@@ -95,7 +95,6 @@ public:
     void visit(EnumVariant& node) override {}
 
     void visit(AssociatedItem& node) override {}
-    void visit(PathInExpression& node) override {}
 
     std::shared_ptr<ScopeTree> getScopeTree() {return root;}
     

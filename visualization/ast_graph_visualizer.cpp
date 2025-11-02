@@ -397,8 +397,8 @@ void ASTGraphVisualizer::visit(StructExpression& node) {
     }
     
     pushNode(std::stoi(nodeId.substr(5)));
-    if (node.pathinexpression) {
-        node.pathinexpression->accept(*this);
+    if (node.pathexpression) {
+        node.pathexpression->accept(*this);
     }
     if (node.structinfo) {
         node.structinfo->accept(*this);
@@ -897,15 +897,6 @@ void ASTGraphVisualizer::visit(SimplePathSegment& node) {
     }
 }
 
-void ASTGraphVisualizer::visit(PathInExpression& node) {
-    std::string nodeId = generateNodeId();
-    addNode(nodeId, getNodeLabel("PathInExpression"));
-    
-    int parentId = getCurrentNodeId();
-    if (parentId != -1) {
-        addEdge("node_" + std::to_string(parentId), nodeId);
-    }
-}
 
 // 其他节点访问实现
 void ASTGraphVisualizer::visit(FunctionParameters& node) {
