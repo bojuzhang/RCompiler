@@ -48,14 +48,14 @@ public:
     bool AlwaysDivergesAt(ASTNode* node) const;
     
     void visit(Crate& node) override;
-    void visit(Item& node) override {}
+    void visit(Item& node) override;
     void visit(Function& node) override;
     void visit(ConstantItem& node) override;
     void visit(StructStruct& node) override {}
     void visit(Enumeration& node) override {}
     void visit(InherentImpl& node) override {}
     
-    void visit(Statement& node) override {}
+    void visit(Statement& node) override;
     void visit(LetStatement& node) override;
     void visit(ExpressionStatement& node) override;
     

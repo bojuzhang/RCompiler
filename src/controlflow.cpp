@@ -43,18 +43,32 @@ void ControlFlowAnalyzer::visit(Crate& node) {
     PopNode();
 }
 
+void ControlFlowAnalyzer::visit(Item& node) {
+    if (node.item) {
+        node.item->accept(*this);
+    }
+}
+
+void ControlFlowAnalyzer::visit(Statement& node) {
+    if (node.astnode) {
+        node.astnode->accept(*this);
+    }
+}
+
 void ControlFlowAnalyzer::visit(Function& node) {
     PushNode(node);
     
     if (node.blockexpression) {
         node.blockexpression->accept(*this);
         // 检查函数返回类型
-        auto returnType = node.functionreturntype->type;
-        auto bodyType = GetNodeType(node.blockexpression.get());
-        
-        // 如果函数体发散，则不需要返回语句
-        if (bodyType && bodyType->tostring() != "!" && GetControlFlow(node.blockexpression.get()) == ControlFlow::Diverges) {
-            // 需要检查是否有return语句或发散表达式
+        if (node.functionreturntype) {
+            auto returnType = node.functionreturntype->type;
+            auto bodyType = GetNodeType(node.blockexpression.get());
+            
+            // 如果函数体发散，则不需要返回语句
+            if (bodyType && bodyType->tostring() != "!" && GetControlFlow(node.blockexpression.get()) == ControlFlow::Diverges) {
+                // 需要检查是否有return语句或发散表达式
+            }
         }
     }
     
@@ -405,8 +419,8 @@ bool ControlFlowAnalyzer::IsAlwaysDiverging(Expression& expr) {
 }
 
 void ControlFlowAnalyzer::CheckBreakContinueValidity(ASTNode& node, Token tokenType) {
+    std::string keyword = tokenType == Token::kbreak ? "break" : "continue";
     if (!InLoop()) {
-        std::string keyword = tokenType == Token::kbreak ? "break" : "continue";
         ReportError(keyword + " expression outside of loop");
     }
 }
