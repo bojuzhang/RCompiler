@@ -219,8 +219,14 @@ std::shared_ptr<ConstBlockExpression> Parser::parseConstBlockExpression() {
     if (!match(Token::kconst)) {
         return nullptr;
     }
+    size_t tmp = pos;
     advance();
-    return std::make_shared<ConstBlockExpression>(std::move(parseBlockExpression()));
+    auto expression = parseBlockExpression();
+    if (expression != nullptr) {
+        return std::make_shared<ConstBlockExpression>(std::move(expression));
+    }
+    pos = tmp;
+    return nullptr;
 }
 std::shared_ptr<InfiniteLoopExpression> Parser::parseInfiniteLoopExpression() {
     if (!match(Token::kloop)) {
@@ -447,38 +453,40 @@ std::shared_ptr<Statement> Parser::parseStatement() {
         }
         return std::make_shared<Statement>(letstatement);
     }
-    if (match(Token::kconst)) {
-        // 检查是否是 const 语句（在函数内部）
-        size_t tmp = pos;
-        advance();
-        if (match(Token::kIDENTIFIER)) {
-            advance();
-            if (match(Token::kColon)) {
-                // 这是一个 const 语句，解析为 ConstantItem
-                pos = tmp;
-                auto constItem = parseConstantItem();
-                if (constItem != nullptr) {
-                    return std::make_shared<Statement>(std::move(constItem));
-                }
-            }
-        }
-        // 如果不是 const 语句，回退
-        pos = tmp;
-    }
+    // if (match(Token::kconst)) {
+    //     // 检查是否是 const 语句（在函数内部）
+    //     size_t tmp = pos;
+    //     advance();
+    //     if (match(Token::kIDENTIFIER)) {
+    //         advance();
+    //         if (match(Token::kColon)) {
+    //             // 这是一个 const 语句，解析为 ConstantItem
+    //             pos = tmp;
+    //             auto constItem = parseConstantItem();
+    //             if (constItem != nullptr) {
+    //                 return std::make_shared<Statement>(std::move(constItem));
+    //             }
+    //         }
+    //     }
+    //     // 如果不是 const 语句，回退
+    //     pos = tmp;
+    // }
     
     // 先尝试解析表达式语句，因为像 while、if、loop 等都是表达式
+    size_t tmp = pos;
     auto expressionstatement = parseExpressionStatement();
     if (expressionstatement != nullptr) {
         return std::make_shared<Statement>(std::move(expressionstatement));
     }
+    pos = tmp;
 
-    // // 只有在表达式解析失败时，才尝试解析 item
-    // size_t tmp = pos;
-    // auto item = parseItem();
-    // if (item != nullptr) {
-    //     return std::make_shared<Statement>(std::move(item));
-    // }
-    // pos = tmp;
+    // 只有在表达式解析失败时，才尝试解析 item
+    tmp = pos;
+    auto item = parseItem();
+    if (item != nullptr) {
+        return std::make_shared<Statement>(std::move(item));
+    }
+    pos = tmp;
     return nullptr;
 }
 std::shared_ptr<Conditions> Parser::parseConditions() {
