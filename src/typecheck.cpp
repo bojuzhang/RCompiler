@@ -2255,9 +2255,16 @@ std::shared_ptr<SemanticType> TypeChecker::InferMethodCallType(CallExpression& e
 
 // 检查是否是内置方法调用
 bool TypeChecker::IsBuiltinMethodCall(const std::string& receiverType, const std::string& methodName) {
-    // u32 和 usize 类型的 to_string 方法
-    if ((receiverType == "u32" || receiverType == "usize") && methodName == "to_string") {
-        return true;
+    // to_string 方法：支持 u32, usize 以及可以隐式转换为这些类型的 Int, UnsignedInt
+    if (methodName == "to_string") {
+        // 直接支持的类型
+        if (receiverType == "u32" || receiverType == "usize") {
+            return true;
+        }
+        // 可以隐式转换为 u32/usize 的类型
+        if (receiverType == "Int" || receiverType == "UnsignedInt") {
+            return true;
+        }
     }
     
     // String 类型的 as_str 和 as_mut_str 方法
@@ -2265,9 +2272,17 @@ bool TypeChecker::IsBuiltinMethodCall(const std::string& receiverType, const std
         return true;
     }
     
-    // 数组类型的 len 方法
-    if (receiverType.find("[") == 0 && receiverType.find("]") == receiverType.length() - 1 && methodName == "len") {
-        return true;
+    // 数组类型的 len 方法（包括数组引用）
+    if (methodName == "len") {
+        // 检查数组类型 [T; N]
+        if (receiverType.find("[") == 0 && receiverType.find("]") == receiverType.length() - 1) {
+            return true;
+        }
+        // 检查数组引用类型 &[T; N] 和 &mut [T; N]
+        if ((receiverType.find("&[") == 0 || receiverType.find("&mut [") == 0) &&
+            receiverType.find("]") == receiverType.length() - 1) {
+            return true;
+        }
     }
     
     return false;
@@ -2275,9 +2290,13 @@ bool TypeChecker::IsBuiltinMethodCall(const std::string& receiverType, const std
 
 // 获取内置方法的返回类型
 std::shared_ptr<SemanticType> TypeChecker::GetBuiltinMethodReturnType(const std::string& receiverType, const std::string& methodName) {
-    // u32 和 usize 类型的 to_string 方法返回 String
-    if ((receiverType == "u32" || receiverType == "usize") && methodName == "to_string") {
-        return std::make_shared<SimpleType>("String");
+    // to_string 方法：支持 u32, usize 以及可以隐式转换为这些类型的 Int, UnsignedInt
+    if (methodName == "to_string") {
+        // 直接支持的类型和可以隐式转换的类型都返回 String
+        if (receiverType == "u32" || receiverType == "usize" ||
+            receiverType == "Int" || receiverType == "UnsignedInt") {
+            return std::make_shared<SimpleType>("String");
+        }
     }
     
     // String 类型的 as_str 和 as_mut_str 方法返回 &str 和 &mut str
@@ -2289,9 +2308,17 @@ std::shared_ptr<SemanticType> TypeChecker::GetBuiltinMethodReturnType(const std:
         }
     }
     
-    // 数组类型的 len 方法返回 usize
-    if (receiverType.find("[") == 0 && receiverType.find("]") == receiverType.length() - 1 && methodName == "len") {
-        return std::make_shared<SimpleType>("usize");
+    // 数组类型的 len 方法返回 usize（包括数组引用）
+    if (methodName == "len") {
+        // 检查数组类型 [T; N]
+        if (receiverType.find("[") == 0 && receiverType.find("]") == receiverType.length() - 1) {
+            return std::make_shared<SimpleType>("usize");
+        }
+        // 检查数组引用类型 &[T; N] 和 &mut [T; N]
+        if ((receiverType.find("&[") == 0 || receiverType.find("&mut [") == 0) &&
+            receiverType.find("]") == receiverType.length() - 1) {
+            return std::make_shared<SimpleType>("usize");
+        }
     }
     
     return nullptr;
