@@ -72,7 +72,7 @@ public:
     void visit(BreakExpression& node) override;
     void visit(ContinueExpression& node) override;
     void visit(ReturnExpression& node) override;
-    void visit(CallExpression& node) override {}
+    void visit(CallExpression& node) override;
     void visit(ArrayExpression& node) override {}
     
     void visit(GroupedExpression& node) override {}

@@ -59,7 +59,7 @@ public:
     void visit(IndexExpression& node) override;
     void visit(TupleExpression& node) override {}
     void visit(StructExpression& node) override;
-    void visit(CallExpression& node) override {}
+    void visit(CallExpression& node) override;
     void visit(MethodCallExpression& node) override {}
     void visit(FieldExpression& node) override;
     void visit(ContinueExpression& node) override {}
@@ -224,4 +224,8 @@ private:
     // 内置方法支持
     bool IsBuiltinMethodCall(const std::string& receiverType, const std::string& methodName);
     std::shared_ptr<SemanticType> GetBuiltinMethodReturnType(const std::string& receiverType, const std::string& methodName);
+    
+    // exit 函数检查
+    void CheckExitFunctionUsage(CallExpression& expr);
+    void CheckMainFunctionExitRequirement(BlockExpression& blockExpr);
 };

@@ -1,0 +1,18 @@
+
+exit
+fn exit(code: i32) -> ()
+Immediately terminates the current process and returns the provided exit code to the parent process. During type checking, exit is treated as returning () (this specification does not include a never type). Nevertheless, control flow does not continue after the call at runtime.
+
+exit may appear only as the final statement of the main function. Using exit anywhere else is a semantic error.
+
+fn main() -> () {
+    println("done");
+    exit(0);
+}
+The following is invalid:
+
+
+fn main() -> () {
+    exit(1);
+    println("unreachable");  // compile-time error
+}

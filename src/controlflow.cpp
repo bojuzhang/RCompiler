@@ -276,6 +276,31 @@ void ControlFlowAnalyzer::visit(ExpressionStatement& node) {
     PopNode();
 }
 
+void ControlFlowAnalyzer::visit(CallExpression& node) {
+    PushNode(node);
+    
+    if (node.expression) {
+        node.expression->accept(*this);
+    }
+    
+    // 检查是否是 exit 函数调用
+    if (auto pathExpr = dynamic_cast<PathExpression*>(node.expression.get())) {
+        if (pathExpr->simplepath && !pathExpr->simplepath->simplepathsegements.empty()) {
+            std::string functionName = pathExpr->simplepath->simplepathsegements[0]->identifier;
+            if (functionName == "exit") {
+                // exit 函数发散
+                nodeControlFlow[&node] = ControlFlow::Diverges;
+                nodeTypes[&node] = std::make_shared<NeverType>();
+                alwaysDiverges[&node] = true;
+                PopNode();
+                return;
+            }
+        }
+    }
+    
+    PopNode();
+}
+
 // 控制流分析方法
 ControlFlow ControlFlowAnalyzer::AnalyzeBlockControlFlow(BlockExpression& block) {
     ControlFlow resultFlow = ControlFlow::Continues;

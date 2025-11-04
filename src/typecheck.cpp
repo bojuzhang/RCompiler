@@ -451,6 +451,11 @@ void TypeChecker::CheckFunctionBody(Function& function) {
             }
         }
         
+        // 特殊检查：对于 main 函数，必须有 exit() 调用作为最后一条语句
+        if (function.identifier_name == "main") {
+            CheckMainFunctionExitRequirement(*function.blockexpression);
+        }
+        
         PopExpectedType();
     }
 }
@@ -878,6 +883,31 @@ std::shared_ptr<SemanticType> TypeChecker::InferBinaryExpressionType(BinaryExpre
     return GetBinaryOperationResultType(leftType, rightType, expr.binarytype);
 }
 
+void TypeChecker::visit(CallExpression& node) {
+    PushNode(node);
+    
+    if (node.expression) {
+        node.expression->accept(*this);
+    }
+    
+    // 访问参数
+    if (node.callparams) {
+        for (const auto& arg : node.callparams->expressions) {
+            if (arg) {
+                arg->accept(*this);
+            }
+        }
+    }
+    
+    // 推断调用表达式的类型
+    auto callType = InferCallExpressionType(node);
+    if (callType) {
+        nodeTypeMap[&node] = callType;
+    }
+    
+    PopNode();
+}
+
 std::shared_ptr<SemanticType> TypeChecker::InferCallExpressionType(CallExpression& expr) {
     auto calleeType = InferExpressionType(*expr.expression);
 
@@ -891,6 +921,14 @@ std::shared_ptr<SemanticType> TypeChecker::InferCallExpressionType(CallExpressio
     if (auto pathExpr = dynamic_cast<PathExpression*>(expr.expression.get())) {
         if (pathExpr->simplepath && !pathExpr->simplepath->simplepathsegements.empty()) {
             std::string functionName = pathExpr->simplepath->simplepathsegements[0]->identifier;
+            
+            // 特殊处理 exit 函数
+            if (functionName == "exit") {
+                CheckExitFunctionUsage(expr);
+                // exit 函数发散，返回 never 类型
+                nodeTypeMap[&expr] = std::make_shared<SimpleType>("!");
+                return std::make_shared<SimpleType>("!");
+            }
             
             // 直接从作用域中查找符号
             auto symbol = FindSymbol(functionName);
@@ -2769,5 +2807,138 @@ std::shared_ptr<SemanticType> TypeChecker::InferTypeCastExpressionType(TypeCastE
         return CheckType(*expr.typenobounds);
     }
     return nullptr;
+}
+
+void TypeChecker::CheckExitFunctionUsage(CallExpression& expr) {
+    // 检查 exit 函数的使用规则
+    
+    // 1. 检查是否在 main 函数中
+    bool isInMainFunction = false;
+    std::stack<ASTNode*> tempStack = nodeStack;
+    
+    while (!tempStack.empty()) {
+        auto topNode = tempStack.top();
+        tempStack.pop();
+        
+        if (auto funcNode = dynamic_cast<Function*>(topNode)) {
+            if (funcNode->identifier_name == "main") {
+                isInMainFunction = true;
+                break;
+            }
+        }
+    }
+    
+    if (!isInMainFunction) {
+        ReportError("exit() may only be used in the main function");
+        return;
+    }
+    
+    // 2. 检查是否是 main 函数的最后一条语句
+    // 需要找到包含这个 exit 调用的语句，并检查它是否是函数体的最后一条语句
+    bool isLastStatement = false;
+    
+    // 再次遍历节点栈，找到 main 函数
+    tempStack = nodeStack;
+    Function* mainFunc = nullptr;
+    BlockExpression* mainBlock = nullptr;
+    
+    while (!tempStack.empty()) {
+        auto topNode = tempStack.top();
+        tempStack.pop();
+        
+        if (auto funcNode = dynamic_cast<Function*>(topNode)) {
+            if (funcNode->identifier_name == "main") {
+                mainFunc = funcNode;
+                if (funcNode->blockexpression) {
+                    mainBlock = funcNode->blockexpression.get();
+                }
+                break;
+            }
+        }
+    }
+    
+    if (mainBlock && !mainBlock->statements.empty()) {
+        // 检查 exit 调用是否是最后一条语句
+        auto lastStmt = mainBlock->statements.back();
+        
+        // 检查最后一条语句是否是表达式语句，且包含 exit 调用
+        if (auto exprStmt = dynamic_cast<ExpressionStatement*>(lastStmt->astnode.get())) {
+            if (auto callExpr = dynamic_cast<CallExpression*>(exprStmt->astnode.get())) {
+                if (auto pathExpr = dynamic_cast<PathExpression*>(callExpr->expression.get())) {
+                    if (pathExpr->simplepath && !pathExpr->simplepath->simplepathsegements.empty()) {
+                        std::string functionName = pathExpr->simplepath->simplepathsegements[0]->identifier;
+                        if (functionName == "exit") {
+                            isLastStatement = true;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // 如果有尾表达式，检查是否是 exit 调用
+        if (!isLastStatement && mainBlock->expressionwithoutblock) {
+            if (auto callExpr = dynamic_cast<CallExpression*>(mainBlock->expressionwithoutblock.get())) {
+                if (auto pathExpr = dynamic_cast<PathExpression*>(callExpr->expression.get())) {
+                    if (pathExpr->simplepath && !pathExpr->simplepath->simplepathsegements.empty()) {
+                        std::string functionName = pathExpr->simplepath->simplepathsegements[0]->identifier;
+                        if (functionName == "exit") {
+                            isLastStatement = true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    if (!isLastStatement) {
+        ReportError("exit() must be the final statement in the main function");
+        return;
+    }
+    
+    // 3. 检查 exit 后是否有不可达代码
+    // 这个检查在控制流分析中进行，这里我们标记 exit 调用为发散
+    nodeTypeMap[&expr] = std::make_shared<SimpleType>("!");
+}
+
+void TypeChecker::CheckMainFunctionExitRequirement(BlockExpression& blockExpr) {
+    // 检查 main 函数是否有 exit() 调用作为最后一条语句
+    bool hasExitAsFinalStatement = false;
+    
+    // 检查最后一条语句是否是 exit 调用
+    if (!blockExpr.statements.empty()) {
+        auto lastStmt = blockExpr.statements.back();
+        
+        // 检查最后一条语句是否是表达式语句，且包含 exit 调用
+        if (auto exprStmt = dynamic_cast<ExpressionStatement*>(lastStmt->astnode.get())) {
+            if (auto callExpr = dynamic_cast<CallExpression*>(exprStmt->astnode.get())) {
+                if (auto pathExpr = dynamic_cast<PathExpression*>(callExpr->expression.get())) {
+                    if (pathExpr->simplepath && !pathExpr->simplepath->simplepathsegements.empty()) {
+                        std::string functionName = pathExpr->simplepath->simplepathsegements[0]->identifier;
+                        if (functionName == "exit") {
+                            hasExitAsFinalStatement = true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // 如果有尾表达式，检查是否是 exit 调用
+    if (!hasExitAsFinalStatement && blockExpr.expressionwithoutblock) {
+        if (auto callExpr = dynamic_cast<CallExpression*>(blockExpr.expressionwithoutblock.get())) {
+            if (auto pathExpr = dynamic_cast<PathExpression*>(callExpr->expression.get())) {
+                if (pathExpr->simplepath && !pathExpr->simplepath->simplepathsegements.empty()) {
+                    std::string functionName = pathExpr->simplepath->simplepathsegements[0]->identifier;
+                    if (functionName == "exit") {
+                        hasExitAsFinalStatement = true;
+                    }
+                }
+            }
+        }
+    }
+    
+    if (!hasExitAsFinalStatement) {
+        ReportError("main function must have an exit() call as its final statement");
+    }
 }
 
