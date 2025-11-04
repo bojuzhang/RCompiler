@@ -1397,7 +1397,7 @@ std::shared_ptr<Symbol> TypeChecker::FindSymbol(const std::string& name) {
     if (!scopeTree) {
         return nullptr;
     }
-    auto  symbol= scopeTree->LookupSymbol(name);
+    auto symbol = scopeTree->LookupSymbol(name);
     return symbol;
 }
 

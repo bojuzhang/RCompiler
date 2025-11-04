@@ -24,14 +24,27 @@ void SymbolCollector::BeginCollection() {
     }
     
     // 添加内置函数
-    auto builtinFunctions = {
-        "print", "println", "printInt", "printlnInt", "getString", "getInt", "exit"
+    struct BuiltinFunction {
+        std::string name;
+        std::string returnType;
     };
-    for (const auto& typeName : builtinFunctions) {
-        auto typeSymbol = std::make_shared<Symbol>(
-            typeName, SymbolKind::Function, nullptr, false, nullptr
+    
+    auto builtinFunctions = {
+        BuiltinFunction{"print", "()"},
+        BuiltinFunction{"println", "()"},
+        BuiltinFunction{"printInt", "()"},
+        BuiltinFunction{"printlnInt", "()"},
+        BuiltinFunction{"getString", "String"},
+        BuiltinFunction{"getInt", "i32"},
+        BuiltinFunction{"exit", "()"}
+    };
+    
+    for (const auto& builtinFunc : builtinFunctions) {
+        auto returnType = std::make_shared<SimpleType>(builtinFunc.returnType);
+        auto funcSymbol = std::make_shared<Symbol>(
+            builtinFunc.name, SymbolKind::Function, returnType, false, nullptr
         );
-        globalScope->Insert(typeName, typeSymbol);
+        globalScope->Insert(builtinFunc.name, funcSymbol);
     }
 }
 
