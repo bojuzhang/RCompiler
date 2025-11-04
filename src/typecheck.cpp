@@ -767,9 +767,32 @@ std::shared_ptr<SemanticType> TypeChecker::InferExpressionType(Expression& expr)
             if (symbol && symbol->type) {
                 type = symbol->type;
             } else {
-                // 如果找不到符号或符号没有类型信息，直接报错
-                ReportError("Undefined variable: " + varName);
-                type = nullptr;
+                // 如果找不到符号或符号没有类型信息，检查是否是常量
+                if (constantEvaluator) {
+                    auto constValue = constantEvaluator->GetConstantValue(varName);
+                    if (constValue) {
+                        // 如果是常量，根据常量值推断类型
+                        if (dynamic_cast<IntConstant*>(constValue.get())) {
+                            type = std::make_shared<SimpleType>("usize");
+                        } else if (dynamic_cast<BoolConstant*>(constValue.get())) {
+                            type = std::make_shared<SimpleType>("bool");
+                        } else if (dynamic_cast<StringConstant*>(constValue.get())) {
+                            type = std::make_shared<SimpleType>("str");
+                        } else if (dynamic_cast<CharConstant*>(constValue.get())) {
+                            type = std::make_shared<SimpleType>("char");
+                        } else {
+                            type = std::make_shared<SimpleType>("unknown");
+                        }
+                    } else {
+                        // 如果找不到符号或常量，直接报错
+                        ReportError("Undefined variable: " + varName);
+                        type = nullptr;
+                    }
+                } else {
+                    // 如果找不到符号或符号没有类型信息，直接报错
+                    ReportError("Undefined variable: " + varName);
+                    type = nullptr;
+                }
             }
         } else {
             type = nullptr;

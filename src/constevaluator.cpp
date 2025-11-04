@@ -74,7 +74,16 @@ void ConstantEvaluator::visit(Statement& node) {
     PushNode(node);
     
     if (node.astnode) {
-        node.astnode->accept(*this);
+        // 检查是否是 Item（包含常量定义的情况）
+        if (auto item = dynamic_cast<Item*>(node.astnode.get())) {
+            // 如果是 Item，需要访问其内部的 item
+            if (item->item) {
+                item->item->accept(*this);
+            }
+        } else {
+            // 其他类型的语句，直接访问
+            node.astnode->accept(*this);
+        }
     }
     
     PopNode();
