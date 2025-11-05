@@ -75,6 +75,18 @@ void ScopeTree::EnterScope(Scope::ScopeType type, ASTNode* node) {
     }
 }
 
+void ScopeTree::EnterExistingScope(ASTNode* node) {
+    if (!node) {
+        return;
+    }
+    
+    // 查找已经存在的作用域
+    auto it = nodeToScopeMap.find(node);
+    if (it != nodeToScopeMap.end()) {
+        currentNode = it->second;
+    }
+}
+
 void ScopeTree::ExitScope() {
     if (!currentNode) {
         return;

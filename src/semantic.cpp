@@ -51,6 +51,10 @@ bool CompleteSemanticAnalyzer::RunSymbolCollection() {
     
     scopeTree = collector.getScopeTree();
     
+    // 修复：符号收集完成后，重置作用域树的当前作用域到根作用域
+    // 这样后续的类型检查阶段可以从正确的作用域开始查找符号
+    scopeTree->GoToNode(nullptr);
+    
     // 检查符号收集过程中是否有错误
     if (collector.HasErrors()) {
         std::cerr << "Symbol collection failed with errors" << std::endl;

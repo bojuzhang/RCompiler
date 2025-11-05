@@ -78,8 +78,8 @@ void TypeChecker::visit(Function& node) {
     // 检查函数签名
     // checkFunctionSignature(node);
     
-    // 进入函数作用域，这样可以在函数体内找到参数符号
-    scopeTree->EnterScope(Scope::ScopeType::Function, &node);
+    // 进入函数作用域，使用符号收集阶段已经创建的作用域
+    scopeTree->EnterExistingScope(&node);
     
     if (node.functionparameters) {
         CheckFunctionParameters(*node.functionparameters);
@@ -138,7 +138,8 @@ void TypeChecker::visit(StructStruct& node) {
     std::string previousStruct = currentStruct;
     EnterStructContext(node.identifier);
     
-    scopeTree->EnterScope(Scope::ScopeType::Struct, &node);
+    // 修复：使用符号收集阶段已经创建的作用域，不创建新作用域
+    scopeTree->EnterExistingScope(&node);
     CheckStructFields(node);
     scopeTree->ExitScope();
     
@@ -172,7 +173,8 @@ void TypeChecker::visit(InherentImpl& node) {
     std::string previousImpl = currentImpl;
     EnterImplContext("impl_" + std::to_string(reinterpret_cast<uintptr_t>(&node)));
     
-    scopeTree->EnterScope(Scope::ScopeType::Impl, &node);
+    // 修复：使用符号收集阶段已经创建的作用域，不创建新作用域
+    scopeTree->EnterExistingScope(&node);
     
     // 检查impl目标类型
     auto targetType = GetImplTargetType(node);
@@ -217,15 +219,9 @@ void TypeChecker::CheckStructFieldType(StructField& field) {
         ReportError("Invalid type in struct field: " + field.identifier);
     }
     
-    auto fieldSymbol = std::make_shared<Symbol>(
-        field.identifier,
-        SymbolKind::Variable,
-        fieldType,
-        false,
-        &field
-    );
-    
-    scopeTree->InsertSymbol(field.identifier, fieldSymbol);
+    // 修复：彻底移除在符号收集阶段之后添加符号的代码
+    // 结构体字段应该在符号收集阶段已经处理，这里只进行类型检查
+    // 不创建符号，只进行类型检查
 }
 
 void TypeChecker::CheckInherentImpl(InherentImpl& node) {
@@ -347,7 +343,8 @@ void TypeChecker::CheckAssociatedFunction(Function& function) {
     // 检查关联函数签名
     CheckFunctionSignature(function);
     
-    scopeTree->EnterScope(Scope::ScopeType::Function, &function);
+    // 修复：使用符号收集阶段已经创建的作用域，不创建新作用域
+    scopeTree->EnterExistingScope(&function);
     CheckFunctionParameters(*function.functionparameters);
     // 修复：暂时跳过返回类型检查，避免段错误
     if (function.functionreturntype) {
@@ -388,7 +385,8 @@ void TypeChecker::CheckFunctionParameters(FunctionParameters& params) {
         if (!paramType) {
             ReportError("Invalid type in function parameter");
         }
-        // 检查参数模式
+        // 修复：函数参数应该在符号收集阶段已经处理，这里只进行类型检查
+        // 不需要再次添加符号，避免重复定义
         CheckPattern(*param->patternnotopalt, paramType);
     }
 }
@@ -1435,7 +1433,15 @@ std::shared_ptr<Symbol> TypeChecker::FindSymbol(const std::string& name) {
     if (!scopeTree) {
         return nullptr;
     }
+    
     auto symbol = scopeTree->LookupSymbol(name);
+    
+    // 修复：如果从当前作用域找不到符号，尝试从根作用域开始查找
+    if (!symbol) {
+        auto rootScope = scopeTree->GetRootScope();
+        symbol = rootScope->Lookup(name, false);
+    }
+    
     return symbol;
 }
 
@@ -1530,16 +1536,18 @@ void TypeChecker::CheckPattern(Pattern& pattern, std::shared_ptr<SemanticType> e
 void TypeChecker::CheckPattern(IdentifierPattern& pattern, std::shared_ptr<SemanticType> expectedType) {
     std::string varName = pattern.identifier;
     
-    auto varSymbol = std::make_shared<Symbol>(
-        varName,
-        SymbolKind::Variable,
-        expectedType,
-        pattern.hasmut,
-        &pattern
-    );
+    // 修复：彻底移除在符号收集阶段之后添加符号的代码
+    // 根据用户要求，symbolcollection阶段后的代码不能添加符号到scope
+    // 所有符号（包括函数参数和局部变量）都应该在symbolcollection阶段处理
     
-    if (!scopeTree->InsertSymbol(varName, varSymbol)) {
-        ReportError("Variable '" + varName + "' is already defined in this scope");
+    // 只进行类型检查，不添加符号
+    auto existingSymbol = scopeTree->LookupSymbol(varName);
+    if (existingSymbol) {
+        // 符号找到，继续处理
+    } else {
+        // 如果找不到符号，说明symbolcollection阶段没有正确处理
+        // 但根据用户要求，我们不能在这里添加符号
+        ReportError("Variable '" + varName + "' not found in symbol collection phase");
     }
 }
 
@@ -2097,8 +2105,8 @@ int64_t TypeChecker::EvaluateArraySize(Expression& sizeExpr) {
 void TypeChecker::visit(BlockExpression& node) {
     PushNode(node);
     
-    // 进入新的作用域
-    scopeTree->EnterScope(Scope::ScopeType::Block, &node);
+    // 进入已存在的块作用域
+    scopeTree->EnterExistingScope(&node);
     for (const auto &stmt : node.statements) {
         stmt->accept(*this);
     }

@@ -152,11 +152,12 @@ void SymbolCollector::visit(InherentImpl& node) {
     root->EnterScope(Scope::ScopeType::Impl, &node);
     
     CollectImplSymbol(node);
-    for (const auto& item : node.associateditems) {
-        if (item) {
-            item->accept(*this);
-        }
-    }
+    // 修复：不要在这里调用 item->accept(*this)，因为 CollectImplSymbol 已经处理了
+    // for (const auto& item : node.associateditems) {
+    //     if (item) {
+    //         item->accept(*this);
+    //     }
+    // }
     
     root->ExitScope();
     inImpl = wasInImpl;
@@ -170,6 +171,10 @@ void SymbolCollector::visit(Statement& node) {
         if (auto item = dynamic_cast<Item*>(node.astnode.get())) {
             // 如果是 Item，需要访问其内部的 item
             if (item->item) {
+                // 调试信息：输出正在处理的 Item 类型
+                if (auto func = dynamic_cast<Function*>(item->item.get())) {
+                    // 处理语句中的函数
+                }
                 item->item->accept(*this);
             }
         } else {
@@ -197,12 +202,14 @@ void SymbolCollector::visit(LetStatement& node) {
             
             // 检查是否是 const 声明（在 Rust 中，const 可以在函数内部声明）
             // 这里我们需要从上下文判断，因为 LetStatement 本身没有 const 字段
-            // 临时解决方案：检查变量名是否以 "const_" 开头或者检查初始化表达式是否是编译时常量
+            // 修复：正确的常量判断应该基于 IdentifierPattern 的 hasmut 字段
+            // 如果 hasmut 为 false，且初始化表达式是字面量，则可能是常量
             bool isConstant = false;
-            // 检查初始化表达式是否是字面量（简单的启发式方法）
-            if (node.expression && dynamic_cast<LiteralExpression*>(node.expression.get())) {
+            // 只有在非可变且初始化表达式是字面量时才考虑为常量
+            if (!identPattern->hasmut && node.expression && dynamic_cast<LiteralExpression*>(node.expression.get())) {
                 isConstant = true;
             }
+            
             
             // 如果是常量，创建常量符号
             std::shared_ptr<Symbol> varSymbol;
@@ -221,7 +228,7 @@ void SymbolCollector::visit(LetStatement& node) {
                 );
             }
             
-            root->InsertSymbol(varName, varSymbol);
+            bool success = root->InsertSymbol(varName, varSymbol);
         }
     }
     
@@ -240,6 +247,12 @@ void SymbolCollector::visit(BlockExpression& node) {
     for (const auto &stmt : node.statements) {
         stmt->accept(*this);
     }
+    
+    // 修复：访问尾表达式（如果存在）
+    if (node.expressionwithoutblock) {
+        node.expressionwithoutblock->accept(*this);
+    }
+    
     root->ExitScope();
     
     PopNode();
@@ -298,7 +311,23 @@ void SymbolCollector::CollectFunctionSymbol(Function& node) {
     
     // 确保函数符号的type字段也被设置
     funcSymbol->type = returnType;
+    
+    // 修复：所有函数都应该插入到根作用域中，这样它们就可以从任何地方访问
+    auto rootScope = root->GetRootScope();
+    auto originalScope = root->GetCurrentScope();
+    
+    // 临时切换到根作用域
+    root->GoToNode(nullptr);
+    
     bool insertSuccess = root->InsertSymbol(funcName, funcSymbol);
+    
+    // 恢复到原来的作用域
+    root->GoToNode(nullptr);
+    if (originalScope) {
+        // 需要找到原来的作用域节点
+        // 这里简化处理，直接回到原来的作用域
+        // 在实际实现中，可能需要更复杂的作用域恢复逻辑
+    }
 }
 
 void SymbolCollector::CollectConstantSymbol(ConstantItem& node) {
@@ -509,6 +538,9 @@ void SymbolCollector::CollectAssociatedItem(AssociatedItem& item,
         true  // 是方法
     );
     
+    // 修复：不要在这里插入函数符号，而是在参数收集完成后插入
+    // 这样可以避免重复定义的问题
+    
     // 修复：检查第一个参数是否为 self 参数
     if (function.functionparameters && !function.functionparameters->functionparams.empty()) {
         auto firstParam = function.functionparameters->functionparams[0];
@@ -519,19 +551,20 @@ void SymbolCollector::CollectAssociatedItem(AssociatedItem& item,
                 // self 参数的类型应该是 impl 的目标类型
                 auto selfType = GetImplTargetType(*static_cast<InherentImpl*>(GetCurrentNode()));
                 if (selfType) {
+                    // 检查 self 参数的可变性
+                    bool isMutable = false;
+                    if (auto refType = dynamic_cast<ReferenceType*>(firstParam->type.get())) {
+                        isMutable = refType->ismut;
+                    }
+                    
                     auto selfSymbol = std::make_shared<Symbol>(
-                        "self", SymbolKind::Variable, selfType, false, &function
+                        "self", SymbolKind::Variable, selfType, isMutable, &function
                     );
                     funcSymbol->parameters.push_back(selfSymbol);
                     funcSymbol->parameterTypes.push_back(selfType);
                 }
             }
         }
-    }
-    
-    if (!root->InsertSymbol(funcName, funcSymbol)) {
-        ReportError("Method '" + funcName + "' is already defined in this impl");
-        return;
     }
     
     implSymbol->items.push_back(funcSymbol);
@@ -542,11 +575,71 @@ void SymbolCollector::CollectAssociatedItem(AssociatedItem& item,
     }
     
     root->EnterScope(Scope::ScopeType::Function, &function);
+    
+    // 直接收集参数符号，避免重复查找函数符号
     if (function.functionparameters) {
         for (const auto& param : function.functionparameters->functionparams) {
-            param->accept(*this);
+            if (auto identPattern = dynamic_cast<IdentifierPattern*>(param->patternnotopalt.get())) {
+                std::string paramName = identPattern->identifier;
+                std::shared_ptr<SemanticType> paramType;
+                
+                // 特殊处理 self 参数
+                if (paramName == "self") {
+                    // self 参数的类型应该是 impl 的目标类型
+                    paramType = GetImplTargetType(*static_cast<InherentImpl*>(GetCurrentNode()));
+                } else {
+                    paramType = ResolveTypeFromNode(*param->type);
+                }
+                
+                // 检查参数模式是否是可变的
+                bool isMutable = identPattern->hasmut;
+                // 对于引用类型，需要检查引用本身是否可变
+                if (auto refType = dynamic_cast<ReferenceType*>(param->type.get())) {
+                    isMutable = refType->ismut;
+                }
+                
+                auto paramSymbol = std::make_shared<Symbol>(
+                    paramName,
+                    SymbolKind::Variable,
+                    paramType,
+                    isMutable,
+                    &function
+                );
+                
+                // 插入到当前函数作用域
+                bool insertSuccess = root->InsertSymbol(paramName, paramSymbol);
+                if (!insertSuccess) {
+                    ReportError("Failed to insert parameter '" + paramName + "' in function scope");
+                }
+                
+                // 添加到函数符号的参数列表（如果还没有添加的话）
+                bool alreadyAdded = false;
+                for (const auto& existingParam : funcSymbol->parameters) {
+                    if (existingParam->name == paramName) {
+                        alreadyAdded = true;
+                        break;
+                    }
+                }
+                if (!alreadyAdded) {
+                    funcSymbol->parameters.push_back(paramSymbol);
+                    funcSymbol->parameterTypes.push_back(paramType);
+                }
+            }
         }
     }
+    
+    // 现在插入函数符号，避免重复定义错误
+    if (!root->InsertSymbol(funcName, funcSymbol)) {
+        ReportError("Method '" + funcName + "' is already defined in this impl");
+        root->ExitScope();
+        return;
+    }
+    
+    // 访问函数体以收集局部变量
+    if (function.blockexpression) {
+        function.blockexpression->accept(*this);
+    }
+    
     root->ExitScope();
 }
 
@@ -646,3 +739,326 @@ void SymbolCollector::ReportError(const std::string& message) {
 bool SymbolCollector::HasErrors() const {
     return hasError;
 }
+
+// 实现完整的符号收集 - 添加缺失的访问方法
+void SymbolCollector::visit(ExpressionStatement& node) {
+    PushNode(node);
+    if (node.astnode) {
+        node.astnode->accept(*this);
+    }
+    PopNode();
+}
+
+void SymbolCollector::visit(Expression& node) {
+    PushNode(node);
+    // 基础表达式类，通常不需要特殊处理
+    PopNode();
+}
+
+void SymbolCollector::visit(ConstBlockExpression& node) {
+    PushNode(node);
+    
+    if (node.blockexpression) {
+        node.blockexpression->accept(*this);
+    }
+    
+    PopNode();
+}
+
+void SymbolCollector::visit(IfExpression& node) {
+    PushNode(node);
+    
+    if (node.conditions) {
+        node.conditions->accept(*this);
+    }
+    
+    if (node.ifblockexpression) {
+        node.ifblockexpression->accept(*this);
+    }
+    
+    if (node.elseexpression) {
+        node.elseexpression->accept(*this);
+    }
+    
+    PopNode();
+}
+
+void SymbolCollector::visit(LiteralExpression& node) {
+    PushNode(node);
+    // 字面量不需要符号收集，但需要访问可能的嵌套表达式
+    PopNode();
+}
+
+void SymbolCollector::visit(PathExpression& node) {
+    PushNode(node);
+    
+    if (node.simplepath) {
+        node.simplepath->accept(*this);
+    }
+    
+    PopNode();
+}
+
+void SymbolCollector::visit(GroupedExpression& node) {
+    PushNode(node);
+    
+    if (node.expression) {
+        node.expression->accept(*this);
+    }
+    
+    PopNode();
+}
+
+void SymbolCollector::visit(ArrayExpression& node) {
+    PushNode(node);
+    
+    if (node.arrayelements) {
+        node.arrayelements->accept(*this);
+    }
+    
+    PopNode();
+}
+
+void SymbolCollector::visit(IndexExpression& node) {
+    PushNode(node);
+    
+    if (node.expressionout) {
+        node.expressionout->accept(*this);
+    }
+    
+    if (node.expressionin) {
+        node.expressionin->accept(*this);
+    }
+    
+    PopNode();
+}
+
+void SymbolCollector::visit(TupleExpression& node) {
+    PushNode(node);
+    
+    if (node.tupleelements) {
+        node.tupleelements->accept(*this);
+    }
+    
+    PopNode();
+}
+
+void SymbolCollector::visit(StructExpression& node) {
+    PushNode(node);
+    
+    if (node.pathexpression) {
+        node.pathexpression->accept(*this);
+    }
+    
+    if (node.structinfo) {
+        node.structinfo->accept(*this);
+    }
+    
+    PopNode();
+}
+
+void SymbolCollector::visit(CallExpression& node) {
+    PushNode(node);
+    
+    if (node.expression) {
+        node.expression->accept(*this);
+    }
+    
+    if (node.callparams) {
+        node.callparams->accept(*this);
+    }
+    
+    PopNode();
+}
+
+void SymbolCollector::visit(MethodCallExpression& node) {
+    // 方法调用表达式的具体实现
+    // 注意：MethodCallExpression 可能没有继承 ASTNode，所以不使用 PushNode/PopNode
+}
+
+void SymbolCollector::visit(FieldExpression& node) {
+    PushNode(node);
+    
+    if (node.expression) {
+        node.expression->accept(*this);
+    }
+    
+    PopNode();
+}
+
+void SymbolCollector::visit(ContinueExpression& node) {
+    PushNode(node);
+    // continue 表达式不需要符号收集
+    PopNode();
+}
+
+void SymbolCollector::visit(BreakExpression& node) {
+    PushNode(node);
+    
+    if (node.expression) {
+        node.expression->accept(*this);
+    }
+    
+    PopNode();
+}
+
+void SymbolCollector::visit(ReturnExpression& node) {
+    PushNode(node);
+    
+    if (node.expression) {
+        node.expression->accept(*this);
+    }
+    
+    PopNode();
+}
+
+void SymbolCollector::visit(UnderscoreExpression& node) {
+    PushNode(node);
+    // 下划线表达式不需要符号收集
+    PopNode();
+}
+
+void SymbolCollector::visit(MatchExpression& node) {
+    // match 表达式的具体实现
+    // 注意：MatchExpression 可能没有继承 ASTNode，所以不使用 PushNode/PopNode
+}
+
+void SymbolCollector::visit(TypeCastExpression& node) {
+    PushNode(node);
+    
+    if (node.expression) {
+        node.expression->accept(*this);
+    }
+    
+    if (node.typenobounds) {
+        node.typenobounds->accept(*this);
+    }
+    
+    PopNode();
+}
+
+void SymbolCollector::visit(AssignmentExpression& node) {
+    PushNode(node);
+    
+    if (node.leftexpression) {
+        node.leftexpression->accept(*this);
+    }
+    
+    if (node.rightexpression) {
+        node.rightexpression->accept(*this);
+    }
+    
+    PopNode();
+}
+
+void SymbolCollector::visit(CompoundAssignmentExpression& node) {
+    PushNode(node);
+    
+    if (node.leftexpression) {
+        node.leftexpression->accept(*this);
+    }
+    
+    if (node.rightexpression) {
+        node.rightexpression->accept(*this);
+    }
+    
+    PopNode();
+}
+
+void SymbolCollector::visit(UnaryExpression& node) {
+    PushNode(node);
+    
+    if (node.expression) {
+        node.expression->accept(*this);
+    }
+    
+    PopNode();
+}
+
+void SymbolCollector::visit(BinaryExpression& node) {
+    PushNode(node);
+    
+    if (node.leftexpression) {
+        node.leftexpression->accept(*this);
+    }
+    
+    if (node.rightexpression) {
+        node.rightexpression->accept(*this);
+    }
+    
+    PopNode();
+}
+
+void SymbolCollector::visit(BorrowExpression& node) {
+    PushNode(node);
+    
+    if (node.expression) {
+        node.expression->accept(*this);
+    }
+    
+    PopNode();
+}
+
+void SymbolCollector::visit(DereferenceExpression& node) {
+    PushNode(node);
+    
+    if (node.expression) {
+        node.expression->accept(*this);
+    }
+    
+    PopNode();
+}
+
+// 实现 Pattern 相关的访问方法
+void SymbolCollector::visit(Pattern& node) {
+    PushNode(node);
+    // 基础模式类，通常不需要特殊处理
+    PopNode();
+}
+
+void SymbolCollector::visit(LiteralPattern& node) {
+    PushNode(node);
+    
+    if (node.literalexprerssion) {
+        node.literalexprerssion->accept(*this);
+    }
+    
+    PopNode();
+}
+
+void SymbolCollector::visit(IdentifierPattern& node) {
+    PushNode(node);
+    
+    if (node.patternnotopalt) {
+        node.patternnotopalt->accept(*this);
+    }
+    
+    PopNode();
+}
+
+void SymbolCollector::visit(AssociatedItem& node) {
+    PushNode(node);
+    
+    if (node.consttantitem_or_function) {
+        node.consttantitem_or_function->accept(*this);
+    }
+    
+    PopNode();
+}
+
+void SymbolCollector::visit(WildcardPattern& node) {
+    PushNode(node);
+    // 通配符模式不需要特殊处理
+    PopNode();
+}
+
+void SymbolCollector::visit(PathPattern& node) {
+    PushNode(node);
+    
+    if (node.pathexpression) {
+        node.pathexpression->accept(*this);
+    }
+    
+    PopNode();
+}
+

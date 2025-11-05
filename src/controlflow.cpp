@@ -95,8 +95,8 @@ void ControlFlowAnalyzer::visit(ConstantItem& node) {
 
 void ControlFlowAnalyzer::visit(BlockExpression& node) {
     PushNode(node);
-    // 进入块作用域
-    scopeTree->EnterScope(Scope::ScopeType::Block, &node);
+    // 修复：使用符号收集阶段已经创建的作用域，不创建新作用域
+    scopeTree->EnterExistingScope(&node);
     for (const auto& stmt : node.statements) {
         if (stmt) {
             stmt->accept(*this);
@@ -119,7 +119,7 @@ void ControlFlowAnalyzer::visit(BlockExpression& node) {
         alwaysDiverges[&node] = (type->tostring() == "!");
     }
     
-    // 退出块作用域
+    // 退出作用域
     scopeTree->ExitScope();
     PopNode();
 }
