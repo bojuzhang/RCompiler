@@ -386,7 +386,7 @@ void SymbolCollector::CollectParameterSymbols(Function& node) {
 }
 
 void SymbolCollector::CollectFieldSymbols(StructStruct& node) {
-    auto fields = node.structfileds;
+    auto fields = node.structfields;
     if (!fields) return;
     
     // 获取刚创建的StructSymbol
@@ -716,6 +716,17 @@ std::shared_ptr<SemanticType> SymbolCollector::CreateSimpleType(const std::strin
 }
 
 bool SymbolCollector::ValidateTypeExistence(const std::string& typeName) {
+    // 特殊处理数组类型：如果以 [ 开头，检查元素类型是否存在
+    if (typeName.find("[") == 0) {
+        // 提取元素类型（简单处理，假设格式为 [T; N]）
+        auto semicolonPos = typeName.find(";");
+        if (semicolonPos != std::string::npos) {
+            auto elementType = typeName.substr(1, semicolonPos - 1);
+            // 递归检查元素类型
+            return ValidateTypeExistence(elementType);
+        }
+    }
+    
     auto symbol = root->LookupSymbol(typeName);
     return symbol && (symbol->kind == SymbolKind::Struct ||
                      symbol->kind == SymbolKind::Enum ||

@@ -89,11 +89,11 @@ public:
 class StructStruct : public ASTNode {
 public:
     std::string identifier;
-    std::shared_ptr<StructFields> structfileds;
+    std::shared_ptr<StructFields> structfields;
     bool issemi;
 public:
     StructStruct(std::string identifier,
-                 std::shared_ptr<StructFields> structfileds,
+                 std::shared_ptr<StructFields> structfields,
                  bool issemi);
                  
     void accept(ASTVisitor& visitor) override {

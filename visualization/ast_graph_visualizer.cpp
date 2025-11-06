@@ -187,8 +187,8 @@ void ASTGraphVisualizer::visit(StructStruct& node) {
     }
     
     pushNode(std::stoi(nodeId.substr(5)));
-    if (node.structfileds) {
-        node.structfileds->accept(*this);
+    if (node.structfields) {
+        node.structfields->accept(*this);
     }
     popNode();
 }

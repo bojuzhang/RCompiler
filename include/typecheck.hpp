@@ -60,7 +60,7 @@ public:
     void visit(TupleExpression& node) override {}
     void visit(StructExpression& node) override;
     void visit(CallExpression& node) override;
-    void visit(MethodCallExpression& node) override {}
+    void visit(MethodCallExpression& node) override;
     void visit(FieldExpression& node) override;
     void visit(ContinueExpression& node) override {}
     void visit(BreakExpression& node) override {}
@@ -171,6 +171,7 @@ private:
     std::shared_ptr<SemanticType> InferExpressionType(Expression& expr);
     std::shared_ptr<SemanticType> InferBinaryExpressionType(BinaryExpression& expr);
     std::shared_ptr<SemanticType> InferCallExpressionType(CallExpression& expr);
+    std::shared_ptr<SemanticType> InferFieldExpressionType(FieldExpression& expr);
     std::shared_ptr<SemanticType> InferMethodCallExpressionType(MethodCallExpression& expr);
     std::shared_ptr<SemanticType> InferIndexExpressionType(IndexExpression& expr);
     std::shared_ptr<SemanticType> InferArrayExpressionType(ArrayExpression& expr);
@@ -217,9 +218,6 @@ private:
     // 二元运算符类型检查辅助函数
     bool CanPerformBinaryOperation(std::shared_ptr<SemanticType> leftType, std::shared_ptr<SemanticType> rightType, Token op);
     std::shared_ptr<SemanticType> GetBinaryOperationResultType(std::shared_ptr<SemanticType> leftType, std::shared_ptr<SemanticType> rightType, Token op);
-    
-    // 方法调用类型推断
-    std::shared_ptr<SemanticType> InferMethodCallType(CallExpression& expr, FieldExpression& fieldExpr);
     
     // 内置方法支持
     bool IsBuiltinMethodCall(const std::string& receiverType, const std::string& methodName);

@@ -38,10 +38,10 @@ ConstantItem::ConstantItem(std::string identifier,
 //       items(std::move(items)) {}
 
 StructStruct::StructStruct(std::string identifier,
-                           std::shared_ptr<StructFields> structfileds,
+                           std::shared_ptr<StructFields> structfields,
                            bool issemi)
     : identifier(std::move(identifier)),
-      structfileds(std::move(structfileds)),
+      structfields(std::move(structfields)),
       issemi(issemi) {}
 
 // TupleStruct::TupleStruct(std::string identifier,

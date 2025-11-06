@@ -687,7 +687,7 @@ std::shared_ptr<Item> Parser::parseItem() {
         return nullptr;
     }
     if (astnode == nullptr) {
-        std::cerr << "Error: illegal item at pos " << pos << ", token: " << (pos < tokens.size() ? tokens[pos].second : "EOF") << "\n";
+        // std::cerr << "Error: illegal item at pos " << pos << ", token: " << (pos < tokens.size() ? tokens[pos].second : "EOF") << "\n";
         return nullptr;
     }
     return std::make_shared<Item>(astnode);
@@ -775,6 +775,7 @@ std::shared_ptr<StructStruct> Parser::parseStruct() {
     }
     auto identifier = getstring();
     advance();
+    
     if (match(Token::kleftCurly)) {
         advance();
         auto structfields = parseStructFields();
@@ -955,17 +956,32 @@ std::shared_ptr<StructFields> Parser::parseStructFields() {
     }
     vec.push_back(std::move(field));
     
-    while (match(Token::kComma)) {
-        advance();
-        auto field = parseStructField();
-        if (field == nullptr) {
+    // 修复：正确处理字段间的逗号和可选的尾随逗号
+    while (true) {
+        // 检查是否有逗号
+        if (match(Token::kComma)) {
+            advance();
+            
+            // 检查逗号后是否是右大括号（尾随逗号）
+            if (match(Token::krightCurly)) {
+                break;
+            }
+            
+            // 解析下一个字段
+            auto nextField = parseStructField();
+            if (nextField == nullptr) {
+                return nullptr;
+            }
+            vec.push_back(std::move(nextField));
+        } else if (match(Token::krightCurly)) {
+            // 没有逗号，直接遇到右大括号
+            break;
+        } else {
+            // 既不是逗号也不是右大括号，语法错误
             return nullptr;
         }
-        vec.push_back(std::move(field));
     }
-    if (match(Token::kComma)) {
-        advance();
-    }
+    
     return std::make_shared<StructFields>(std::move(vec));
 }
 std::shared_ptr<StructField> Parser::parseStructField() {

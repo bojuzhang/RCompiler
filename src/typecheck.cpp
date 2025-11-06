@@ -206,9 +206,9 @@ void TypeChecker::visit(InherentImpl& node) {
 }
 
 void TypeChecker::CheckStructFields(StructStruct& node) {
-    if (!node.structfileds) return;
+    if (!node.structfields) return;
     
-    for (const auto& field : node.structfileds->structfields) {
+    for (const auto& field : node.structfields->structfields) {
         CheckStructFieldType(*field);
     }
 }
@@ -272,7 +272,8 @@ void TypeChecker::CheckTraitImpl(InherentImpl& node) {
 std::shared_ptr<SemanticType> TypeChecker::GetImplTargetType(InherentImpl& node) {
     // 从impl节点中提取目标类型
     if (node.type) {
-        return CheckType(*node.type);
+        auto type = CheckType(*node.type);
+        return type;
     }
     return nullptr;
 }
@@ -317,7 +318,10 @@ void TypeChecker::CheckTraitRequirementsSatisfied(const std::string& traitName, 
 
 
 void TypeChecker::CheckAssociatedItem(AssociatedItem& item) {
-    if (!item.consttantitem_or_function) return;
+    if (!item.consttantitem_or_function) {
+        ReportError("Associated item has no content");
+        return;
+    }
     
     std::string itemName;
     if (auto function = dynamic_cast<Function*>(item.consttantitem_or_function.get())) {
@@ -345,13 +349,24 @@ void TypeChecker::CheckAssociatedFunction(Function& function) {
     
     // 修复：使用符号收集阶段已经创建的作用域，不创建新作用域
     scopeTree->EnterExistingScope(&function);
-    CheckFunctionParameters(*function.functionparameters);
-    // 修复：暂时跳过返回类型检查，避免段错误
+    
+    // 重要：调用 function.accept(*this) 以确保 Function 节点被推入节点栈
+    // 这样在处理函数体内的表达式时，可以正确地找到当前函数
+    PushNode(function);
+    
+    // 检查函数参数（如果有的话）
+    if (function.functionparameters) {
+        CheckFunctionParameters(*function.functionparameters);
+    }
+    
+    // 检查返回类型
     if (function.functionreturntype) {
         CheckFunctionReturnType(*function.functionreturntype);
     }
+    
     CheckFunctionBody(function);
     
+    PopNode();
     scopeTree->ExitScope();
 }
 
@@ -380,14 +395,30 @@ void TypeChecker::CheckFunctionSignature(Function& function) {
 
 void TypeChecker::CheckFunctionParameters(FunctionParameters& params) {
     for (const auto& param : params.functionparams) {
+        // 添加空指针检查
+        if (!param) {
+            ReportError("Null function parameter found");
+            continue;
+        }
+        
         // 检查参数类型
+        if (!param->type) {
+            ReportError("Function parameter has no type information");
+            continue;
+        }
+        
         auto paramType = CheckType(*param->type);
         if (!paramType) {
             ReportError("Invalid type in function parameter");
         }
+        
         // 修复：函数参数应该在符号收集阶段已经处理，这里只进行类型检查
         // 不需要再次添加符号，避免重复定义
-        CheckPattern(*param->patternnotopalt, paramType);
+        if (param->patternnotopalt) {
+            CheckPattern(*param->patternnotopalt, paramType);
+        } else {
+            ReportError("Function parameter has no pattern");
+        }
     }
 }
 
@@ -478,7 +509,8 @@ std::shared_ptr<SemanticType> TypeChecker::CheckType(TypePath& typePath) {
         return nullptr;
     }
     std::string typeName = typePath.simplepathsegement->identifier;
-    return ResolveType(typeName);
+    auto result = ResolveType(typeName);
+    return result;
 }
 
 std::shared_ptr<SemanticType> TypeChecker::CheckType(ArrayType& arrayType) {
@@ -553,6 +585,19 @@ std::shared_ptr<SemanticType> TypeChecker::ResolveType(const std::string& typeNa
     // 特殊处理 unit 类型 ()，确保它总是被认为是有效的
     if (typeName == "()") {
         return std::make_shared<SimpleType>("()");
+    }
+    
+    // 首先尝试查找符号，看是否是已定义的结构体、枚举等
+    auto symbol = FindSymbol(typeName);
+    if (symbol) {
+        if (symbol->type) {
+            return symbol->type;
+        }
+        // 对于结构体、枚举等类型，即使没有具体的 type 字段，也应该返回有效的类型
+        if (symbol->kind == SymbolKind::Struct || symbol->kind == SymbolKind::Enum || symbol->kind == SymbolKind::BuiltinType) {
+            auto type = std::make_shared<SimpleType>(typeName);
+            return type;
+        }
     }
     
     auto type = std::make_shared<SimpleType>(typeName);
@@ -765,36 +810,136 @@ std::shared_ptr<SemanticType> TypeChecker::InferExpressionType(Expression& expr)
     } else if (auto pathExpr = dynamic_cast<PathExpression*>(&expr)) {
         if (pathExpr->simplepath && !pathExpr->simplepath->simplepathsegements.empty()) {
             std::string varName = pathExpr->simplepath->simplepathsegements[0]->identifier;
-            auto symbol = FindSymbol(varName);
             
-            if (symbol && symbol->type) {
-                type = symbol->type;
-            } else {
-                // 如果找不到符号或符号没有类型信息，检查是否是常量
-                if (constantEvaluator) {
-                    auto constValue = constantEvaluator->GetConstantValue(varName);
-                    if (constValue) {
-                        // 如果是常量，根据常量值推断类型
-                        if (dynamic_cast<IntConstant*>(constValue.get())) {
-                            type = std::make_shared<SimpleType>("usize");
-                        } else if (dynamic_cast<BoolConstant*>(constValue.get())) {
-                            type = std::make_shared<SimpleType>("bool");
-                        } else if (dynamic_cast<StringConstant*>(constValue.get())) {
-                            type = std::make_shared<SimpleType>("str");
-                        } else if (dynamic_cast<CharConstant*>(constValue.get())) {
-                            type = std::make_shared<SimpleType>("char");
-                        } else {
-                            type = std::make_shared<SimpleType>("unknown");
+            
+            // 特殊处理 self：在 impl 块中，self 指代结构体本身
+            if (varName == "self") {
+                // self 是特殊关键字，不应该从符号表中查找，而是根据当前 impl 上下文确定
+                if (!currentImpl.empty()) {
+                    // 检查是否在函数内部，且该函数有 self 参数
+                    bool inFunctionWithSelf = false;
+                    std::shared_ptr<SemanticType> selfType = nullptr;
+                    
+                    // 遍历节点栈，查找当前函数
+                    std::stack<ASTNode*> tempStack = nodeStack;
+                    while (!tempStack.empty()) {
+                        auto node = tempStack.top();
+                        tempStack.pop();
+                        
+                        if (auto func = dynamic_cast<Function*>(node)) {
+                            // 检查函数是否有 self 参数
+                            if (func->functionparameters && !func->functionparameters->functionparams.empty()) {
+                                auto firstParam = func->functionparameters->functionparams[0];
+                                if (auto identPattern = dynamic_cast<IdentifierPattern*>(firstParam->patternnotopalt.get())) {
+                                    // 检查是否是 self 参数（包括 self, &self, &mut self）
+                                    if (identPattern->identifier == "self") {
+                                        inFunctionWithSelf = true;
+                                        // self 参数的类型应该是 impl 的目标类型
+                                        // 从符号表中查找 self 符号，它在符号收集阶段已经被正确设置
+                                        auto selfSymbol = scopeTree->LookupSymbol("self");
+                                        if (selfSymbol && selfSymbol->type) {
+                                            selfType = selfSymbol->type;
+                                        } else {
+                                            // 如果从符号表中找不到，尝试从 impl 获取目标类型
+                                            // 遍历节点栈，查找 impl 节点
+                                            std::stack<ASTNode*> implStack = nodeStack;
+                                            while (!implStack.empty()) {
+                                                auto implNode = implStack.top();
+                                                implStack.pop();
+                                                
+                                                if (auto impl = dynamic_cast<InherentImpl*>(implNode)) {
+                                                    selfType = GetImplTargetType(*impl);
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                        break;
+                                    }
+                                } else if (auto refPattern = dynamic_cast<ReferencePattern*>(firstParam->patternnotopalt.get())) {
+                                    // 检查是否是 &self 或 &mut self
+                                    if (refPattern->pattern) {
+                                        if (auto innerIdentPattern = dynamic_cast<IdentifierPattern*>(refPattern->pattern.get())) {
+                                            if (innerIdentPattern->identifier == "self") {
+                                                inFunctionWithSelf = true;
+                                                // self 参数的类型应该是 impl 的目标类型
+                                                // 从符号表中查找 self 符号，它在符号收集阶段已经被正确设置
+                                                auto selfSymbol = scopeTree->LookupSymbol("self");
+                                                if (selfSymbol && selfSymbol->type) {
+                                                    selfType = selfSymbol->type;
+                                                } else {
+                                                    // 如果从符号表中找不到，尝试从 impl 获取目标类型
+                                                    // 遍历节点栈，查找 impl 节点
+                                                    std::stack<ASTNode*> implStack = nodeStack;
+                                                    while (!implStack.empty()) {
+                                                        auto implNode = implStack.top();
+                                                        implStack.pop();
+                                                        
+                                                        if (auto impl = dynamic_cast<InherentImpl*>(implNode)) {
+                                                            selfType = GetImplTargetType(*impl);
+                                                            break;
+                                                        }
+                                                    }
+                                                }
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            break;
                         }
+                    }
+                    
+                    if (inFunctionWithSelf && selfType) {
+                        type = selfType;
                     } else {
-                        // 如果找不到符号或常量，直接报错
-                        ReportError("Undefined variable: " + varName);
+                        ReportError("'self' can only be used in methods that have self parameter");
                         type = nullptr;
                     }
                 } else {
-                    // 如果找不到符号或符号没有类型信息，直接报错
-                    ReportError("Undefined variable: " + varName);
+                    ReportError("'self' can only be used in impl blocks");
                     type = nullptr;
+                }
+            } else {
+                auto symbol = FindSymbol(varName);
+                
+                if (symbol && symbol->type) {
+                    type = symbol->type;
+                } else {
+                    // 如果找不到符号或符号没有类型信息，检查是否是常量
+                    if (constantEvaluator) {
+                        auto constValue = constantEvaluator->GetConstantValue(varName);
+                        if (constValue) {
+                            // 如果是常量，根据常量值推断类型
+                            if (dynamic_cast<IntConstant*>(constValue.get())) {
+                                type = std::make_shared<SimpleType>("usize");
+                            } else if (dynamic_cast<BoolConstant*>(constValue.get())) {
+                                type = std::make_shared<SimpleType>("bool");
+                            } else if (dynamic_cast<StringConstant*>(constValue.get())) {
+                                type = std::make_shared<SimpleType>("str");
+                            } else if (dynamic_cast<CharConstant*>(constValue.get())) {
+                                type = std::make_shared<SimpleType>("char");
+                            } else {
+                                type = std::make_shared<SimpleType>("unknown");
+                            }
+                        } else {
+                            // 如果找不到符号或常量，直接报错
+                            if (varName.empty()) {
+                                ReportError("Undefined variable: <empty>");
+                            } else {
+                                ReportError("Undefined variable: " + varName);
+                            }
+                            type = nullptr;
+                        }
+                    } else {
+                        // 如果找不到符号或符号没有类型信息，直接报错
+                        if (varName.empty()) {
+                            ReportError("Undefined variable: <empty> (in path expression)");
+                        } else {
+                            ReportError("Undefined variable: " + varName);
+                        }
+                        type = nullptr;
+                    }
                 }
             }
         } else {
@@ -841,13 +986,18 @@ std::shared_ptr<SemanticType> TypeChecker::InferExpressionType(Expression& expr)
         } else {
             type = nullptr;
         }
+    } else if (auto fieldExpr = dynamic_cast<FieldExpression*>(&expr)) {
+        // FieldExpression 类型推断：查找其前置 expression 的类型属于哪一个 struct，
+        // 之后在这个 struct 内查找其 identifier 对应的变量类型，以此类型作为表达式类型
+        type = InferFieldExpressionType(*fieldExpr);
+    } else if (auto methodCall = dynamic_cast<MethodCallExpression*>(&expr)) {
+        // MethodCallExpression 类型推断：解析变量属于哪一个 struct，然后看 methodname 是什么函数
+        // 其类型应该为这个函数声明的返回值
+        type = InferMethodCallExpressionType(*methodCall);
     } else {
         // 未知表达式类型
         type = nullptr;
     }
-    // else if (auto methodCall = dynamic_cast<MethodCallExpression*>(&expr)) {
-    //     type = inferMethodCallExpressionType(*methodCall);
-    // }
     
     // 更新缓存
     if (type) {
@@ -909,11 +1059,6 @@ void TypeChecker::visit(CallExpression& node) {
 std::shared_ptr<SemanticType> TypeChecker::InferCallExpressionType(CallExpression& expr) {
     auto calleeType = InferExpressionType(*expr.expression);
 
-    // 修复：检查是否是方法调用
-    if (auto fieldExpr = dynamic_cast<FieldExpression*>(expr.expression.get())) {
-        return InferMethodCallType(expr, *fieldExpr);
-    }
-    
     // 查找函数符号
     // 如果callee是路径表达式，尝试解析为函数调用
     if (auto pathExpr = dynamic_cast<PathExpression*>(expr.expression.get())) {
@@ -956,9 +1101,201 @@ std::shared_ptr<SemanticType> TypeChecker::InferCallExpressionType(CallExpressio
     return calleeType;
 }
 
+std::shared_ptr<SemanticType> TypeChecker::InferFieldExpressionType(FieldExpression& expr) {
+    // 首先检查前置表达式是否是 PathExpression 且为 self
+    if (auto pathExpr = dynamic_cast<PathExpression*>(expr.expression.get())) {
+        if (pathExpr->simplepath && !pathExpr->simplepath->simplepathsegements.empty()) {
+            std::string varName = pathExpr->simplepath->simplepathsegements[0]->identifier;
+            
+            // 修复：直接检查是否是 self，不依赖于 identifier 字段
+            bool isSelf = false;
+            if (pathExpr->simplepath->simplepathsegements[0]->identifier == "self") {
+                isSelf = true;
+            } else if (pathExpr->simplepath->simplepathsegements[0]->identifier.empty()) {
+                // 如果 identifier 为空，可能是 self 关键字没有被正确解析
+                // 检查 token 类型是否为 kSELF
+                // 这里我们需要访问 token 信息，但 PathExpression 可能没有直接访问 token 的方法
+                // 作为临时解决方案，我们假设如果 identifier 为空且在 impl 块中，可能是 self
+                isSelf = !currentImpl.empty();
+            }
+            
+            if (isSelf && !currentImpl.empty()) {
+                // 特殊处理 self：在 impl 块中，self 指代结构体本身
+                // 检查是否在函数内部，且该函数有 self 参数
+                bool inFunctionWithSelf = false;
+                std::shared_ptr<SemanticType> selfType = nullptr;
+                
+                // 遍历节点栈，查找当前函数
+                std::stack<ASTNode*> tempStack = nodeStack;
+                while (!tempStack.empty()) {
+                    auto node = tempStack.top();
+                    tempStack.pop();
+                    
+                    if (auto func = dynamic_cast<Function*>(node)) {
+                        // 检查函数是否有 self 参数
+                        if (func->functionparameters && !func->functionparameters->functionparams.empty()) {
+                            auto firstParam = func->functionparameters->functionparams[0];
+                            if (auto identPattern = dynamic_cast<IdentifierPattern*>(firstParam->patternnotopalt.get())) {
+                                // 检查是否是 self 参数（包括 self, &self, &mut self）
+                                if (identPattern->identifier == "self") {
+                                    inFunctionWithSelf = true;
+                                    // self 参数的类型应该是 impl 的目标类型
+                                    // 从符号表中查找 self 符号，它在符号收集阶段已经被正确设置
+                                    auto selfSymbol = scopeTree->LookupSymbol("self");
+                                    if (selfSymbol && selfSymbol->type) {
+                                        selfType = selfSymbol->type;
+                                    } else {
+                                        // 如果从符号表中找不到，尝试从 impl 获取目标类型
+                                        // 遍历节点栈，查找 impl 节点
+                                        std::stack<ASTNode*> implStack = nodeStack;
+                                        while (!implStack.empty()) {
+                                            auto implNode = implStack.top();
+                                            implStack.pop();
+                                            
+                                            if (auto impl = dynamic_cast<InherentImpl*>(implNode)) {
+                                                selfType = GetImplTargetType(*impl);
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    break;
+                                }
+                            } else if (auto refPattern = dynamic_cast<ReferencePattern*>(firstParam->patternnotopalt.get())) {
+                                // 检查是否是 &self 或 &mut self
+                                if (refPattern->pattern) {
+                                    if (auto innerIdentPattern = dynamic_cast<IdentifierPattern*>(refPattern->pattern.get())) {
+                                        if (innerIdentPattern->identifier == "self") {
+                                            inFunctionWithSelf = true;
+                                            // self 参数的类型应该是 impl 的目标类型
+                                            // 从符号表中查找 self 符号，它在符号收集阶段已经被正确设置
+                                            auto selfSymbol = scopeTree->LookupSymbol("self");
+                                            if (selfSymbol && selfSymbol->type) {
+                                                selfType = selfSymbol->type;
+                                            } else {
+                                                // 如果从符号表中找不到，尝试从 impl 获取目标类型
+                                                // 遍历节点栈，查找 impl 节点
+                                                std::stack<ASTNode*> implStack = nodeStack;
+                                                while (!implStack.empty()) {
+                                                    auto implNode = implStack.top();
+                                                    implStack.pop();
+                                                    
+                                                    if (auto impl = dynamic_cast<InherentImpl*>(implNode)) {
+                                                        selfType = GetImplTargetType(*impl);
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        break;
+                    }
+                }
+                
+                if (inFunctionWithSelf && selfType) {
+                    // 使用 self 的类型来查找字段
+                    std::string selfTypeName = selfType->tostring();
+                    auto structSymbol = FindStruct(selfTypeName);
+                    if (!structSymbol) {
+                        ReportError("Cannot find struct: " + selfTypeName);
+                        return nullptr;
+                    }
+                    
+                    // 在结构体中查找字段
+                    for (const auto& field : structSymbol->fields) {
+                        if (field->name == expr.identifier) {
+                            return field->type;
+                        }
+                    }
+                    
+                    ReportError("Struct '" + selfTypeName + "' has no field '" + expr.identifier + "'");
+                    return nullptr;
+                } else {
+                    ReportError("'self' can only be used in methods that have self parameter");
+                    return nullptr;
+                }
+            }
+        }
+    }
+    
+    // 对于非 self 的情况，使用原有的逻辑
+    // 首先推断前置表达式的类型
+    auto receiverType = InferExpressionType(*expr.expression);
+    if (!receiverType) {
+        return nullptr;
+    }
+    
+    std::string receiverTypeName = receiverType->tostring();
+    
+    // 修复：处理引用类型，如果类型以 & 开头，去掉 & 前缀
+    if (receiverTypeName.find("&") == 0) {
+        receiverTypeName = receiverTypeName.substr(1);
+    }
+    
+    // 检查类型是否有效
+    if (receiverTypeName.empty()) {
+        ReportError("Cannot determine receiver type for field access");
+        return nullptr;
+    }
+    
+    // 查找结构体符号
+    auto structSymbol = FindStruct(receiverTypeName);
+    if (!structSymbol) {
+        ReportError("Cannot find struct: " + receiverTypeName);
+        return nullptr;
+    }
+    
+    
+    // 在结构体中查找字段
+    for (const auto& field : structSymbol->fields) {
+        if (field->name == expr.identifier) {
+            return field->type;
+        }
+    }
+    
+    ReportError("Struct '" + receiverTypeName + "' has no field '" + expr.identifier + "'");
+    return nullptr;
+}
+
 std::shared_ptr<SemanticType> TypeChecker::InferMethodCallExpressionType(MethodCallExpression& expr) {
-    // 方法调用：需要查找方法定义并返回其返回类型
-    return std::make_shared<SimpleType>("unknown");
+    // 首先推断接收者表达式的类型
+    auto receiverType = InferExpressionType(*expr.receiver);
+    if (!receiverType) {
+        return nullptr;
+    }
+    
+    std::string receiverTypeName = receiverType->tostring();
+    std::string methodName = expr.method_name;
+    
+    // 修复：处理引用类型，如果类型以 & 开头，去掉 & 前缀
+    if (receiverTypeName.find("&") == 0) {
+        receiverTypeName = receiverTypeName.substr(1);
+    }
+    
+    // 检查是否是内置方法
+    if (IsBuiltinMethodCall(receiverTypeName, methodName)) {
+        return GetBuiltinMethodReturnType(receiverTypeName, methodName);
+    }
+    
+    // 查找结构体符号
+    auto structSymbol = FindStruct(receiverTypeName);
+    if (!structSymbol) {
+        ReportError("Cannot find struct: " + receiverTypeName);
+        return nullptr;
+    }
+    
+    // 在结构体的 impl 中查找方法
+    for (const auto& method : structSymbol->methods) {
+        if (method->name == methodName) {
+            return method->returntype;
+        }
+    }
+    
+    ReportError("Struct '" + receiverTypeName + "' has no method '" + methodName + "'");
+    return nullptr;
 }
 
 std::shared_ptr<SemanticType> TypeChecker::InferIndexExpressionType(IndexExpression& expr) {
@@ -1458,6 +1795,16 @@ std::shared_ptr<StructSymbol> TypeChecker::FindStruct(const std::string& name) {
     if (symbol && symbol->kind == SymbolKind::Struct) {
         return std::dynamic_pointer_cast<StructSymbol>(symbol);
     }
+    
+    // 修复：如果从当前作用域找不到，尝试从根作用域开始查找
+    if (!symbol) {
+        auto rootScope = scopeTree->GetRootScope();
+        symbol = rootScope->Lookup(name, false);
+        if (symbol && symbol->kind == SymbolKind::Struct) {
+            return std::dynamic_pointer_cast<StructSymbol>(symbol);
+        }
+    }
+    
     return nullptr;
 }
 
@@ -1536,6 +1883,13 @@ void TypeChecker::CheckPattern(Pattern& pattern, std::shared_ptr<SemanticType> e
 void TypeChecker::CheckPattern(IdentifierPattern& pattern, std::shared_ptr<SemanticType> expectedType) {
     std::string varName = pattern.identifier;
     
+    // 特殊处理 self：self 是特殊关键字，不应该从符号表中查找
+    if (varName == "self") {
+        // self 是特殊关键字，不需要在符号表中查找
+        // 它的类型应该由函数签名中的 self 参数决定
+        return;
+    }
+    
     // 修复：彻底移除在符号收集阶段之后添加符号的代码
     // 根据用户要求，symbolcollection阶段后的代码不能添加符号到scope
     // 所有符号（包括函数参数和局部变量）都应该在symbolcollection阶段处理
@@ -1598,10 +1952,23 @@ void TypeChecker::CheckVariableMutability(PathExpression& pathExpr) {
     }
     varName = pathExpr.simplepath->simplepathsegements[0]->identifier;
     
-    if (varName.empty()) return;
+    if (varName.empty()) {
+        return;
+    }
+    
+    // 特殊处理 self：self 是特殊关键字，不应该从符号表中查找
+    if (varName == "self") {
+        // self 的可变性由函数签名决定，不需要额外检查
+        return;
+    }
+    
     auto symbol = scopeTree->LookupSymbol(varName);
     if (!symbol) {
-        ReportError("Undefined variable: " + varName);
+        if (varName.empty()) {
+            ReportError("Undefined variable: <empty> (in CheckVariableMutability)");
+        } else {
+            ReportError("Undefined variable: " + varName);
+        }
         return;
     }
     
@@ -1671,6 +2038,19 @@ void TypeChecker::visit(AssignmentExpression& node) {
         // 类型推断失败时，错误已经在 InferExpressionType 中报告了
     }
     
+    // 检查赋值类型兼容性
+    if (node.leftexpression && node.rightexpression) {
+        auto leftType = InferExpressionType(*node.leftexpression);
+        auto rightType = InferExpressionType(*node.rightexpression);
+        
+        if (leftType && rightType) {
+            if (!AreTypesCompatible(leftType, rightType)) {
+                ReportError("Type mismatch in assignment: expected '" + leftType->tostring() +
+                           "', found '" + rightType->tostring() + "'");
+            }
+        }
+    }
+    
     PopNode();
 }
 
@@ -1700,7 +2080,8 @@ void TypeChecker::visit(IndexExpression& node) {
         
         // 检查索引类型必须是整数
         auto indexType = InferExpressionType(*node.expressionin);
-        if (indexType && indexType->tostring() != "i32" && indexType->tostring() != "usize") {
+        auto typestring = indexType->tostring();
+        if (indexType && typestring != "i32" && typestring != "usize" && typestring != "u32" && typestring != "isize" && typestring != "Int" && typestring != "UnsignedInt" && typestring != "SignedInt") {
             ReportError("Array index must be of integer type, found " + indexType->tostring());
         }
     }
@@ -1758,6 +2139,32 @@ void TypeChecker::visit(FieldExpression& node) {
     if (node.expression) {
         node.expression->accept(*this);
     }
+    PopNode();
+}
+
+void TypeChecker::visit(MethodCallExpression& node) {
+    PushNode(node);
+    
+    // 访问接收者表达式
+    if (node.receiver) {
+        node.receiver->accept(*this);
+    }
+    
+    // 访问方法参数
+    if (node.callparams) {
+        for (const auto& arg : node.callparams->expressions) {
+            if (arg) {
+                arg->accept(*this);
+            }
+        }
+    }
+    
+    // 推断方法调用表达式的类型
+    auto methodCallType = InferMethodCallExpressionType(node);
+    if (methodCallType) {
+        nodeTypeMap[&node] = methodCallType;
+    }
+    
     PopNode();
 }
 
@@ -1955,7 +2362,11 @@ void TypeChecker::CheckArraySizeMatchForAnyExpression(ArrayTypeWrapper& declared
         
         auto symbol = FindSymbol(varName);
         if (!symbol) {
-            ReportError("Undefined variable: " + varName);
+            if (varName.empty()) {
+                ReportError("Undefined variable: <empty> (in CheckArraySizeMatchForAnyExpression)");
+            } else {
+                ReportError("Undefined variable: " + varName);
+            }
             return;
         }
         
@@ -2268,34 +2679,6 @@ void TypeChecker::visit(InfiniteLoopExpression& node) {
     PopNode();
 }
 
-// 新增方法调用类型推断
-std::shared_ptr<SemanticType> TypeChecker::InferMethodCallType(CallExpression& expr, FieldExpression& fieldExpr) {
-    // 获取接收者类型
-    auto receiverType = InferExpressionType(*fieldExpr.expression);
-    if (!receiverType) {
-        return nullptr;
-    }
-    
-    std::string methodName = fieldExpr.identifier;
-    std::string receiverTypeName = receiverType->tostring();
-    
-    // 检查是否是内置方法
-    if (IsBuiltinMethodCall(receiverTypeName, methodName)) {
-        return GetBuiltinMethodReturnType(receiverTypeName, methodName);
-    }
-    
-    // 在结构体中查找方法
-    if (auto structSymbol = FindStruct(receiverTypeName)) {
-        for (const auto& method : structSymbol->methods) {
-            if (method->name == methodName) {
-                return method->returntype;
-            }
-        }
-    }
-    
-    ReportError("Method '" + methodName + "' not found for type '" + receiverTypeName + "'");
-    return nullptr;
-}
 
 // 检查是否是内置方法调用
 bool TypeChecker::IsBuiltinMethodCall(const std::string& receiverType, const std::string& methodName) {
