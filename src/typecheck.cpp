@@ -2101,7 +2101,6 @@ int64_t TypeChecker::EvaluateArraySize(Expression& sizeExpr) {
     ReportError("Complex array size expressions not supported");
     return -1;
 }
-
 void TypeChecker::visit(BlockExpression& node) {
     PushNode(node);
     
@@ -2151,7 +2150,6 @@ void TypeChecker::visit(BlockExpression& node) {
         // 3. 空块表达式的类型为 unit
         nodeTypeMap[&node] = std::make_shared<SimpleType>("()");
     }
-    
     
     // 退出作用域
     scopeTree->ExitScope();
@@ -2762,6 +2760,9 @@ std::shared_ptr<SemanticType> TypeChecker::InferBlockExpressionType(BlockExpress
     // 2. 没有尾表达式的情况，如果所有控制流都会遇到 return/break/continue，使用 !
     // 3. 否则类型为 unit
     
+    // 关键修复：进入 BlockExpression 的作用域
+    scopeTree->EnterExistingScope(&expr);
+    
     // 重要：在推断类型之前，先访问所有语句以确保变量被注册到符号表中
     for (const auto& stmt : expr.statements) {
         if (stmt) {
@@ -2774,9 +2775,12 @@ std::shared_ptr<SemanticType> TypeChecker::InferBlockExpressionType(BlockExpress
         // 推断尾表达式的类型
         auto tailExprType = InferExpressionType(*expr.expressionwithoutblock);
         if (tailExprType) {
+            // 退出作用域
+            scopeTree->ExitScope();
             return tailExprType;
         } else {
             // 如果尾表达式类型推断失败，默认为 unit
+            scopeTree->ExitScope();
             return std::make_shared<SimpleType>("()");
         }
     } else if (!expr.statements.empty()) {
@@ -2789,21 +2793,26 @@ std::shared_ptr<SemanticType> TypeChecker::InferBlockExpressionType(BlockExpress
                 // 不带分号的表达式语句，作为尾表达式处理
                 auto lastExprType = InferExpressionType(*exprStmt->astnode);
                 if (lastExprType) {
+                    scopeTree->ExitScope();
                     return lastExprType;
                 } else {
                     // 如果表达式类型推断失败，默认为 unit
+                    scopeTree->ExitScope();
                     return std::make_shared<SimpleType>("()");
                 }
             } else {
                 // 带分号的表达式语句或其他情况，块表达式类型为 unit
+                scopeTree->ExitScope();
                 return std::make_shared<SimpleType>("()");
             }
         } else {
             // 如果最后一条语句不是表达式语句，块表达式类型为 unit
+            scopeTree->ExitScope();
             return std::make_shared<SimpleType>("()");
         }
     } else {
         // 3. 空块表达式的类型为 unit
+        scopeTree->ExitScope();
         return std::make_shared<SimpleType>("()");
     }
 }

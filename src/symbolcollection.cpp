@@ -192,6 +192,7 @@ void SymbolCollector::visit(LetStatement& node) {
     if (node.patternnotopalt) {
         if (auto identPattern = dynamic_cast<IdentifierPattern*>(node.patternnotopalt.get())) {
             std::string varName = identPattern->identifier;
+            
             // 获取变量类型
             std::shared_ptr<SemanticType> varType;
             if (node.type) {
@@ -209,7 +210,6 @@ void SymbolCollector::visit(LetStatement& node) {
             if (!identPattern->hasmut && node.expression && dynamic_cast<LiteralExpression*>(node.expression.get())) {
                 isConstant = true;
             }
-            
             
             // 如果是常量，创建常量符号
             std::shared_ptr<Symbol> varSymbol;
