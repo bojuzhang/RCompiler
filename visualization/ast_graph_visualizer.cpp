@@ -426,13 +426,23 @@ void ASTGraphVisualizer::visit(CallExpression& node) {
 }
 
 void ASTGraphVisualizer::visit(MethodCallExpression& node) {
+    std::string details = "method: " + node.method_name;
     std::string nodeId = generateNodeId();
-    addNode(nodeId, getNodeLabel("MethodCallExpression"));
+    addNode(nodeId, getNodeLabel("MethodCallExpression", details));
     
     int parentId = getCurrentNodeId();
     if (parentId != -1) {
         addEdge("node_" + std::to_string(parentId), nodeId);
     }
+    
+    pushNode(std::stoi(nodeId.substr(5)));
+    if (node.receiver) {
+        node.receiver->accept(*this);
+    }
+    if (node.callparams) {
+        node.callparams->accept(*this);
+    }
+    popNode();
 }
 
 void ASTGraphVisualizer::visit(FieldExpression& node) {

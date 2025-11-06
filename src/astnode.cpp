@@ -158,6 +158,13 @@ CallExpression::CallExpression(std::shared_ptr<Expression> expression,
     : expression(std::move(expression)),
       callparams(std::move(callparams)) {}
 
+MethodCallExpression::MethodCallExpression(std::shared_ptr<Expression> receiver,
+                                           std::string method_name,
+                                           std::shared_ptr<CallParams> callparams)
+    : receiver(std::move(receiver)),
+      method_name(std::move(method_name)),
+      callparams(std::move(callparams)) {}
+
 FieldExpression::FieldExpression(std::shared_ptr<Expression> expression, std::string identifier)
     : expression(std::move(expression)), identifier(std::move(identifier)) {}
 

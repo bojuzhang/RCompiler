@@ -417,13 +417,20 @@ public:
         visitor.visit(*this);
     }
 };
-// class MethodCallExpression : public Expression {
-// public:
-//     // is it deleted?
-//     std::unique_ptr<Expression> expression;
-//     // std::unique_ptr<Path>
-//     std::unique_ptr<CallParams> callparams;
-// };
+class MethodCallExpression : public Expression {
+public:
+    std::shared_ptr<Expression> receiver;  // 接收者对象 (Expression before '.')
+    std::string method_name;                // 方法名 (SimplePathSegment)
+    std::shared_ptr<CallParams> callparams; // 参数列表 (CallParams?)
+public:
+    MethodCallExpression(std::shared_ptr<Expression> receiver,
+                         std::string method_name,
+                         std::shared_ptr<CallParams> callparams);
+                         
+    void accept(ASTVisitor& visitor) override {
+        visitor.visit(*this);
+    }
+};
 class FieldExpression : public Expression {
 public:
     std::shared_ptr<Expression> expression;

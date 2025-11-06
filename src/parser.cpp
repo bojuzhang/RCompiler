@@ -131,7 +131,31 @@ std::shared_ptr<Expression> Parser::parseInfixPratt(std::shared_ptr<Expression> 
         } else if (type == Token::kleftCurly) {
             lhs = parseStructExpressionFromInfix(std::move(lhs));
         } else if (type == Token::kDot) {
-            // 处理字段访问表达式
+            // 处理方法调用表达式和字段访问表达式
+            // 首先尝试解析为MethodCallExpression: Expression '.' SimplePathSegment '(' CallParams? ')'
+            size_t backup_pos = pos;  // 保存当前位置以便回溯
+            
+            if (match(Token::kIDENTIFIER)) {
+                auto method_name = getstring();
+                advance();
+                
+                // 检查后面是否跟着左括号，这是方法调用的标志
+                if (match(Token::kleftParenthe)) {
+                    // 成功匹配方法调用模式
+                    advance();  // 消费左括号
+                    auto callparams = parseCallParams();
+                    if (match(Token::krightParenthe)) {
+                        advance();  // 消费右括号
+                        lhs = std::make_shared<MethodCallExpression>(std::move(lhs), method_name, std::move(callparams));
+                        continue;  // 继续处理后续的中缀表达式
+                    }
+                }
+                
+                // 如果不是方法调用，回溯到初始位置并尝试解析为FieldExpression
+                pos = backup_pos;
+            }
+            
+            // 回溯失败，尝试解析为FieldExpression
             if (!match(Token::kIDENTIFIER)) {
                 return nullptr;
             }
