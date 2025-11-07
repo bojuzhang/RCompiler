@@ -1047,6 +1047,50 @@ void TypeChecker::visit(CallExpression& node) {
         }
     }
     
+    // 添加参数类型检查
+    if (auto pathExpr = dynamic_cast<PathExpression*>(node.expression.get())) {
+        if (pathExpr->simplepath) {
+            if (!pathExpr->simplepath->simplepathsegements.empty()) {
+                std::string functionName = pathExpr->simplepath->simplepathsegements[0]->identifier;
+                
+                // 特殊检查：exit 函数的使用规则
+                if (functionName == "exit") {
+                    CheckExitFunctionUsage(node);
+                }
+                
+                auto functionSymbol = FindFunction(functionName);
+                if (functionSymbol && node.callparams) {
+                    const auto& params = functionSymbol->parameters;
+                    const auto& args = node.callparams->expressions;
+                    
+                    // 检查参数数量是否匹配
+                    if (params.size() != args.size()) {
+                        ReportError("Function '" + functionName + "' expects " +
+                                   std::to_string(params.size()) + " arguments, but " +
+                                   std::to_string(args.size()) + " were provided");
+                    } else {
+                        // 按顺序检查每个参数的类型
+                        for (size_t i = 0; i < params.size(); ++i) {
+                            if (i < args.size() && args[i]) {
+                                auto paramType = params[i]->type;
+                                auto argType = InferExpressionType(*args[i]);
+                                
+                                if (paramType && argType) {
+                                    if (!AreTypesCompatible(paramType, argType)) {
+                                        ReportError("Type mismatch in function call '" + functionName +
+                                                   "': parameter " + std::to_string(i + 1) +
+                                                   " expects type '" + paramType->tostring() +
+                                                   "', but found type '" + argType->tostring() + "'");
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
     // 推断调用表达式的类型
     auto callType = InferCallExpressionType(node);
     if (callType) {
@@ -1064,14 +1108,6 @@ std::shared_ptr<SemanticType> TypeChecker::InferCallExpressionType(CallExpressio
     if (auto pathExpr = dynamic_cast<PathExpression*>(expr.expression.get())) {
         if (pathExpr->simplepath && !pathExpr->simplepath->simplepathsegements.empty()) {
             std::string functionName = pathExpr->simplepath->simplepathsegements[0]->identifier;
-            
-            // 特殊处理 exit 函数
-            if (functionName == "exit") {
-                CheckExitFunctionUsage(expr);
-                // exit 函数发散，返回 never 类型
-                nodeTypeMap[&expr] = std::make_shared<SimpleType>("!");
-                return std::make_shared<SimpleType>("!");
-            }
             
             // 直接从作用域中查找符号
             auto symbol = FindSymbol(functionName);
@@ -1235,6 +1271,11 @@ std::shared_ptr<SemanticType> TypeChecker::InferFieldExpressionType(FieldExpress
         receiverTypeName = receiverTypeName.substr(1);
     }
     
+    // 修复：处理 mut 前缀，如果类型以 mut 开头，去掉 mut 前缀
+    if (receiverTypeName.find("mut ") == 0) {
+        receiverTypeName = receiverTypeName.substr(4); // 去掉 "mut " (4个字符)
+    }
+
     // 检查类型是否有效
     if (receiverTypeName.empty()) {
         ReportError("Cannot determine receiver type for field access");
@@ -1273,6 +1314,11 @@ std::shared_ptr<SemanticType> TypeChecker::InferMethodCallExpressionType(MethodC
     // 修复：处理引用类型，如果类型以 & 开头，去掉 & 前缀
     if (receiverTypeName.find("&") == 0) {
         receiverTypeName = receiverTypeName.substr(1);
+    }
+    
+    // 修复：处理 mut 前缀，如果类型以 mut 开头，去掉 mut 前缀
+    if (receiverTypeName.find("mut ") == 0) {
+        receiverTypeName = receiverTypeName.substr(4); // 去掉 "mut " (4个字符)
     }
     
     // 检查是否是内置方法
@@ -1784,8 +1830,10 @@ std::shared_ptr<Symbol> TypeChecker::FindSymbol(const std::string& name) {
 
 std::shared_ptr<FunctionSymbol> TypeChecker::FindFunction(const std::string& name) {
     auto symbol = FindSymbol(name);
-    if (symbol && symbol->kind == SymbolKind::Function) {
-        return std::dynamic_pointer_cast<FunctionSymbol>(symbol);
+    if (symbol) {
+        if (symbol->kind == SymbolKind::Function) {
+            return std::dynamic_pointer_cast<FunctionSymbol>(symbol);
+        }
     }
     return nullptr;
 }
@@ -2159,6 +2207,62 @@ void TypeChecker::visit(MethodCallExpression& node) {
         }
     }
     
+    // 添加参数类型检查
+    std::string methodName = node.method_name;
+    auto receiverType = InferExpressionType(*node.receiver);
+    
+    if (receiverType) {
+        std::string receiverTypeName = receiverType->tostring();
+        
+        // 处理引用类型，去掉 & 前缀
+        if (receiverTypeName.find("&") == 0) {
+            receiverTypeName = receiverTypeName.substr(1);
+        }
+        
+        // 处理 mut 前缀，去掉 mut 前缀
+        if (receiverTypeName.find("mut ") == 0) {
+            receiverTypeName = receiverTypeName.substr(4);
+        }
+        
+        // 查找结构体符号
+        auto structSymbol = FindStruct(receiverTypeName);
+        if (structSymbol) {
+            // 在结构体的 impl 中查找方法
+            for (const auto& method : structSymbol->methods) {
+                if (method->name == methodName) {
+                    // 找到方法，检查参数类型
+                    const auto& params = method->parameters;
+                    const auto& args = node.callparams ? node.callparams->expressions : std::vector<std::shared_ptr<Expression>>();
+                    
+                    // 检查参数数量是否匹配（注意：方法参数不包括 self）
+                    if (params.size() != args.size()) {
+                        ReportError("Method '" + methodName + "' expects " +
+                                   std::to_string(params.size()) + " arguments, but " +
+                                   std::to_string(args.size()) + " were provided");
+                    } else {
+                        // 按顺序检查每个参数的类型
+                        for (size_t i = 0; i < params.size(); ++i) {
+                            if (i < args.size() && args[i]) {
+                                auto paramType = params[i]->type;
+                                auto argType = InferExpressionType(*args[i]);
+                                
+                                if (paramType && argType) {
+                                    if (!AreTypesCompatible(paramType, argType)) {
+                                        ReportError("Type mismatch in method call '" + methodName +
+                                                   "': parameter " + std::to_string(i + 1) +
+                                                   " expects type '" + paramType->tostring() +
+                                                   "', but found type '" + argType->tostring() + "'");
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    break; // 找到方法后退出循环
+                }
+            }
+        }
+    }
+    
     // 推断方法调用表达式的类型
     auto methodCallType = InferMethodCallExpressionType(node);
     if (methodCallType) {
@@ -2198,6 +2302,11 @@ void TypeChecker::visit(LetStatement& node) {
             PopNode();
             return;
         }
+    }
+    
+    // 首先访问初始化表达式，这样其中的 CallExpression 会被正确处理
+    if (node.expression) {
+        node.expression->accept(*this);
     }
     
     // 检查初始化表达式
@@ -3212,24 +3321,59 @@ std::shared_ptr<SemanticType> TypeChecker::InferTypeCastExpressionType(TypeCastE
 void TypeChecker::CheckExitFunctionUsage(CallExpression& expr) {
     // 检查 exit 函数的使用规则
     
-    // 1. 检查是否在 main 函数中
+    // 1. 检查是否在 main 函数中，并且不在 impl 块内
     bool isInMainFunction = false;
+    bool isInImplBlock = false;
     std::stack<ASTNode*> tempStack = nodeStack;
+        
+    // 打印整个 nodeStack 的内容
+    std::stack<ASTNode*> debugStack = nodeStack;
+    std::vector<ASTNode*> stackContents;
+    while (!debugStack.empty()) {
+        stackContents.push_back(debugStack.top());
+        debugStack.pop();
+    }
+    
+    for (size_t i = 0; i < stackContents.size(); ++i) {
+        auto node = stackContents[i];        
+        // 检查是否在 impl 块内
+        if (auto implNode = dynamic_cast<InherentImpl*>(node)) {
+            isInImplBlock = true;
+        }
+        
+        if (auto funcNode = dynamic_cast<Function*>(node)) {
+            if (funcNode->identifier_name == "main") {
+                isInMainFunction = true;
+            }
+        }
+    }
     
     while (!tempStack.empty()) {
         auto topNode = tempStack.top();
         tempStack.pop();
         
+        // 检查是否在 impl 块内
+        if (auto implNode = dynamic_cast<InherentImpl*>(topNode)) {
+            isInImplBlock = true;
+            // 注意：不要 break，继续查找以确认是否在 main 函数中
+        }
+        
         if (auto funcNode = dynamic_cast<Function*>(topNode)) {
             if (funcNode->identifier_name == "main") {
                 isInMainFunction = true;
+                // 找到函数后可以停止查找
                 break;
             }
         }
     }
     
-    if (!isInMainFunction) {
-        ReportError("exit() may only be used in the main function");
+    // 如果不在 main 函数中，或者在 impl 块内的 main 方法中，都报错
+    if (!isInMainFunction || isInImplBlock) {
+        if (isInImplBlock) {
+            ReportError("exit() cannot be used in methods even if named 'main'");
+        } else {
+            ReportError("exit() may only be used in the main function");
+        }
         return;
     }
     

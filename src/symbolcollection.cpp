@@ -27,23 +27,46 @@ void SymbolCollector::BeginCollection() {
     struct BuiltinFunction {
         std::string name;
         std::string returnType;
+        std::vector<std::string> paramTypes;
     };
     
     auto builtinFunctions = {
-        BuiltinFunction{"print", "()"},
-        BuiltinFunction{"println", "()"},
-        BuiltinFunction{"printInt", "()"},
-        BuiltinFunction{"printlnInt", "()"},
-        BuiltinFunction{"getString", "String"},
-        BuiltinFunction{"getInt", "i32"},
-        BuiltinFunction{"exit", "()"}
+        BuiltinFunction{"print", "()", {"&str"}},
+        BuiltinFunction{"println", "()", {"&str"}},
+        BuiltinFunction{"printInt", "()", {"i32"}},
+        BuiltinFunction{"printlnInt", "()", {"i32"}},
+        BuiltinFunction{"getString", "String", {}},
+        BuiltinFunction{"getInt", "i32", {}},
+        BuiltinFunction{"exit", "()", {"i32"}}
     };
     
     for (const auto& builtinFunc : builtinFunctions) {
         auto returnType = std::make_shared<SimpleType>(builtinFunc.returnType);
-        auto funcSymbol = std::make_shared<Symbol>(
-            builtinFunc.name, SymbolKind::Function, returnType, false, nullptr
+        std::vector<std::shared_ptr<Symbol>> params;
+        std::vector<std::shared_ptr<SemanticType>> paramTypes;
+        
+        // 设置参数信息
+        for (const auto& paramType : builtinFunc.paramTypes) {
+            auto type = std::make_shared<SimpleType>(paramType);
+            paramTypes.push_back(type);
+            
+            // 创建参数符号（不需要名称，用于类型检查）
+            auto paramSymbol = std::make_shared<Symbol>(
+                "", SymbolKind::Variable, type, false, nullptr
+            );
+            params.push_back(paramSymbol);
+        }
+        
+        auto funcSymbol = std::make_shared<FunctionSymbol>(
+            builtinFunc.name,
+            params,
+            returnType,
+            false
         );
+        
+        // 设置参数类型信息
+        funcSymbol->parameterTypes = paramTypes;
+        
         globalScope->Insert(builtinFunc.name, funcSymbol);
     }
 }
