@@ -154,6 +154,7 @@ private:
     // break 表达式分析结果
     struct BreakAnalysisResult {
         bool hasBreak = false;                // 是否有 break 语句
+        bool hasContinue = false;             // 是否有 continue 语句
         std::vector<std::shared_ptr<SemanticType>> breakTypes; // 所有 break 表达式的类型
     };
     

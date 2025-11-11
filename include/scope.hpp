@@ -3,6 +3,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 #include "symbol.hpp"
 
@@ -61,4 +62,19 @@ public:
     bool InsertSymbol(const std::string& name, std::shared_ptr<Symbol> symbol);
     std::shared_ptr<Symbol> LookupSymbol(const std::string& name);
     std::shared_ptr<Symbol> LookupSymbolInCurrentScope(const std::string& name);
+    
+    // 可视化 scopetree 的辅助函数
+    void VisualizeScopeTree();
+    
+private:
+    // 递归可视化 scope 的辅助函数
+    void VisualizeScope(std::shared_ptr<Scope> scope, std::shared_ptr<Scope> currentScope,
+                       const std::string& prefix, bool isLast, bool isCurrentPath,
+                       const std::unordered_set<std::shared_ptr<Scope>>& currentPathSet);
+    
+    // 获取 Scope 类型的字符串表示
+    std::string GetScopeTypeString(std::shared_ptr<Scope> scope);
+    
+    // 获取 Symbol 类型的字符串表示
+    std::string GetSymbolKindString(SymbolKind kind);
 };

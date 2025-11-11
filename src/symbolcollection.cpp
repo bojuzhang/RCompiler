@@ -301,10 +301,12 @@ void SymbolCollector::visit(PredicateLoopExpression& node) {
     
     bool wasInLoop = inLoop;
     inLoop = true;
-    root->EnterScope(Scope::ScopeType::Loop, &node);
     if (node.conditions) {
-        node.conditions->accept(*this);
+        node.conditions->expression->accept(*this);
     }
+    
+    // conditions 不应该在 while 的 scope 内。
+    root->EnterScope(Scope::ScopeType::Loop, &node);
     
     if (node.blockexpression) {
         node.blockexpression->accept(*this);
@@ -803,7 +805,7 @@ void SymbolCollector::visit(IfExpression& node) {
     PushNode(node);
     
     if (node.conditions) {
-        node.conditions->accept(*this);
+        node.conditions->expression->accept(*this);
     }
     
     if (node.ifblockexpression) {

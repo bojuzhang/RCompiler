@@ -80,7 +80,7 @@ void TypeChecker::visit(Function& node) {
     
     // 进入函数作用域，使用符号收集阶段已经创建的作用域
     scopeTree->EnterExistingScope(&node);
-    
+
     if (node.functionparameters) {
         CheckFunctionParameters(*node.functionparameters);
     }
@@ -2630,49 +2630,10 @@ void TypeChecker::visit(BlockExpression& node) {
         stmt->accept(*this);
     }
     
-    // 推断块表达式的类型（按照语义规范优先级）
-    // 1. 首先检查是否有尾表达式（expressionwithoutblock）
-    if (node.expressionwithoutblock) {
-        // 在作用域内访问尾表达式并推断其类型
-        node.expressionwithoutblock->accept(*this);
-        auto tailExprType = InferExpressionType(*node.expressionwithoutblock);
-        
-        if (tailExprType) {
-            nodeTypeMap[&node] = tailExprType;
-        } else {
-            // 如果尾表达式类型推断失败，默认为 unit
-            nodeTypeMap[&node] = std::make_shared<SimpleType>("()");
-        }
-    } else if (!node.statements.empty()) {
-        // 2. 如果没有尾表达式，检查最后一条语句是否是不带分号的表达式语句
-        auto lastStmt = node.statements.back();
-        // Statement 使用组合模式，需要检查其 astnode 的类型
-        if (auto exprStmt = dynamic_cast<ExpressionStatement*>(lastStmt->astnode.get())) {
-            // 检查是否为不带分号的表达式语句（expressionstatement without semi）
-            if (!exprStmt->hassemi && exprStmt->astnode) {
-                // 不带分号的表达式语句，作为尾表达式处理
-                auto lastExprType = InferExpressionType(*exprStmt->astnode);
-                if (lastExprType) {
-                    nodeTypeMap[&node] = lastExprType;
-                } else {
-                    // 如果表达式类型推断失败，默认为 unit
-                    nodeTypeMap[&node] = std::make_shared<SimpleType>("()");
-                }
-            } else {
-                // 带分号的表达式语句或其他情况，块表达式类型为 unit
-                nodeTypeMap[&node] = std::make_shared<SimpleType>("()");
-            }
-        } else {
-            // 如果最后一条语句不是表达式语句，块表达式类型为 unit
-            nodeTypeMap[&node] = std::make_shared<SimpleType>("()");
-        }
-    } else {
-        // 3. 空块表达式的类型为 unit
-        nodeTypeMap[&node] = std::make_shared<SimpleType>("()");
-    }
+    nodeTypeMap[&node] = InferBlockExpressionType(node);
     
-    // 退出作用域
-    scopeTree->ExitScope();
+    // 已经在 infer 中退出了作用域
+    // scopeTree->ExitScope();
     
     PopNode();
 }
@@ -2961,18 +2922,35 @@ void TypeChecker::AnalyzeReturnStatementsInExpression(Expression& expr, ReturnAn
             result.certainReturnType = std::make_shared<SimpleType>("()");
         }
     } else if (auto ifExpr = dynamic_cast<IfExpression*>(&expr)) {
-        // if 表达式中的 return 语句是不确定执行的
+        // 修复：正确分析 if 表达式中的返回语句
+        bool ifHasReturn = false;
+        bool elseHasReturn = false;
+        
+        // 分析 if 分支
         if (ifExpr->ifblockexpression) {
             auto ifResult = AnalyzeReturnStatements(*ifExpr->ifblockexpression);
-            result.hasUncertainReturn = result.hasUncertainReturn || ifResult.hasUncertainReturn || ifResult.hasCertainReturn;
+            ifHasReturn = ifResult.hasCertainReturn;
         }
+        
+        // 分析 else 分支
         if (ifExpr->elseexpression) {
             if (auto elseBlock = dynamic_cast<BlockExpression*>(ifExpr->elseexpression.get())) {
                 auto elseResult = AnalyzeReturnStatements(*elseBlock);
-                result.hasUncertainReturn = result.hasUncertainReturn || elseResult.hasUncertainReturn || elseResult.hasCertainReturn;
+                elseHasReturn = elseResult.hasCertainReturn;
             } else {
-                AnalyzeReturnStatementsInExpression(*ifExpr->elseexpression, result);
+                ReturnAnalysisResult elseResult;
+                AnalyzeReturnStatementsInExpression(*ifExpr->elseexpression, elseResult);
+                elseHasReturn = elseResult.hasCertainReturn;
             }
+        }
+        
+        // 如果 if 和 else 分支都有确定的返回语句，那么整个 if 表达式确定返回
+        if (ifHasReturn && elseHasReturn) {
+            result.hasCertainReturn = true;
+            result.certainReturnType = std::make_shared<SimpleType>("!");
+        } else if (ifHasReturn || elseHasReturn) {
+            // 只有一个分支有返回语句，这是不确定的返回
+            result.hasUncertainReturn = true;
         }
     } else if (auto loopExpr = dynamic_cast<InfiniteLoopExpression*>(&expr)) {
         // 无限循环中的 return 语句是不确定执行的（因为可能永远不会执行到）
@@ -3047,7 +3025,6 @@ std::shared_ptr<SemanticType> TypeChecker::InferIfExpressionType(IfExpression& e
         return nullptr;
     }
     
-    // 检查是否有一个分支是 ! 类型（never type）
     bool ifIsNever = ifType->tostring() == "!";
     bool elseIsNever = elseType->tostring() == "!";
     
@@ -3162,9 +3139,14 @@ void TypeChecker::AnalyzeBreakExpressionsInExpression(Expression& expr, BreakAna
                 result.breakTypes.push_back(std::make_shared<SimpleType>("()"));
             }
         } else {
-            // break 没有表达式，类型为 unit
-            result.breakTypes.push_back(std::make_shared<SimpleType>("()"));
+            // break 没有表达式，不添加类型到 breakTypes
+            // 这样 breakTypes.empty() 可以用来判断是否有无值的 break 语句
+            // 无值的 break 语句应该导致块具有 ! 类型
         }
+    } else if (auto continueExpr = dynamic_cast<ContinueExpression*>(&expr)) {
+        // 找到 continue 表达式
+        result.hasContinue = true;
+        // continue 没有表达式，不需要记录类型
     } else if (auto ifExpr = dynamic_cast<IfExpression*>(&expr)) {
         // if 表达式中的 break
         if (ifExpr->ifblockexpression) {
@@ -3262,6 +3244,12 @@ std::shared_ptr<SemanticType> TypeChecker::InferBlockExpressionType(BlockExpress
         }
     }
     
+    // 分析块中的返回语句
+    auto returnAnalysis = AnalyzeReturnStatements(expr);
+    
+    // 分析块中的 break/continue 语句
+    auto breakAnalysis = AnalyzeBreakExpressions(expr);
+    
     // 1. 首先检查是否有尾表达式（expressionwithoutblock）
     if (expr.expressionwithoutblock) {
         // 推断尾表达式的类型
@@ -3293,14 +3281,38 @@ std::shared_ptr<SemanticType> TypeChecker::InferBlockExpressionType(BlockExpress
                     return std::make_shared<SimpleType>("()");
                 }
             } else {
-                // 带分号的表达式语句或其他情况，块表达式类型为 unit
+                // 带分号的表达式语句或其他情况，检查是否有确定执行的返回语句或 break/continue 语句
+                // 修复：考虑 break/continue 语句导致的确定返回
+                bool hasDivergingStatement = returnAnalysis.hasCertainReturn ||
+                                           (breakAnalysis.hasBreak && breakAnalysis.breakTypes.empty()) ||
+                                           breakAnalysis.hasContinue;
+                
+                if (hasDivergingStatement) {
+                    // 如果有确定执行的返回语句或 break/continue 语句，块表达式的类型为 !
+                    scopeTree->ExitScope();
+                    return std::make_shared<SimpleType>("!");
+                } else {
+                    // 否则，块表达式类型为 unit
+                    scopeTree->ExitScope();
+                    return std::make_shared<SimpleType>("()");
+                }
+            }
+        } else {
+            // 如果最后一条语句不是表达式语句，检查是否有确定执行的返回语句或 break/continue 语句
+            // 修复：考虑 break/continue 语句导致的确定返回
+            bool hasDivergingStatement = returnAnalysis.hasCertainReturn ||
+                                       (breakAnalysis.hasBreak && breakAnalysis.breakTypes.empty()) ||
+                                       breakAnalysis.hasContinue;
+            
+            if (hasDivergingStatement) {
+                // 如果有确定执行的返回语句或 break/continue 语句，块表达式的类型为 !
+                scopeTree->ExitScope();
+                return std::make_shared<SimpleType>("!");
+            } else {
+                // 否则，块表达式类型为 unit
                 scopeTree->ExitScope();
                 return std::make_shared<SimpleType>("()");
             }
-        } else {
-            // 如果最后一条语句不是表达式语句，块表达式类型为 unit
-            scopeTree->ExitScope();
-            return std::make_shared<SimpleType>("()");
         }
     } else {
         // 3. 空块表达式的类型为 unit

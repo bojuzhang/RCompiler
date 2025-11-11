@@ -62,6 +62,10 @@ bool CompleteSemanticAnalyzer::RunSymbolCollection() {
         return false;
     }
     
+    // // 可视化符号收集完成后的 scopetree
+    // std::cerr << "\n=== Scope Tree after Symbol Collection ===" << std::endl;
+    // scopeTree->VisualizeScopeTree();
+    
     return true;
 }
 
