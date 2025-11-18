@@ -468,15 +468,15 @@ void TypeChecker::CheckFunctionBody(Function& function) {
             if (bodyType && declaredReturnType) {
                 // 检查函数体类型与声明的返回类型是否匹配
                 // 注意：如果函数体类型是 !（never），说明函数总是发散，不需要检查
-                if (bodyType->tostring() != "!") {
+                // if (bodyType->tostring() != "!") {
                     // 如果声明的返回类型不是 unit，或者函数体类型不是 unit，进行类型检查
-                    if (declaredReturnType->tostring() != "()" || bodyType->tostring() != "()") {
+                    // if (declaredReturnType->tostring() != "()" || bodyType->tostring() != "()") {
                         if (!AreTypesCompatible(declaredReturnType, bodyType)) {
                             ReportError("Function '" + function.identifier_name + "' return type mismatch: expected '" +
                                        declaredReturnType->tostring() + "', found '" + bodyType->tostring() + "'");
                         }
-                    }
-                }
+                    // }
+                // }
             }
         }
         
