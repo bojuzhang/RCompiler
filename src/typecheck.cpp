@@ -637,6 +637,47 @@ bool TypeChecker::AreTypesCompatible(std::shared_ptr<SemanticType> expected, std
         return true;
     }
     
+    // 处理引用级别的转换：&mut A 可以转换为 &A，但 &A 不能转换为 &mut A
+    auto expectedRef = dynamic_cast<ReferenceTypeWrapper*>(expected.get());
+    auto actualRef = dynamic_cast<ReferenceTypeWrapper*>(actual.get());
+    
+    if (expectedRef && actualRef) {
+        // 两者都是引用类型，检查目标类型是否兼容
+        auto expectedTarget = expectedRef->getTargetType();
+        auto actualTarget = actualRef->getTargetType();
+        
+        // 如果目标类型兼容
+        if (AreTypesCompatible(expectedTarget, actualTarget)) {
+            // 检查引用级别：&mut A 可以转换为 &A
+            if (!expectedRef->GetIsMutable() && actualRef->GetIsMutable()) {
+                // 期望不可变引用，实际是可变引用：允许转换
+                return true;
+            } else if (expectedRef->GetIsMutable() && !actualRef->GetIsMutable()) {
+                // 期望可变引用，实际是不可变引用：不允许转换
+                return false;
+            } else {
+                // 两者可变性相同
+                return true;
+            }
+        }
+    }
+    
+    // 处理期望是引用，实际不是引用的情况
+    if (expectedRef && !actualRef) {
+        // 检查实际类型是否与期望的引用目标类型兼容
+        if (AreTypesCompatible(expectedRef->getTargetType(), actual)) {
+            // 但这通常不应该发生，因为非引用不能隐式转换为引用
+            // 这里保持保守，返回 false
+            return false;
+        }
+    }
+    
+    // 处理期望不是引用，实际是引用的情况
+    if (!expectedRef && actualRef) {
+        // 检查引用的目标类型是否与期望类型兼容
+        return AreTypesCompatible(expected, actualRef->getTargetType());
+    }
+    
     // 实现隐式转换规则：
     // 1) Int 可以为 usize,isize,i32,u32
     // 2) SignedInt 可以为 i32,isize
