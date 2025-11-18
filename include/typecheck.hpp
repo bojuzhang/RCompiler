@@ -78,7 +78,7 @@ public:
     void visit(UnaryExpression& node) override {}
     void visit(BinaryExpression& node) override;
     void visit(BorrowExpression& node) override {}
-    void visit(DereferenceExpression& node) override {}
+    void visit(DereferenceExpression& node) override;
     
     void visit(Pattern& node) override {}
     void visit(LiteralPattern& node) override {}
@@ -184,6 +184,7 @@ private:
     std::shared_ptr<SemanticType> InferPredicateLoopExpressionType(PredicateLoopExpression& expr);
     std::shared_ptr<SemanticType> InferBlockExpressionType(BlockExpression& expr);
     std::shared_ptr<SemanticType> InferTypeCastExpressionType(TypeCastExpression& expr);
+    std::shared_ptr<SemanticType> InferDereferenceExpressionType(DereferenceExpression& expr);
     
     void ReportError(const std::string& message);
     void ReportUndefinedType(const std::string& typeName, ASTNode* context);

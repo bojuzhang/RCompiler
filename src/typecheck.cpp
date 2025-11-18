@@ -1035,6 +1035,10 @@ std::shared_ptr<SemanticType> TypeChecker::InferExpressionType(Expression& expr)
         // MethodCallExpression 类型推断：解析变量属于哪一个 struct，然后看 methodname 是什么函数
         // 其类型应该为这个函数声明的返回值
         type = InferMethodCallExpressionType(*methodCall);
+    } else if (auto derefExpr = dynamic_cast<DereferenceExpression*>(&expr)) {
+        // DereferenceExpression 类型推断：首先判断其类型能否解引用
+        // 然后分析其解引用后的类型
+        type = InferDereferenceExpressionType(*derefExpr);
     } else {
         // 未知表达式类型
         type = nullptr;
@@ -3537,5 +3541,60 @@ void TypeChecker::CheckMainFunctionExitRequirement(BlockExpression& blockExpr) {
     if (!hasExitAsFinalStatement) {
         ReportError("main function must have an exit() call as its final statement");
     }
+}
+
+void TypeChecker::visit(DereferenceExpression& node) {
+    PushNode(node);
+    
+    // 访问内部表达式
+    if (node.expression) {
+        node.expression->accept(*this);
+    }
+    
+    // 推断解引用表达式的类型
+    auto derefType = InferDereferenceExpressionType(node);
+    if (derefType) {
+        nodeTypeMap[&node] = derefType;
+    }
+    
+    PopNode();
+}
+
+std::shared_ptr<SemanticType> TypeChecker::InferDereferenceExpressionType(DereferenceExpression& expr) {
+    // 首先推断内部表达式的类型
+    if (!expr.expression) {
+        ReportError("Dereference expression has no inner expression");
+        return nullptr;
+    }
+    
+    auto innerType = InferExpressionType(*expr.expression);
+    if (!innerType) {
+        // 类型推断失败，错误已经在 InferExpressionType 中报告了
+        return nullptr;
+    }
+    
+    // 检查内部表达式是否是引用类型
+    if (auto refType = dynamic_cast<ReferenceTypeWrapper*>(innerType.get())) {
+        // 如果是引用类型，返回其目标类型
+        return refType->getTargetType();
+    }
+    
+    // 检查是否是字符串字面量（&str 类型）
+    std::string innerTypeStr = innerType->tostring();
+    if (innerTypeStr == "&str") {
+        // &str 解引用得到 str
+        return std::make_shared<SimpleType>("str");
+    }
+    
+    // 检查是否是其他引用类型的字符串表示
+    if (innerTypeStr.find("&") == 0) {
+        // 去掉 & 前缀，返回目标类型
+        std::string targetType = innerTypeStr.substr(1);
+        return std::make_shared<SimpleType>(targetType);
+    }
+    
+    // 如果不是引用类型，报告错误
+    ReportError("Cannot dereference type '" + innerType->tostring() + "': not a reference type");
+    return nullptr;
 }
 
