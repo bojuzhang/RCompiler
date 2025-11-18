@@ -725,7 +725,7 @@ std::shared_ptr<SemanticType> SymbolCollector::ResolveTypeFromNode(Type& node) {
     } else if (auto arrayType = dynamic_cast<ArrayType*>(&node)) {
         auto elementType = ResolveTypeFromNode(*arrayType->type);
         if (elementType) {
-            return std::make_shared<ArrayTypeWrapper>(elementType, arrayType->expression.get());
+            return std::make_shared<ArrayTypeWrapper>(elementType, arrayType->expression, nullptr);
         }
     } else if (auto refType = dynamic_cast<ReferenceType*>(&node)) {
         auto targetType = ResolveTypeFromNode(*refType->type);

@@ -41,8 +41,8 @@ std::shared_ptr<SemanticType> TypeEnvironment::ApplySubstitutions(std::shared_pt
         return type;
     } else if (auto arrayType = dynamic_cast<ArrayTypeWrapper*>(type.get())) {
         auto newElement = ApplySubstitutions(arrayType->GetElementType());
-        return std::make_shared<ArrayTypeWrapper>(newElement, arrayType->GetSizeExpression());
-    } 
+        return std::make_shared<ArrayTypeWrapper>(newElement, arrayType->GetSizeExpression(), nullptr);
+    }
     
     return type;
 }

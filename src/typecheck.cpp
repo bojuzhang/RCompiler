@@ -543,7 +543,7 @@ std::shared_ptr<SemanticType> TypeChecker::CheckType(ArrayType& arrayType) {
         }
     }
     
-    auto result = std::make_shared<ArrayTypeWrapper>(elementType, arrayType.expression.get(), constantEvaluator.get());
+    auto result = std::make_shared<ArrayTypeWrapper>(elementType, arrayType.expression, constantEvaluator.get());
     nodeTypeMap[&arrayType] = result; // 替换占位符
     return result;
 }
@@ -1592,17 +1592,17 @@ std::shared_ptr<SemanticType> TypeChecker::InferArrayExpressionType(ArrayExpress
     }
     
     // 创建数组类型，确保大小表达式是独立的
-    // 创建一个新的LiteralExpression来避免共享指针
-    Expression* independentSizeExpr = nullptr;
+    // 使用智能指针管理内存
+    std::shared_ptr<Expression> independentSizeExpr = nullptr;
     if (sizeExpr) {
         if (auto literal = dynamic_cast<LiteralExpression*>(sizeExpr.get())) {
-            independentSizeExpr = new LiteralExpression(literal->literal, literal->tokentype);
+            independentSizeExpr = std::make_shared<LiteralExpression>(literal->literal, literal->tokentype);
         } else {
-            independentSizeExpr = sizeExpr.get();
+            independentSizeExpr = sizeExpr;
         }
     }
     
-    auto result = std::make_shared<ArrayTypeWrapper>(elementType, independentSizeExpr);
+    auto result = std::make_shared<ArrayTypeWrapper>(elementType, independentSizeExpr, constantEvaluator.get());
     nodeTypeMap[&expr] = result; // 替换占位符
     
     
@@ -1680,7 +1680,7 @@ std::shared_ptr<SemanticType> TypeChecker::InferArrayExpressionTypeWithExpected(
     nodeTypeMap[&expr] = placeholder;
     
     std::shared_ptr<SemanticType> expectedElementType = nullptr;
-    Expression* expectedSizeExpr = nullptr;
+    std::shared_ptr<Expression> expectedSizeExpr = nullptr;
     
     // 从期望类型中提取元素类型和大小表达式
     if (auto arrayTypeWrapper = dynamic_cast<ArrayTypeWrapper*>(expectedType.get())) {
@@ -1790,7 +1790,7 @@ std::shared_ptr<SemanticType> TypeChecker::InferArrayExpressionTypeWithExpected(
         }
     }
     
-    auto result = std::make_shared<ArrayTypeWrapper>(elementType, sizeExpr.get());
+    auto result = std::make_shared<ArrayTypeWrapper>(elementType, sizeExpr, constantEvaluator.get());
     nodeTypeMap[&expr] = result; // 替换占位符
     return result;
 }

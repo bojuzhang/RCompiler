@@ -8,11 +8,11 @@
 class ArrayTypeWrapper : public SemanticType {
 private:
     std::shared_ptr<SemanticType> elementType;
-    Expression* sizeExpression;
+    std::shared_ptr<Expression> sizeExpression;
     ConstantEvaluator* constantEvaluator; // 添加常量求值器引用
     
 public:
-    ArrayTypeWrapper(std::shared_ptr<SemanticType> elementType, Expression* sizeExpr = nullptr, ConstantEvaluator* constEval = nullptr)
+    ArrayTypeWrapper(std::shared_ptr<SemanticType> elementType, std::shared_ptr<Expression> sizeExpr = nullptr, ConstantEvaluator* constEval = nullptr)
         : elementType(elementType), sizeExpression(sizeExpr), constantEvaluator(constEval) {}
     
     std::string tostring() const override {
@@ -20,11 +20,11 @@ public:
         if (sizeExpression) {
             result += "; ";
             // 尝试获取大小值
-            if (auto literal = dynamic_cast<LiteralExpression*>(sizeExpression)) {
+            if (auto literal = dynamic_cast<LiteralExpression*>(sizeExpression.get())) {
                 result += literal->literal;
             } else if (constantEvaluator) {
                 // 尝试使用常量求值器获取大小
-                if (auto pathExpr = dynamic_cast<PathExpression*>(sizeExpression)) {
+                if (auto pathExpr = dynamic_cast<PathExpression*>(sizeExpression.get())) {
                     if (pathExpr->simplepath && !pathExpr->simplepath->simplepathsegements.empty()) {
                         std::string constName = pathExpr->simplepath->simplepathsegements[0]->identifier;
                         auto constValue = constantEvaluator->GetConstantValue(constName);
@@ -48,7 +48,7 @@ public:
     }
     
     std::shared_ptr<SemanticType> GetElementType() const { return elementType; }
-    Expression* GetSizeExpression() const { return sizeExpression; }
+    std::shared_ptr<Expression> GetSizeExpression() const { return sizeExpression; }
     void SetConstantEvaluator(ConstantEvaluator* eval) { constantEvaluator = eval; }
 };
 
