@@ -544,9 +544,9 @@ void SymbolCollector::CollectAssociatedItem(AssociatedItem& item,
 }
 
  void SymbolCollector::CollectAssociatedFunction(Function& function,
-                                                 std::shared_ptr<ImplSymbol> implSymbol,
-                                                 std::shared_ptr<StructSymbol> structSymbol) {
-    std::string funcName = function.identifier_name;
+                                                  std::shared_ptr<ImplSymbol> implSymbol,
+                                                  std::shared_ptr<StructSymbol> structSymbol) {
+     std::string funcName = function.identifier_name;
     
     // 检查返回类型
     std::shared_ptr<SemanticType> returnType;
@@ -566,9 +566,11 @@ void SymbolCollector::CollectAssociatedItem(AssociatedItem& item,
     // 修复：不要在这里插入函数符号，而是在参数收集完成后插入
     // 这样可以避免重复定义的问题
     
-    // 修复：检查第一个参数是否为 self 参数
+    // 修复：检查第一个参数是否为 self 参数（包括 self, &self, &mut self）
     if (function.functionparameters && !function.functionparameters->functionparams.empty()) {
         auto firstParam = function.functionparameters->functionparams[0];
+        
+        // 检查是否是 IdentifierPattern（处理 self）
         if (auto identPattern = dynamic_cast<IdentifierPattern*>(firstParam->patternnotopalt.get())) {
             if (identPattern->identifier == "self") {
                 // 这是 self 参数，标记为方法
@@ -578,8 +580,11 @@ void SymbolCollector::CollectAssociatedItem(AssociatedItem& item,
                 if (selfType) {
                     // 检查 self 参数的可变性
                     bool isMutable = false;
+                    // 检查参数类型是否为引用类型
                     if (auto refType = dynamic_cast<ReferenceType*>(firstParam->type.get())) {
                         isMutable = refType->ismut;
+                        // 创建引用类型
+                        selfType = std::make_shared<ReferenceTypeWrapper>(selfType, isMutable);
                     }
                     
                     auto selfSymbol = std::make_shared<Symbol>(
@@ -587,6 +592,30 @@ void SymbolCollector::CollectAssociatedItem(AssociatedItem& item,
                     );
                     funcSymbol->parameters.push_back(selfSymbol);
                     funcSymbol->parameterTypes.push_back(selfType);
+                }
+            }
+        }
+        // 检查是否是 ReferencePattern（处理 &self 和 &mut self）
+        else if (auto refPattern = dynamic_cast<ReferencePattern*>(firstParam->patternnotopalt.get())) {
+            if (refPattern->pattern) {
+                if (auto innerIdentPattern = dynamic_cast<IdentifierPattern*>(refPattern->pattern.get())) {
+                    if (innerIdentPattern->identifier == "self") {
+                        // 这是 &self 或 &mut self 参数，标记为方法
+                        funcSymbol->isMethod = true;
+                        // self 参数的类型应该是 impl 的目标类型
+                        auto selfType = GetImplTargetType(*static_cast<InherentImpl*>(GetCurrentNode()));
+                        if (selfType) {
+                            // 对于 ReferencePattern，总是创建引用类型
+                            bool isMutable = refPattern->hasmut;
+                            selfType = std::make_shared<ReferenceTypeWrapper>(selfType, isMutable);
+                            
+                            auto selfSymbol = std::make_shared<Symbol>(
+                                "self", SymbolKind::Variable, selfType, isMutable, &function
+                            );
+                            funcSymbol->parameters.push_back(selfSymbol);
+                            funcSymbol->parameterTypes.push_back(selfType);
+                        }
+                    }
                 }
             }
         }
@@ -608,10 +637,17 @@ void SymbolCollector::CollectAssociatedItem(AssociatedItem& item,
                 std::string paramName = identPattern->identifier;
                 std::shared_ptr<SemanticType> paramType;
                 
-                // 特殊处理 self 参数
+                // 特殊处理 self 参数（包括 &self 和 &mut self）
                 if (paramName == "self") {
                     // self 参数的类型应该是 impl 的目标类型
                     paramType = GetImplTargetType(*static_cast<InherentImpl*>(GetCurrentNode()));
+                    
+                    // 检查 self 参数是否为引用类型
+                    if (auto refType = dynamic_cast<ReferenceType*>(param->type.get())) {
+                        bool isMutable = refType->ismut;
+                        // 创建引用类型
+                        paramType = std::make_shared<ReferenceTypeWrapper>(paramType, isMutable);
+                    }
                 } else {
                     paramType = ResolveTypeFromNode(*param->type);
                 }
@@ -621,7 +657,12 @@ void SymbolCollector::CollectAssociatedItem(AssociatedItem& item,
                 // 对于引用类型，需要检查引用本身是否可变
                 if (auto refType = dynamic_cast<ReferenceType*>(param->type.get())) {
                     isMutable = refType->ismut;
+                    // 如果是引用类型且不是 self 参数，创建引用类型包装器
+                    if (paramName != "self") {
+                        paramType = std::make_shared<ReferenceTypeWrapper>(paramType, isMutable);
+                    }
                 }
+                
                 
                 auto paramSymbol = std::make_shared<Symbol>(
                     paramName,

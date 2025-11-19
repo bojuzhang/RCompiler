@@ -2259,42 +2259,145 @@ void TypeChecker::visit(MethodCallExpression& node) {
     if (receiverType) {
         std::string receiverTypeName = receiverType->tostring();
         
-        // 处理引用类型，去掉 & 前缀
-        if (receiverTypeName.find("&") == 0) {
-            receiverTypeName = receiverTypeName.substr(1);
-        }
+        // 查找结构体符号
+        std::string baseTypeName = receiverTypeName;
         
-        // 处理 mut 前缀，去掉 mut 前缀
-        if (receiverTypeName.find("mut ") == 0) {
-            receiverTypeName = receiverTypeName.substr(4);
+        // 处理引用类型，提取基础类型和可变性信息
+        bool receiverIsRef = false;
+        bool receiverIsMut = false;
+        
+        if (receiverTypeName.find("&") == 0) {
+            receiverIsRef = true;
+            baseTypeName = receiverTypeName.substr(1); // 去掉 &
+            
+            if (baseTypeName.find("mut ") == 0) {
+                receiverIsMut = true;
+                baseTypeName = baseTypeName.substr(4); // 去掉 mut
+            }
         }
         
         // 查找结构体符号
-        auto structSymbol = FindStruct(receiverTypeName);
+        auto structSymbol = FindStruct(baseTypeName);
         if (structSymbol) {
             // 在结构体的 impl 中查找方法
             for (const auto& method : structSymbol->methods) {
                 if (method->name == methodName) {
+                    // 检查接收者可变性与方法要求的匹配
+                    if (!method->parameters.empty() && method->parameters[0]->name == "self") {
+                        auto selfParam = method->parameters[0];
+                        bool methodRequiresMut = selfParam->ismutable;
+                        bool methodRequiresRef = false;
+                        
+                        // 检查 self 参数的类型是否为引用类型
+                        if (method->parameterTypes.size() > 0) {
+                            auto selfType = method->parameterTypes[0];
+                            
+                            if (auto refType = dynamic_cast<ReferenceTypeWrapper*>(selfType.get())) {
+                                methodRequiresRef = true;
+                                methodRequiresMut = refType->GetIsMutable();
+                            }
+                        }
+                        
+                        // 进行可变性检查
+                        if (methodRequiresRef && !receiverIsRef) {
+                            // 方法需要引用，但接收者不是引用
+                            // 检查是否可以进行 autoref
+                            if (auto pathExpr = dynamic_cast<PathExpression*>(node.receiver.get())) {
+                                if (pathExpr->simplepath && !pathExpr->simplepath->simplepathsegements.empty()) {
+                                    std::string varName = pathExpr->simplepath->simplepathsegements[0]->identifier;
+                                    auto varSymbol = FindSymbol(varName);
+                                    
+                                    if (varSymbol && varSymbol->ismutable) {
+                                        // mut 变量可以通过 autoref 转换为 &mut
+                                        if (methodRequiresMut) {
+                                            // &mut self 方法，mut 变量可以 autoref 为 &mut
+                                            // 这是允许的
+                                        } else {
+                                            // &self 方法，mut 变量可以 autoref 为 &（不可变引用）
+                                            // 这也是允许的
+                                        }
+                                    } else {
+                                        // 不可变变量，无法进行 &mut autoref
+                                        if (methodRequiresMut) {
+                                            ReportError("Cannot call method '" + methodName + "' which requires &mut self on immutable value");
+                                        }
+                                        // 对于 &self 方法，不可变变量可以 autoref 为 &
+                                    }
+                                }
+                            } else if (auto indexExpr = dynamic_cast<IndexExpression*>(node.receiver.get())) {
+                                // 处理数组索引表达式，如 graph_nodes[0]
+                                // 检查数组变量本身是否可变
+                                if (auto arrayPathExpr = dynamic_cast<PathExpression*>(indexExpr->expressionout.get())) {
+                                    if (arrayPathExpr->simplepath && !arrayPathExpr->simplepath->simplepathsegements.empty()) {
+                                        std::string arrayVarName = arrayPathExpr->simplepath->simplepathsegements[0]->identifier;
+                                        auto arrayVarSymbol = FindSymbol(arrayVarName);
+                                        
+                                        if (arrayVarSymbol && arrayVarSymbol->ismutable) {
+                                            // mut 数组的元素可以通过 autoref 转换为 &mut
+                                            if (methodRequiresMut) {
+                                                // &mut self 方法，mut 数组的元素可以 autoref 为 &mut
+                                                // 这是允许的
+                                            } else {
+                                                // &self 方法，mut 数组的元素可以 autoref 为 &（不可变引用）
+                                                // 这也是允许的
+                                            }
+                                        } else {
+                                            // 不可变数组，无法进行 &mut autoref
+                                            if (methodRequiresMut) {
+                                                ReportError("Cannot call method '" + methodName + "' which requires &mut self on immutable array element");
+                                            }
+                                            // 对于 &self 方法，不可变数组的元素可以 autoref 为 &
+                                        }
+                                    }
+                                } else {
+                                    // 更复杂的表达式，无法进行 autoref
+                                    if (methodRequiresMut) {
+                                        ReportError("Cannot call method '" + methodName + "' which requires &mut self on immutable value");
+                                    }
+                                }
+                            } else {
+                                // 非简单路径表达式或索引表达式，无法进行 autoref
+                                if (methodRequiresMut) {
+                                    ReportError("Cannot call method '" + methodName + "' which requires &mut self on immutable value");
+                                }
+                            }
+                        } else if (receiverIsRef && methodRequiresRef) {
+                            // 两者都是引用，检查可变性匹配
+                            if (methodRequiresMut && !receiverIsMut) {
+                                ReportError("Cannot call method '" + methodName + "' which requires &mut self on immutable reference");
+                            }
+                        } else if (!methodRequiresRef && receiverIsRef) {
+                            // 方法不需要引用，但提供了引用
+                            // 这种情况通常是可以的，因为可以解引用
+                        }
+                    }
+                    
                     // 找到方法，检查参数类型
                     const auto& params = method->parameters;
                     const auto& args = node.callparams ? node.callparams->expressions : std::vector<std::shared_ptr<Expression>>();
                     
                     // 检查参数数量是否匹配（注意：方法参数不包括 self）
-                    if (params.size() != args.size()) {
+                    // 如果第一个参数是 self 参数，则从参数总数中减去 1
+                    size_t expectedArgs = params.size();
+                    if (!params.empty() && params[0]->name == "self") {
+                        expectedArgs--;
+                    }
+                    
+                    if (expectedArgs != args.size()) {
                         ReportError("Method '" + methodName + "' expects " +
-                                   std::to_string(params.size()) + " arguments, but " +
+                                   std::to_string(expectedArgs) + " arguments, but " +
                                    std::to_string(args.size()) + " were provided");
                     } else {
                         // 按顺序检查每个参数的类型
-                        for (size_t i = 0; i < params.size(); ++i) {
-                            if (i < args.size() && args[i]) {
+                        for (size_t i = 1; i < params.size(); ++i) { // 从1开始，跳过self参数
+                            if (i-1 < args.size() && args[i-1]) {
                                 auto paramType = params[i]->type;
-                                auto argType = InferExpressionType(*args[i]);
+                                auto argType = InferExpressionType(*args[i-1]);
                                 
                                 if (paramType && argType) {
                                     if (!AreTypesCompatible(paramType, argType)) {
                                         ReportError("Type mismatch in method call '" + methodName +
-                                                   "': parameter " + std::to_string(i + 1) +
+                                                   "': parameter " + std::to_string(i) +
                                                    " expects type '" + paramType->tostring() +
                                                    "', but found type '" + argType->tostring() + "'");
                                     }
