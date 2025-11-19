@@ -852,6 +852,38 @@ std::shared_ptr<SemanticType> TypeChecker::InferExpressionType(Expression& expr)
         if (pathExpr->simplepath && !pathExpr->simplepath->simplepathsegements.empty()) {
             std::string varName = pathExpr->simplepath->simplepathsegements[0]->identifier;
             
+            // 修复：检查是否是 Self 或 self 关键字（它们的 identifier 字段可能为空）
+            bool isSelfKeyword = false;
+            bool isLowerSelf = false;
+            if (pathExpr->simplepath->simplepathsegements[0]->isSelf) {
+                isSelfKeyword = true;
+                varName = "Self";
+            } else if (pathExpr->simplepath->simplepathsegements[0]->isself) {
+                isLowerSelf = true;
+                varName = "self";
+            }
+            
+            // 修复：检查是否是多段路径（如 Stack::new）
+            if (pathExpr->simplepath->simplepathsegements.size() >= 2) {
+                // 对于多段路径，第一段应该是类型名，第二段应该是函数名
+                std::string typeName = pathExpr->simplepath->simplepathsegements[0]->identifier;
+                std::string funcName = pathExpr->simplepath->simplepathsegements[1]->identifier;
+                
+                // 检查第一段是否是有效的类型
+                auto typeSymbol = FindSymbol(typeName);
+                if (typeSymbol && (typeSymbol->kind == SymbolKind::Struct ||
+                                  typeSymbol->kind == SymbolKind::Enum ||
+                                  typeSymbol->kind == SymbolKind::BuiltinType)) {
+                    // 这是一个有效的类型路径，不需要进一步处理
+                    // 类型将在 CallExpression 中处理
+                    type = std::make_shared<SimpleType>(typeName);
+                    // 设置缓存并返回，避免后续的变量查找
+                    nodeTypeMap[&expr] = type;
+                    return type;
+                } else {
+                    // 不是有效的类型，继续按普通变量处理
+                }
+            }
             
             // 特殊处理 self：在 impl 块中，self 指代结构体本身
             if (varName == "self") {
@@ -966,7 +998,14 @@ std::shared_ptr<SemanticType> TypeChecker::InferExpressionType(Expression& expr)
                         } else {
                             // 如果找不到符号或常量，直接报错
                             if (varName.empty()) {
-                                ReportError("Undefined variable: <empty>");
+                                // 修复：如果 varName 为空，检查是否是 Self 或 self 关键字
+                                if (isSelfKeyword) {
+                                    ReportError("Undefined type: Self");
+                                } else if (isLowerSelf) {
+                                    ReportError("'self' can only be used in methods that have self parameter");
+                                } else {
+                                    ReportError("Undefined variable: <empty>");
+                                }
                             } else {
                                 ReportError("Undefined variable: " + varName);
                             }
@@ -975,7 +1014,14 @@ std::shared_ptr<SemanticType> TypeChecker::InferExpressionType(Expression& expr)
                     } else {
                         // 如果找不到符号或符号没有类型信息，直接报错
                         if (varName.empty()) {
-                            ReportError("Undefined variable: <empty> (in path expression)");
+                            // 修复：如果 varName 为空，检查是否是 Self 或 self 关键字
+                            if (isSelfKeyword) {
+                                ReportError("Undefined type: Self");
+                            } else if (isLowerSelf) {
+                                ReportError("'self' can only be used in methods that have self parameter");
+                            } else {
+                                ReportError("Undefined variable: <empty> (in path expression)");
+                            }
                         } else {
                             ReportError("Undefined variable: " + varName);
                         }
@@ -1096,36 +1142,92 @@ void TypeChecker::visit(CallExpression& node) {
     if (auto pathExpr = dynamic_cast<PathExpression*>(node.expression.get())) {
         if (pathExpr->simplepath) {
             if (!pathExpr->simplepath->simplepathsegements.empty()) {
-                std::string functionName = pathExpr->simplepath->simplepathsegements[0]->identifier;
-                
-                // 特殊检查：exit 函数的使用规则
-                if (functionName == "exit") {
-                    CheckExitFunctionUsage(node);
-                }
-                
-                auto functionSymbol = FindFunction(functionName);
-                if (functionSymbol && node.callparams) {
-                    const auto& params = functionSymbol->parameters;
-                    const auto& args = node.callparams->expressions;
+                // 修复：检查是否是多段路径（如 Stack::new）
+                if (pathExpr->simplepath->simplepathsegements.size() >= 2) {
+                    // 对于多段路径，第一段应该是类型名，第二段应该是函数名
+                    std::string typeName = pathExpr->simplepath->simplepathsegements[0]->identifier;
+                    std::string functionName = pathExpr->simplepath->simplepathsegements[1]->identifier;
                     
-                    // 检查参数数量是否匹配
-                    if (params.size() != args.size()) {
-                        ReportError("Function '" + functionName + "' expects " +
-                                   std::to_string(params.size()) + " arguments, but " +
-                                   std::to_string(args.size()) + " were provided");
+                    // 检查第一段是否是有效的类型
+                    auto typeSymbol = FindSymbol(typeName);
+                    if (typeSymbol && (typeSymbol->kind == SymbolKind::Struct ||
+                                      typeSymbol->kind == SymbolKind::Enum ||
+                                      typeSymbol->kind == SymbolKind::BuiltinType)) {
+                        // 这是一个关联函数调用（如 Stack::new）
+                        // 查找该类型的关联函数
+                        if (auto structSymbol = FindStruct(typeName)) {
+                            for (const auto& method : structSymbol->methods) {
+                                if (method->name == functionName) {
+                                    // 找到关联函数，检查参数类型
+                                    if (node.callparams) {
+                                        const auto& params = method->parameters;
+                                        const auto& args = node.callparams->expressions;
+                                        
+                                        // 检查参数数量是否匹配（注意：关联函数的第一个参数可能不是self）
+                                        if (params.size() != args.size()) {
+                                            ReportError("Function '" + typeName + "::" + functionName + "' expects " +
+                                                       std::to_string(params.size()) + " arguments, but " +
+                                                       std::to_string(args.size()) + " were provided");
+                                        } else {
+                                            // 按顺序检查每个参数的类型
+                                            for (size_t i = 0; i < params.size(); ++i) {
+                                                if (i < args.size() && args[i]) {
+                                                    auto paramType = params[i]->type;
+                                                    auto argType = InferExpressionType(*args[i]);
+                                                    
+                                                    if (paramType && argType) {
+                                                        if (!AreTypesCompatible(paramType, argType)) {
+                                                            ReportError("Type mismatch in function call '" + typeName + "::" + functionName +
+                                                                       "': parameter " + std::to_string(i + 1) +
+                                                                       " expects type '" + paramType->tostring() +
+                                                                       "', but found type '" + argType->tostring() + "'");
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    break; // 找到函数后退出循环
+                                }
+                            }
+                        }
                     } else {
-                        // 按顺序检查每个参数的类型
-                        for (size_t i = 0; i < params.size(); ++i) {
-                            if (i < args.size() && args[i]) {
-                                auto paramType = params[i]->type;
-                                auto argType = InferExpressionType(*args[i]);
-                                
-                                if (paramType && argType) {
-                                    if (!AreTypesCompatible(paramType, argType)) {
-                                        ReportError("Type mismatch in function call '" + functionName +
-                                                   "': parameter " + std::to_string(i + 1) +
-                                                   " expects type '" + paramType->tostring() +
-                                                   "', but found type '" + argType->tostring() + "'");
+                        // 如果第一段不是有效的类型，可能是类型名未定义
+                        // 不在这里报错，让后续逻辑处理
+                    }
+                } else {
+                    // 单段路径的情况
+                    std::string functionName = pathExpr->simplepath->simplepathsegements[0]->identifier;
+                    
+                    // 特殊检查：exit 函数的使用规则
+                    if (functionName == "exit") {
+                        CheckExitFunctionUsage(node);
+                    }
+                    
+                    auto functionSymbol = FindFunction(functionName);
+                    if (functionSymbol && node.callparams) {
+                        const auto& params = functionSymbol->parameters;
+                        const auto& args = node.callparams->expressions;
+                        
+                        // 检查参数数量是否匹配
+                        if (params.size() != args.size()) {
+                            ReportError("Function '" + functionName + "' expects " +
+                                       std::to_string(params.size()) + " arguments, but " +
+                                       std::to_string(args.size()) + " were provided");
+                        } else {
+                            // 按顺序检查每个参数的类型
+                            for (size_t i = 0; i < params.size(); ++i) {
+                                if (i < args.size() && args[i]) {
+                                    auto paramType = params[i]->type;
+                                    auto argType = InferExpressionType(*args[i]);
+                                    
+                                    if (paramType && argType) {
+                                        if (!AreTypesCompatible(paramType, argType)) {
+                                            ReportError("Type mismatch in function call '" + functionName +
+                                                       "': parameter " + std::to_string(i + 1) +
+                                                       " expects type '" + paramType->tostring() +
+                                                       "', but found type '" + argType->tostring() + "'");
+                                        }
                                     }
                                 }
                             }
@@ -1152,6 +1254,50 @@ std::shared_ptr<SemanticType> TypeChecker::InferCallExpressionType(CallExpressio
     // 如果callee是路径表达式，尝试解析为函数调用
     if (auto pathExpr = dynamic_cast<PathExpression*>(expr.expression.get())) {
         if (pathExpr->simplepath && !pathExpr->simplepath->simplepathsegements.empty()) {
+            // 修复：检查是否是多段路径（如 Stack::new）
+            if (pathExpr->simplepath->simplepathsegements.size() >= 2) {
+                // 对于多段路径，第一段应该是类型名，第二段应该是函数名
+                std::string typeName = pathExpr->simplepath->simplepathsegements[0]->identifier;
+                std::string functionName = pathExpr->simplepath->simplepathsegements[1]->identifier;
+                
+                // 检查第一段是否是有效的类型
+                auto typeSymbol = FindSymbol(typeName);
+                if (typeSymbol && (typeSymbol->kind == SymbolKind::Struct ||
+                                  typeSymbol->kind == SymbolKind::Enum ||
+                                  typeSymbol->kind == SymbolKind::BuiltinType)) {
+                    // 这是一个关联函数调用（如 Stack::new）
+                    // 查找该类型的关联函数
+                    if (auto structSymbol = FindStruct(typeName)) {
+                        for (const auto& method : structSymbol->methods) {
+                            if (method->name == functionName) {
+                                // 找到关联函数，返回其返回类型
+                                return method->returntype;
+                            }
+                        }
+                    }
+                    
+                    // 如果在结构体方法中找不到，尝试作为普通函数查找
+                    std::string qualifiedName = typeName + "::" + functionName;
+                    auto functionSymbol = FindFunction(qualifiedName);
+                    if (functionSymbol) {
+                        if (functionSymbol->returntype) {
+                            return functionSymbol->returntype;
+                        }
+                        if (functionSymbol->type) {
+                            return functionSymbol->type;
+                        }
+                    }
+                    
+                    // 如果找不到关联函数，报错
+                    ReportError("Undefined function: " + typeName + "::" + functionName);
+                    return nullptr;
+                } else {
+                    // 如果第一段不是有效的类型，可能是类型名未定义
+                    // 不在这里报错，让后续逻辑处理
+                }
+            }
+            
+            // 单段路径的情况
             std::string functionName = pathExpr->simplepath->simplepathsegements[0]->identifier;
             
             // 直接从作用域中查找符号
@@ -2046,6 +2192,18 @@ void TypeChecker::CheckVariableMutability(PathExpression& pathExpr) {
     varName = pathExpr.simplepath->simplepathsegements[0]->identifier;
     
     if (varName.empty()) {
+        // 修复：如果 varName 为空，可能是 Self 或 self 关键字
+        // 检查是否是 Self 或 self 关键字
+        if (pathExpr.simplepath && !pathExpr.simplepath->simplepathsegements.empty()) {
+            auto segment = pathExpr.simplepath->simplepathsegements[0];
+            if (segment->isSelf) {
+                // Self 关键字，不需要检查可变性
+                return;
+            } else if (segment->isself) {
+                // self 关键字，可变性由函数签名决定
+                return;
+            }
+        }
         return;
     }
     
@@ -2058,6 +2216,17 @@ void TypeChecker::CheckVariableMutability(PathExpression& pathExpr) {
     auto symbol = scopeTree->LookupSymbol(varName);
     if (!symbol) {
         if (varName.empty()) {
+            // 修复：如果 varName 为空，检查是否是 Self 或 self 关键字
+            if (pathExpr.simplepath && !pathExpr.simplepath->simplepathsegements.empty()) {
+                auto segment = pathExpr.simplepath->simplepathsegements[0];
+                if (segment->isSelf) {
+                    // Self 关键字，不需要检查可变性
+                    return;
+                } else if (segment->isself) {
+                    // self 关键字，可变性由函数签名决定
+                    return;
+                }
+            }
             ReportError("Undefined variable: <empty> (in CheckVariableMutability)");
         } else {
             ReportError("Undefined variable: " + varName);
@@ -2613,6 +2782,14 @@ void TypeChecker::CheckArraySizeMatchForAnyExpression(ArrayTypeWrapper& declared
         }
         
         if (varName.empty()) {
+            // 修复：如果 varName 为空，检查是否是 Self 或 self 关键字
+            if (pathExpr->simplepath && !pathExpr->simplepath->simplepathsegements.empty()) {
+                auto segment = pathExpr->simplepath->simplepathsegements[0];
+                if (segment->isSelf || segment->isself) {
+                    ReportError("Cannot use array size with Self or self keyword");
+                    return;
+                }
+            }
             ReportError("Invalid variable name in array initialization");
             return;
         }
@@ -2620,6 +2797,14 @@ void TypeChecker::CheckArraySizeMatchForAnyExpression(ArrayTypeWrapper& declared
         auto symbol = FindSymbol(varName);
         if (!symbol) {
             if (varName.empty()) {
+                // 修复：如果 varName 为空，检查是否是 Self 或 self 关键字
+                if (pathExpr->simplepath && !pathExpr->simplepath->simplepathsegements.empty()) {
+                    auto segment = pathExpr->simplepath->simplepathsegements[0];
+                    if (segment->isSelf || segment->isself) {
+                        ReportError("Cannot use array size with Self or self keyword");
+                        return;
+                    }
+                }
                 ReportError("Undefined variable: <empty> (in CheckArraySizeMatchForAnyExpression)");
             } else {
                 ReportError("Undefined variable: " + varName);
