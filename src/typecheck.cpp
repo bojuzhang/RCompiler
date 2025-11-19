@@ -2473,24 +2473,76 @@ void TypeChecker::visit(MethodCallExpression& node) {
                             // 检查是否可以进行 autoref
                             if (auto pathExpr = dynamic_cast<PathExpression*>(node.receiver.get())) {
                                 if (pathExpr->simplepath && !pathExpr->simplepath->simplepathsegements.empty()) {
-                                    std::string varName = pathExpr->simplepath->simplepathsegements[0]->identifier;
-                                    auto varSymbol = FindSymbol(varName);
+                                    auto segment = pathExpr->simplepath->simplepathsegements[0];
+                                    std::string varName = segment->identifier;
                                     
-                                    if (varSymbol && varSymbol->ismutable) {
-                                        // mut 变量可以通过 autoref 转换为 &mut
-                                        if (methodRequiresMut) {
-                                            // &mut self 方法，mut 变量可以 autoref 为 &mut
-                                            // 这是允许的
-                                        } else {
-                                            // &self 方法，mut 变量可以 autoref 为 &（不可变引用）
-                                            // 这也是允许的
+                                    
+                                    // 特殊处理 self：在方法内部，self 的可变性由当前方法的声明决定
+                                    if (varName == "self" || segment->isself) {
+                                        // 检查当前方法的 self 参数是否可变
+                                        bool currentMethodSelfIsMutable = false;
+                                        std::stack<ASTNode*> tempStack = nodeStack;
+                                        while (!tempStack.empty()) {
+                                            auto node = tempStack.top();
+                                            tempStack.pop();
+                                            
+                                            if (auto func = dynamic_cast<Function*>(node)) {
+                                                // 检查函数是否有 self 参数
+                                                if (func->functionparameters && !func->functionparameters->functionparams.empty()) {
+                                                    auto firstParam = func->functionparameters->functionparams[0];
+                                                    if (auto refPattern = dynamic_cast<ReferencePattern*>(firstParam->patternnotopalt.get())) {
+                                                        // 检查是否是 &self 或 &mut self
+                                                        if (refPattern->pattern) {
+                                                            if (auto innerIdentPattern = dynamic_cast<IdentifierPattern*>(refPattern->pattern.get())) {
+                                                                if (innerIdentPattern->identifier == "self") {
+                                                                    // 检查是否是 &mut self
+                                                                    currentMethodSelfIsMutable = refPattern->hasmut;
+                                                                    break;
+                                                                }
+                                                            }
+                                                        }
+                                                    } else if (auto identPattern = dynamic_cast<IdentifierPattern*>(firstParam->patternnotopalt.get())) {
+                                                        // 检查是否是 self (不是引用)
+                                                        if (identPattern->identifier == "self") {
+                                                            // self 参数不是引用，所以不可变
+                                                            currentMethodSelfIsMutable = false;
+                                                            break;
+                                                        }
+                                                    }
+                                                }
+                                                break;
+                                            }
                                         }
+                                        
+                                        // 如果当前方法的 self 是可变的，则可以调用需要 &mut self 的方法
+                                        if (methodRequiresMut && !currentMethodSelfIsMutable) {
+                                            ReportError("Cannot call method '" + methodName + "' which requires &mut self from method with immutable self");
+                                        }
+                                        // 如果方法需要引用但当前方法的self不可变，则报错
+                                        if (methodRequiresRef && !currentMethodSelfIsMutable && methodRequiresMut) {
+                                            ReportError("Cannot call method '" + methodName + "' which requires &mut self from method with immutable self");
+                                        }
+                                        // 如果当前方法的 self 是可变的，或者方法不需要 &mut，则允许调用
                                     } else {
-                                        // 不可变变量，无法进行 &mut autoref
-                                        if (methodRequiresMut) {
-                                            ReportError("Cannot call method '" + methodName + "' which requires &mut self on immutable value");
+                                        // 非 self 变量的处理
+                                        auto varSymbol = FindSymbol(varName);
+                                        
+                                        if (varSymbol && varSymbol->ismutable) {
+                                            // mut 变量可以通过 autoref 转换为 &mut
+                                            if (methodRequiresMut) {
+                                                // &mut self 方法，mut 变量可以 autoref 为 &mut
+                                                // 这是允许的
+                                            } else {
+                                                // &self 方法，mut 变量可以 autoref 为 &（不可变引用）
+                                                // 这也是允许的
+                                            }
+                                        } else {
+                                            // 不可变变量，无法进行 &mut autoref
+                                            if (methodRequiresMut) {
+                                                ReportError("Cannot call method '" + methodName + "' which requires &mut self on immutable value");
+                                            }
+                                            // 对于 &self 方法，不可变变量可以 autoref 为 &
                                         }
-                                        // 对于 &self 方法，不可变变量可以 autoref 为 &
                                     }
                                 }
                             } else if (auto indexExpr = dynamic_cast<IndexExpression*>(node.receiver.get())) {
