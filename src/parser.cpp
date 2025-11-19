@@ -332,7 +332,8 @@ std::shared_ptr<ArrayExpression> Parser::parseArrayExpression() {
 std::shared_ptr<UnaryExpression> Parser::parseUnaryExpression() {
     auto unarytype = peek();
     advance();
-    auto expression = parseExpression();
+    // 使用高优先级来解析操作数，确保一元运算符只绑定到紧随其后的主表达式
+    auto expression = parseExpressionPratt(UNARY);
     return std::make_shared<UnaryExpression>(std::move(expression), unarytype);
 }
 std::shared_ptr<BorrowExpression> Parser::parseBorrowExpression() {
@@ -347,14 +348,17 @@ std::shared_ptr<BorrowExpression> Parser::parseBorrowExpression() {
         advance();
     }
     
-    auto expression = parseExpression();
+    // 使用高优先级来解析操作数，确保借用运算符只绑定到紧随其后的主表达式
+    auto expression = parseExpressionPratt(UNARY);
     return std::make_shared<BorrowExpression>(std::move(expression), isdouble, ismut);
 }
 std::shared_ptr<DereferenceExpression> Parser::parseDereferenceExpression() {
     if (match(Token::kStar)) {
         advance();
     }
-    auto expression = parseExpression();
+    // 使用高优先级来解析操作数，确保解引用运算符只绑定到紧随其后的主表达式
+    // 而不会吞噬后面的低优先级运算符
+    auto expression = parseExpressionPratt(UNARY);
     return std::make_shared<DereferenceExpression>(std::move(expression));
 }
 std::shared_ptr<BreakExpression> Parser::parseBreakExpression() {
