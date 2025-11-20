@@ -1,5 +1,6 @@
 #include "typecheck.hpp"
 #include "lexer.hpp"
+#include "symbol.hpp"
 #include "typewrapper.hpp"
 #include "astnodes.hpp"
 #include <iostream>
@@ -633,7 +634,7 @@ bool TypeChecker::AreTypesCompatible(std::shared_ptr<SemanticType> expected, std
         return true;
     }
     // 推断类型与任何类型兼容
-    if (actualStr == "_") {
+    if (actualStr == "_" || actualStr == "!") {
         return true;
     }
     
@@ -3435,8 +3436,14 @@ std::shared_ptr<SemanticType> TypeChecker::InferIfExpressionType(IfExpression& e
     
     // 根据 Rx 语言规范进行类型推断
     if (!elseType) {
-        // 没有 else 分支，类型为 unit
-        return ifType ? ifType : std::make_shared<SimpleType>("()");
+        if (!ifType) {
+            return std::make_shared<SimpleType>("()");
+        }
+        if (ifType->tostring() == "()" || ifType->tostring() == "!") {
+            return std::make_shared<SimpleType>("()");
+        }
+        ReportError("type mismatch in ifexpression: missing else but if type is: " + ifType->tostring() + " but not ()");
+        return ifType;
     }
     
     // 有 else 分支的情况
