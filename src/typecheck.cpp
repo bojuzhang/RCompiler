@@ -1172,9 +1172,66 @@ void TypeChecker::visit(CallExpression& node) {
                     
                     // 检查第一段是否是有效的类型
                     auto typeSymbol = FindSymbol(typeName);
+                    
                     if (typeSymbol && (typeSymbol->kind == SymbolKind::Struct ||
                                       typeSymbol->kind == SymbolKind::Enum ||
                                       typeSymbol->kind == SymbolKind::BuiltinType)) {
+                        
+                        // 修复：如果是 enum 类型，检查第二段是否是 enum 变体
+                        if (typeSymbol->kind == SymbolKind::Enum) {
+                            auto enumSymbol = std::dynamic_pointer_cast<EnumSymbol>(typeSymbol);
+                            if (enumSymbol) {
+                                // 查找变体
+                                for (const auto& variant : enumSymbol->variants) {
+                                    if (variant->name == functionName) {
+                                        // 找到 enum 变体，检查变体类型和参数
+                                        auto variantSymbol = std::dynamic_pointer_cast<VariantSymbol>(variant);
+                                        if (variantSymbol) {
+                                            // 检查是否有参数
+                                            bool hasArgs = node.callparams && !node.callparams->expressions.empty();
+                                            
+                                            if (variantSymbol->variantKind == VariantSymbol::VariantKind::Unit) {
+                                                // Unit 变体不应该有参数
+                                                if (hasArgs) {
+                                                    ReportError("Enum variant '" + typeName + "::" + functionName + "' is a unit variant and cannot take arguments");
+                                                }
+                                            } else if (variantSymbol->variantKind == VariantSymbol::VariantKind::Tuple) {
+                                                // Tuple 变体应该有正确数量的参数
+                                                size_t expectedArgs = variantSymbol->tupleFields.size();
+                                                size_t actualArgs = hasArgs ? node.callparams->expressions.size() : 0;
+                                                
+                                                if (expectedArgs != actualArgs) {
+                                                    ReportError("Enum variant '" + typeName + "::" + functionName + "' expects " +
+                                                               std::to_string(expectedArgs) + " arguments, but " +
+                                                               std::to_string(actualArgs) + " were provided");
+                                                } else {
+                                                    // 检查参数类型
+                                                    for (size_t i = 0; i < actualArgs; ++i) {
+                                                        if (i < node.callparams->expressions.size() && node.callparams->expressions[i]) {
+                                                            auto expectedType = variantSymbol->tupleFields[i];
+                                                            auto actualType = InferExpressionType(*node.callparams->expressions[i]);
+                                                            
+                                                            if (expectedType && actualType) {
+                                                                if (!AreTypesCompatible(expectedType, actualType)) {
+                                                                    ReportError("Type mismatch in enum variant '" + typeName + "::" + functionName +
+                                                                               "': argument " + std::to_string(i + 1) +
+                                                                               " expects type '" + expectedType->tostring() +
+                                                                               "', but found type '" + actualType->tostring() + "'");
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            // Struct 变体目前不支持，暂时跳过
+                                        }
+                                        return; // 找到enum变体后直接返回，不需要继续查找函数
+                                    }
+                                }
+                                // 如果不是变体，可能是关联函数，继续处理
+                            }
+                        }
+                        
                         // 这是一个关联函数调用（如 Stack::new）
                         // 查找该类型的关联函数
                         if (auto structSymbol = FindStruct(typeName)) {
