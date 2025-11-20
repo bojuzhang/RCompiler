@@ -686,27 +686,27 @@ bool TypeChecker::AreTypesCompatible(std::shared_ptr<SemanticType> expected, std
     // 4) 其余usize,isize,u32,i32 类型之间不应该有任何的隐式类型转化
     
     if (expectedStr == "Int") {
-        return (actualStr == "usize" || actualStr == "isize" || actualStr == "i32" || actualStr == "u32");
+        return (actualStr == "usize" || actualStr == "isize" || actualStr == "i32" || actualStr == "u32" || actualStr == "SignedInt" || actualStr == "UnsignedInt");
     }
     
     if (actualStr == "Int") {
-        return (expectedStr == "usize" || expectedStr == "isize" || expectedStr == "i32" || expectedStr == "u32");
+        return (expectedStr == "usize" || expectedStr == "isize" || expectedStr == "i32" || expectedStr == "u32" || expectedStr == "SignedInt" || expectedStr == "UnsignedInt");
     }
     
     if (expectedStr == "SignedInt") {
-        return (actualStr == "i32" || actualStr == "isize");
+        return (actualStr == "i32" || actualStr == "isize" || actualStr == "Int");
     }
     
     if (actualStr == "SignedInt") {
-        return (expectedStr == "i32" || expectedStr == "isize");
+        return (expectedStr == "i32" || expectedStr == "isize" || expectedStr == "Int");
     }
     
     if (expectedStr == "UnsignedInt") {
-        return (actualStr == "u32" || actualStr == "usize");
+        return (actualStr == "u32" || actualStr == "usize" || actualStr == "Int");
     }
     
     if (actualStr == "UnsignedInt") {
-        return (expectedStr == "u32" || expectedStr == "usize");
+        return (expectedStr == "u32" || expectedStr == "usize" || expectedStr == "Int");
     }
     
     // 特殊处理数组类型的兼容性检查
@@ -1062,6 +1062,9 @@ std::shared_ptr<SemanticType> TypeChecker::InferExpressionType(Expression& expr)
         // UnaryExpression 的类型为其内部 expression 的类型
         if (unaryExpr->expression) {
             type = InferExpressionType(*unaryExpr->expression);
+            if (unaryExpr->unarytype == Token::kMinus && (type->tostring() == "UnsignedInt" || type->tostring() == "Int")) {
+                return std::make_shared<SignedIntType>();
+            }
         } else {
             type = nullptr;
         }
