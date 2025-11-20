@@ -1578,24 +1578,26 @@ std::shared_ptr<SemanticType> TypeChecker::InferIndexExpressionType(IndexExpress
     if (expr.expressionout) {
         auto arrayType = InferExpressionType(*expr.expressionout);
         if (arrayType) {
-            // 如果是数组类型，返回元素类型
-            if (auto arrayTypeWrapper = dynamic_cast<ArrayTypeWrapper*>(arrayType.get())) {
-                return arrayTypeWrapper->GetElementType();
-            }
-            // 如果是引用类型，需要解引用
-            else if (auto refType = dynamic_cast<ReferenceTypeWrapper*>(arrayType.get())) {
-                auto derefType = refType->getTargetType();
-                if (auto innerArrayType = dynamic_cast<ArrayTypeWrapper*>(derefType.get())) {
-                    return innerArrayType->GetElementType();
+            // 递归解引用，直到找到非引用类型
+            std::shared_ptr<SemanticType> currentType = arrayType;
+            
+            while (currentType) {
+                // 如果是数组类型，返回元素类型
+                if (auto arrayTypeWrapper = dynamic_cast<ArrayTypeWrapper*>(currentType.get())) {
+                    return arrayTypeWrapper->GetElementType();
                 }
-                // 如果解引用后仍然是引用类型，继续解引用
-                else if (auto innerRefType = dynamic_cast<ReferenceTypeWrapper*>(derefType.get())) {
-                    auto innerDerefType = innerRefType->getTargetType();
-                    if (auto innerArrayType2 = dynamic_cast<ArrayTypeWrapper*>(innerDerefType.get())) {
-                        return innerArrayType2->GetElementType();
-                    }
+                // 如果是引用类型，继续解引用
+                else if (auto refType = dynamic_cast<ReferenceTypeWrapper*>(currentType.get())) {
+                    currentType = refType->getTargetType();
+                }
+                // 如果不是引用类型也不是数组类型，退出循环
+                else {
+                    break;
                 }
             }
+            
+            // 如果循环结束还没有找到数组类型，报错
+            ReportError("Cannot index into non-array type: " + arrayType->tostring());
         }
     }
     
@@ -2390,21 +2392,25 @@ void TypeChecker::visit(IndexExpression& node) {
     if (node.expressionout) {
         auto arrayType = InferExpressionType(*node.expressionout);
         if (arrayType) {
-            // 提取元素类型
-            if (auto arrayTypeWrapper = dynamic_cast<ArrayTypeWrapper*>(arrayType.get())) {
-                auto elementType = arrayTypeWrapper->GetElementType();
-                nodeTypeMap[&node] = elementType;
-            } else if (auto refType = dynamic_cast<ReferenceTypeWrapper*>(arrayType.get())) {
-                // 如果是引用类型，需要解引用
-                auto derefType = refType->getTargetType();
-                if (auto innerArrayType = dynamic_cast<ArrayTypeWrapper*>(derefType.get())) {
-                    auto elementType = innerArrayType->GetElementType();
+            // 递归解引用，直到找到非引用类型
+            std::shared_ptr<SemanticType> currentType = arrayType;
+            
+            while (currentType) {
+                // 如果是数组类型，提取元素类型并设置
+                if (auto arrayTypeWrapper = dynamic_cast<ArrayTypeWrapper*>(currentType.get())) {
+                    auto elementType = arrayTypeWrapper->GetElementType();
                     nodeTypeMap[&node] = elementType;
-                } else {
-                    ReportError("Cannot index into non-array type: " + arrayType->tostring());
+                    break;
                 }
-            } else {
-                ReportError("Cannot index into non-array type: " + arrayType->tostring());
+                // 如果是引用类型，继续解引用
+                else if (auto refType = dynamic_cast<ReferenceTypeWrapper*>(currentType.get())) {
+                    currentType = refType->getTargetType();
+                }
+                // 如果不是引用类型也不是数组类型，退出循环并报错
+                else {
+                    ReportError("Cannot index into non-array type: " + arrayType->tostring());
+                    break;
+                }
             }
         }
     }
