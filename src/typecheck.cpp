@@ -1495,15 +1495,8 @@ std::shared_ptr<SemanticType> TypeChecker::InferFieldExpressionType(FieldExpress
     
     std::string receiverTypeName = receiverType->tostring();
     
-    // 修复：处理引用类型，如果类型以 & 开头，去掉 & 前缀
-    if (receiverTypeName.find("&") == 0) {
-        receiverTypeName = receiverTypeName.substr(1);
-    }
-    
-    // 修复：处理 mut 前缀，如果类型以 mut 开头，去掉 mut 前缀
-    if (receiverTypeName.find("mut ") == 0) {
-        receiverTypeName = receiverTypeName.substr(4); // 去掉 "mut " (4个字符)
-    }
+    // 修复：使用新的辅助函数处理多层引用
+    receiverTypeName = RemoveAllReferences(receiverTypeName);
 
     // 检查类型是否有效
     if (receiverTypeName.empty()) {
@@ -1540,15 +1533,8 @@ std::shared_ptr<SemanticType> TypeChecker::InferMethodCallExpressionType(MethodC
     std::string receiverTypeName = receiverType->tostring();
     std::string methodName = expr.method_name;
     
-    // 修复：处理引用类型，如果类型以 & 开头，去掉 & 前缀
-    if (receiverTypeName.find("&") == 0) {
-        receiverTypeName = receiverTypeName.substr(1);
-    }
-    
-    // 修复：处理 mut 前缀，如果类型以 mut 开头，去掉 mut 前缀
-    if (receiverTypeName.find("mut ") == 0) {
-        receiverTypeName = receiverTypeName.substr(4); // 去掉 "mut " (4个字符)
-    }
+    // 修复：使用新的辅助函数处理多层引用
+    receiverTypeName = RemoveAllReferences(receiverTypeName);
     
     // 检查是否是内置方法
     if (IsBuiltinMethodCall(receiverTypeName, methodName)) {
@@ -3986,5 +3972,22 @@ std::shared_ptr<SemanticType> TypeChecker::InferDereferenceExpressionType(Derefe
     // 如果不是引用类型，报告错误
     ReportError("Cannot dereference type '" + innerType->tostring() + "': not a reference type");
     return nullptr;
+}
+
+// 多层引用解析辅助函数
+std::string TypeChecker::RemoveAllReferences(const std::string& typeName) {
+    std::string result = typeName;
+    
+    // 去除所有开头的 & 符号
+    while (!result.empty() && result[0] == '&') {
+        result = result.substr(1);
+    }
+    
+    // 处理 mut 前缀，如果类型以 mut 开头，去掉 mut 前缀
+    if (result.find("mut ") == 0) {
+        result = result.substr(4); // 去掉 "mut " (4个字符)
+    }
+    
+    return result;
 }
 

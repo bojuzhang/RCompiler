@@ -225,6 +225,9 @@ private:
     bool IsBuiltinMethodCall(const std::string& receiverType, const std::string& methodName);
     std::shared_ptr<SemanticType> GetBuiltinMethodReturnType(const std::string& receiverType, const std::string& methodName);
     
+    // 多层引用解析辅助函数
+    std::string RemoveAllReferences(const std::string& typeName);
+    
     // exit 函数检查
     void CheckExitFunctionUsage(CallExpression& expr);
     void CheckMainFunctionExitRequirement(BlockExpression& blockExpr);
