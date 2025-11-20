@@ -3977,6 +3977,10 @@ std::shared_ptr<SemanticType> TypeChecker::InferDereferenceExpressionType(Derefe
 // 多层引用解析辅助函数
 std::string TypeChecker::RemoveAllReferences(const std::string& typeName) {
     std::string result = typeName;
+
+    if (!result.empty() && result[0] != '&' && (result.size() < 4 || result.substr(0, 4) != "mut ")) {
+        return result;
+    }
     
     // 去除所有开头的 & 符号
     while (!result.empty() && result[0] == '&') {
@@ -3988,6 +3992,6 @@ std::string TypeChecker::RemoveAllReferences(const std::string& typeName) {
         result = result.substr(4); // 去掉 "mut " (4个字符)
     }
     
-    return result;
+    return RemoveAllReferences(result);
 }
 
