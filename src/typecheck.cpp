@@ -863,17 +863,35 @@ std::shared_ptr<SemanticType> TypeChecker::InferExpressionType(Expression& expr)
                 varName = "self";
             }
             
-            // 修复：检查是否是多段路径（如 Stack::new）
+            // 修复：检查是否是多段路径（如 Operation::Add）
             if (pathExpr->simplepath->simplepathsegements.size() >= 2) {
-                // 对于多段路径，第一段应该是类型名，第二段应该是函数名
+                // 对于多段路径，第一段应该是类型名，第二段应该是函数名或变体名
                 std::string typeName = pathExpr->simplepath->simplepathsegements[0]->identifier;
-                std::string funcName = pathExpr->simplepath->simplepathsegements[1]->identifier;
+                std::string secondName = pathExpr->simplepath->simplepathsegements[1]->identifier;
                 
                 // 检查第一段是否是有效的类型
                 auto typeSymbol = FindSymbol(typeName);
                 if (typeSymbol && (typeSymbol->kind == SymbolKind::Struct ||
                                   typeSymbol->kind == SymbolKind::Enum ||
                                   typeSymbol->kind == SymbolKind::BuiltinType)) {
+                    
+                    // 修复：如果是 enum 类型，检查第二段是否是 enum 变体
+                    if (typeSymbol->kind == SymbolKind::Enum) {
+                        auto enumSymbol = std::dynamic_pointer_cast<EnumSymbol>(typeSymbol);
+                        if (enumSymbol) {
+                            // 查找变体
+                            for (const auto& variant : enumSymbol->variants) {
+                                if (variant->name == secondName) {
+                                    // 找到 enum 变体，返回 enum 类型
+                                    type = std::make_shared<SimpleType>(typeName);
+                                    nodeTypeMap[&expr] = type;
+                                    return type;
+                                }
+                            }
+                            // 如果不是变体，可能是关联函数，继续处理
+                        }
+                    }
+                    
                     // 这是一个有效的类型路径，不需要进一步处理
                     // 类型将在 CallExpression 中处理
                     type = std::make_shared<SimpleType>(typeName);
@@ -1254,22 +1272,38 @@ std::shared_ptr<SemanticType> TypeChecker::InferCallExpressionType(CallExpressio
     // 如果callee是路径表达式，尝试解析为函数调用
     if (auto pathExpr = dynamic_cast<PathExpression*>(expr.expression.get())) {
         if (pathExpr->simplepath && !pathExpr->simplepath->simplepathsegements.empty()) {
-            // 修复：检查是否是多段路径（如 Stack::new）
+            // 修复：检查是否是多段路径（如 Operation::Add）
             if (pathExpr->simplepath->simplepathsegements.size() >= 2) {
-                // 对于多段路径，第一段应该是类型名，第二段应该是函数名
+                // 对于多段路径，第一段应该是类型名，第二段应该是函数名或变体名
                 std::string typeName = pathExpr->simplepath->simplepathsegements[0]->identifier;
-                std::string functionName = pathExpr->simplepath->simplepathsegements[1]->identifier;
+                std::string secondName = pathExpr->simplepath->simplepathsegements[1]->identifier;
                 
                 // 检查第一段是否是有效的类型
                 auto typeSymbol = FindSymbol(typeName);
                 if (typeSymbol && (typeSymbol->kind == SymbolKind::Struct ||
                                   typeSymbol->kind == SymbolKind::Enum ||
                                   typeSymbol->kind == SymbolKind::BuiltinType)) {
+                    
+                    // 修复：如果是 enum 类型，检查第二段是否是 enum 变体
+                    if (typeSymbol->kind == SymbolKind::Enum) {
+                        auto enumSymbol = std::dynamic_pointer_cast<EnumSymbol>(typeSymbol);
+                        if (enumSymbol) {
+                            // 查找变体
+                            for (const auto& variant : enumSymbol->variants) {
+                                if (variant->name == secondName) {
+                                    // 找到 enum 变体，返回 enum 类型
+                                    return std::make_shared<SimpleType>(typeName);
+                                }
+                            }
+                            // 如果不是变体，可能是关联函数，继续处理
+                        }
+                    }
+                    
                     // 这是一个关联函数调用（如 Stack::new）
                     // 查找该类型的关联函数
                     if (auto structSymbol = FindStruct(typeName)) {
                         for (const auto& method : structSymbol->methods) {
-                            if (method->name == functionName) {
+                            if (method->name == secondName) {
                                 // 找到关联函数，返回其返回类型
                                 return method->returntype;
                             }
@@ -1277,7 +1311,7 @@ std::shared_ptr<SemanticType> TypeChecker::InferCallExpressionType(CallExpressio
                     }
                     
                     // 如果在结构体方法中找不到，尝试作为普通函数查找
-                    std::string qualifiedName = typeName + "::" + functionName;
+                    std::string qualifiedName = typeName + "::" + secondName;
                     auto functionSymbol = FindFunction(qualifiedName);
                     if (functionSymbol) {
                         if (functionSymbol->returntype) {
@@ -1289,7 +1323,7 @@ std::shared_ptr<SemanticType> TypeChecker::InferCallExpressionType(CallExpressio
                     }
                     
                     // 如果找不到关联函数，报错
-                    ReportError("Undefined function: " + typeName + "::" + functionName);
+                    ReportError("Undefined function: " + typeName + "::" + secondName);
                     return nullptr;
                 } else {
                     // 如果第一段不是有效的类型，可能是类型名未定义

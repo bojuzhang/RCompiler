@@ -809,6 +809,9 @@ std::shared_ptr<Enumeration> Parser::parseEnumeration() {
     }
     advance();
     auto enumvariants = parseEnumVariants();
+    if (enumvariants == nullptr) {
+        return nullptr;
+    }
     if (!match(Token::krightCurly)) {
         return nullptr;
     }
@@ -1007,6 +1010,12 @@ std::shared_ptr<StructField> Parser::parseStructField() {
 
 std::shared_ptr<EnumVariants> Parser::parseEnumVariants() {
     std::vector<std::shared_ptr<EnumVariant>> vec;
+    
+    // 检查是否为空的 enum
+    if (match(Token::krightCurly)) {
+        return std::make_shared<EnumVariants>(std::move(vec));
+    }
+    
     auto variant = parseEnumVariant();
     if (variant == nullptr) {
         return nullptr;
@@ -1014,6 +1023,10 @@ std::shared_ptr<EnumVariants> Parser::parseEnumVariants() {
     vec.push_back(std::move(variant));
     while (match(Token::kComma)) {
         advance();
+        // 检查逗号后是否是右大括号（尾随逗号）
+        if (match(Token::krightCurly)) {
+            break;
+        }
         auto variant = parseEnumVariant();
         if (variant == nullptr) {
             return nullptr;
@@ -1030,6 +1043,7 @@ std::shared_ptr<EnumVariant> Parser::parseEnumVariant() {
         return nullptr;
     }
     auto identifier = getstring();
+    advance();
     return std::make_shared<EnumVariant>(identifier);
 }
 

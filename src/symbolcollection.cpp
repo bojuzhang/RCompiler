@@ -452,7 +452,22 @@ void SymbolCollector::CollectEnumSymbol(Enumeration& node) {
     
     auto enumSymbol = std::make_shared<EnumSymbol>(enumName);
     
-    if (!root->InsertSymbol(enumName, enumSymbol)) {
+    // 修复：确保 enum 符号的 type 字段被正确设置
+    enumSymbol->type = std::make_shared<SimpleType>(enumName);
+    
+    // 修复：插入到根作用域，确保全局可访问
+    auto rootScope = root->GetRootScope();
+    auto originalScope = root->GetCurrentScope();
+    
+    // 临时切换到根作用域
+    root->GoToNode(nullptr);
+    
+    bool insertSuccess = rootScope->Insert(enumName, enumSymbol);
+    
+    // 恢复到原来的作用域
+    root->GoToNode(nullptr);
+    
+    if (!insertSuccess) {
         // reportError("Enum '" + enumName + "' is already defined in this scope");
         return;
     }
@@ -468,21 +483,30 @@ void SymbolCollector::CollectVariantSymbols(Enumeration& node) {
     }
     
     std::string enumName = node.identifier;
+    
+    // 获取 enum 符号
+    auto enumSymbol = std::dynamic_pointer_cast<EnumSymbol>(root->LookupSymbol(enumName));
+    if (!enumSymbol) {
+        ReportError("Could not find enum symbol for " + enumName);
+        return;
+    }
+    
     for (const auto& variant : node.enumvariants->enumvariants) {
         std::string variantName = variant->identifier;
         VariantSymbol::VariantKind variantKind = VariantSymbol::VariantKind::Unit;
-        variantKind = VariantSymbol::VariantKind::Unit;
         
         auto variantSymbol = std::make_shared<VariantSymbol>(variantName, variantKind);
+        
+        // 修复：设置变体的类型为对应的 enum 类型
+        variantSymbol->type = std::make_shared<SimpleType>(enumName);
+        
         if (!root->InsertSymbol(variantName, variantSymbol)) {
             // reportError("Variant '" + variantName + "' is already defined in enum '" + enumName + "'");
             continue;
         }
         
-        auto enumSymbol = std::dynamic_pointer_cast<EnumSymbol>(root->LookupSymbol(enumName));
-        if (enumSymbol) {
-            enumSymbol->variants.push_back(variantSymbol);
-        }
+        // 添加到 enum 的变体列表
+        enumSymbol->variants.push_back(variantSymbol);
     }
 }
 
