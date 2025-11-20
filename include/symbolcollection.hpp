@@ -117,6 +117,7 @@ private:
     
     bool ValidateTypeExistence(const std::string& typeName);
     bool ValidateTypeExistence(Type& typeNode);
+    bool ValidateArrayTypeExistence(const std::string& arrayTypeName);
     void ReportError(const std::string& message);
 
     std::shared_ptr<SemanticType> GetImplTargetType(InherentImpl& node);

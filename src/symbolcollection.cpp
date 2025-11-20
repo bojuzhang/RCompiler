@@ -808,13 +808,7 @@ std::shared_ptr<SemanticType> SymbolCollector::CreateSimpleType(const std::strin
 bool SymbolCollector::ValidateTypeExistence(const std::string& typeName) {
     // 特殊处理数组类型：如果以 [ 开头，检查元素类型是否存在
     if (typeName.find("[") == 0) {
-        // 提取元素类型（简单处理，假设格式为 [T; N]）
-        auto semicolonPos = typeName.find(";");
-        if (semicolonPos != std::string::npos) {
-            auto elementType = typeName.substr(1, semicolonPos - 1);
-            // 递归检查元素类型
-            return ValidateTypeExistence(elementType);
-        }
+        return ValidateArrayTypeExistence(typeName);
     }
     
     auto symbol = root->LookupSymbol(typeName);
@@ -830,6 +824,41 @@ bool SymbolCollector::ValidateTypeExistence(Type& typeNode) {
     
     std::string typeName = type->tostring();
     return ValidateTypeExistence(typeName);
+}
+
+bool SymbolCollector::ValidateArrayTypeExistence(const std::string& arrayTypeName) {
+    // 处理嵌套数组类型，如 [[bool; 100]; 100]
+    if (arrayTypeName.empty() || arrayTypeName[0] != '[') {
+        return false;
+    }
+    
+    // 找到最后一个分号的位置，这是数组大小分隔符
+    auto lastSemicolonPos = arrayTypeName.rfind(";");
+    if (lastSemicolonPos == std::string::npos) {
+        return false; // 格式错误
+    }
+    
+    // 找到匹配的右括号
+    size_t closingBracketPos = arrayTypeName.find("]", lastSemicolonPos);
+    if (closingBracketPos == std::string::npos) {
+        return false; // 没有找到右括号
+    }
+    
+    // 提取元素类型部分（从第一个字符到最后一个分号之前）
+    std::string elementTypeStr = arrayTypeName.substr(1, lastSemicolonPos - 1);
+    
+    // 去除可能的空格
+    // 提取实际的元素类型
+    std::string actualElementType = elementTypeStr;
+    
+    // 递归验证元素类型
+    // 如果元素类型也是数组，继续递归处理
+    if (actualElementType.find("[") == 0) {
+        return ValidateArrayTypeExistence(actualElementType);
+    } else {
+        // 基础类型，检查是否存在
+        return ValidateTypeExistence(actualElementType);
+    }
 }
 
 void SymbolCollector::ReportError(const std::string& message) {
