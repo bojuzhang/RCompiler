@@ -2487,10 +2487,9 @@ void TypeChecker::visit(AssignmentExpression& node) {
         CheckAssignmentMutability(*node.leftexpression);
     }
     
-    // 检查右值的类型
+    // 访问右表达式以触发其中的类型检查（如 CallExpression 的参数检查）
     if (node.rightexpression) {
-        auto rightType = InferExpressionType(*node.rightexpression);
-        // 类型推断失败时，错误已经在 InferExpressionType 中报告了
+        node.rightexpression->accept(*this);
     }
     
     // 检查赋值类型兼容性
@@ -2516,9 +2515,10 @@ void TypeChecker::visit(CompoundAssignmentExpression& node) {
     if (node.leftexpression) {
         CheckAssignmentMutability(*node.leftexpression);
     }
-    // 检查右值的类型
+    
+    // 访问右表达式以触发其中的类型检查（如 CallExpression 的参数检查）
     if (node.rightexpression) {
-        auto rightType = InferExpressionType(*node.rightexpression);
+        node.rightexpression->accept(*this);
     }
     
     PopNode();
