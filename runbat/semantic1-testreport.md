@@ -1,15 +1,15 @@
 # RCompiler Semantic-1 测试评测报告
 
-**生成时间**: 2025-11-20 23:24:47
-**执行时间**: 685.05 秒
+**生成时间**: 2025-11-21 10:40:18
+**执行时间**: 855.93 秒
 
 ## 总体统计
 
 | 指标 | 数量 | 百分比 |
 |------|------|--------|
 | 总测试数 | 222 | 100.0% |
-| 通过 | 216 | 97.3% |
-| 失败 | 6 | 2.7% |
+| 通过 | 222 | 100.0% |
+| 失败 | 0 | 0.0% |
 | 错误 | 0 | 0.0% |
 
 ## 按期望结果分类统计
@@ -18,8 +18,8 @@
 
 | 实际结果 | 数量 | 占比 |
 |----------|------|------|
-| 0 (正确) | 111 | 98.2% |
-| -1 (错误) | 2 | 1.8% |
+| 0 (正确) | 113 | 100.0% |
+| -1 (错误) | 0 | 0.0% |
 | -2 (异常) | 0 | 0.0% |
 | **总计** | 113 | 100.0% |
 
@@ -27,8 +27,8 @@
 
 | 实际结果 | 数量 | 占比 |
 |----------|------|------|
-| 0 (错误) | 4 | 3.7% |
-| -1 (正确) | 105 | 96.3% |
+| 0 (错误) | 0 | 0.0% |
+| -1 (正确) | 109 | 100.0% |
 | -2 (异常) | 0 | 0.0% |
 | **总计** | 109 | 100.0% |
 
@@ -179,6 +179,7 @@
 | misc26 | 1 | 1 | 0 | 0 | 100.0% |
 | misc27 | 1 | 1 | 0 | 0 | 100.0% |
 | misc28 | 1 | 1 | 0 | 0 | 100.0% |
+| misc29 | 1 | 1 | 0 | 0 | 100.0% |
 | misc3 | 1 | 1 | 0 | 0 | 100.0% |
 | misc30 | 1 | 1 | 0 | 0 | 100.0% |
 | misc31 | 1 | 1 | 0 | 0 | 100.0% |
@@ -209,12 +210,16 @@
 | misc54 | 1 | 1 | 0 | 0 | 100.0% |
 | misc55 | 1 | 1 | 0 | 0 | 100.0% |
 | misc56 | 1 | 1 | 0 | 0 | 100.0% |
+| misc57 | 1 | 1 | 0 | 0 | 100.0% |
+| misc58 | 1 | 1 | 0 | 0 | 100.0% |
 | misc59 | 1 | 1 | 0 | 0 | 100.0% |
 | misc6 | 1 | 1 | 0 | 0 | 100.0% |
+| misc60 | 1 | 1 | 0 | 0 | 100.0% |
 | misc61 | 1 | 1 | 0 | 0 | 100.0% |
 | misc62 | 1 | 1 | 0 | 0 | 100.0% |
 | misc63 | 1 | 1 | 0 | 0 | 100.0% |
 | misc64 | 1 | 1 | 0 | 0 | 100.0% |
+| misc65 | 1 | 1 | 0 | 0 | 100.0% |
 | misc7 | 1 | 1 | 0 | 0 | 100.0% |
 | misc8 | 1 | 1 | 0 | 0 | 100.0% |
 | misc9 | 1 | 1 | 0 | 0 | 100.0% |
@@ -250,14 +255,9 @@
 | type4 | 1 | 1 | 0 | 0 | 100.0% |
 | type5 | 1 | 1 | 0 | 0 | 100.0% |
 | type6 | 1 | 1 | 0 | 0 | 100.0% |
+| type7 | 1 | 1 | 0 | 0 | 100.0% |
 | type8 | 1 | 1 | 0 | 0 | 100.0% |
 | type9 | 1 | 1 | 0 | 0 | 100.0% |
-| misc29 | 1 | 0 | 1 | 0 | 0.0% |
-| misc57 | 1 | 0 | 1 | 0 | 0.0% |
-| misc58 | 1 | 0 | 1 | 0 | 0.0% |
-| misc60 | 1 | 0 | 1 | 0 | 0.0% |
-| misc65 | 1 | 0 | 1 | 0 | 0.0% |
-| type7 | 1 | 0 | 1 | 0 | 0.0% |
 
 ## 详细测试结果
 
@@ -406,6 +406,7 @@
 | misc26 | 0 | 0 | ✅ PASS | ../RCompiler-Testcases/semantic-1/src/misc26/misc26.rx |
 | misc27 | 0 | 0 | ✅ PASS | ../RCompiler-Testcases/semantic-1/src/misc27/misc27.rx |
 | misc28 | 0 | 0 | ✅ PASS | ../RCompiler-Testcases/semantic-1/src/misc28/misc28.rx |
+| misc29 | 0 | 0 | ✅ PASS | ../RCompiler-Testcases/semantic-1/src/misc29/misc29.rx |
 | misc3 | 0 | 0 | ✅ PASS | ../RCompiler-Testcases/semantic-1/src/misc3/misc3.rx |
 | misc30 | 0 | 0 | ✅ PASS | ../RCompiler-Testcases/semantic-1/src/misc30/misc30.rx |
 | misc31 | 0 | 0 | ✅ PASS | ../RCompiler-Testcases/semantic-1/src/misc31/misc31.rx |
@@ -436,12 +437,16 @@
 | misc54 | 0 | 0 | ✅ PASS | ../RCompiler-Testcases/semantic-1/src/misc54/misc54.rx |
 | misc55 | 0 | 0 | ✅ PASS | ../RCompiler-Testcases/semantic-1/src/misc55/misc55.rx |
 | misc56 | -1 | -1 | ✅ PASS | ../RCompiler-Testcases/semantic-1/src/misc56/misc56.rx |
+| misc57 | -1 | -1 | ✅ PASS | ../RCompiler-Testcases/semantic-1/src/misc57/misc57.rx |
+| misc58 | -1 | -1 | ✅ PASS | ../RCompiler-Testcases/semantic-1/src/misc58/misc58.rx |
 | misc59 | -1 | -1 | ✅ PASS | ../RCompiler-Testcases/semantic-1/src/misc59/misc59.rx |
 | misc6 | 0 | 0 | ✅ PASS | ../RCompiler-Testcases/semantic-1/src/misc6/misc6.rx |
+| misc60 | -1 | -1 | ✅ PASS | ../RCompiler-Testcases/semantic-1/src/misc60/misc60.rx |
 | misc61 | -1 | -1 | ✅ PASS | ../RCompiler-Testcases/semantic-1/src/misc61/misc61.rx |
 | misc62 | -1 | -1 | ✅ PASS | ../RCompiler-Testcases/semantic-1/src/misc62/misc62.rx |
 | misc63 | -1 | -1 | ✅ PASS | ../RCompiler-Testcases/semantic-1/src/misc63/misc63.rx |
 | misc64 | -1 | -1 | ✅ PASS | ../RCompiler-Testcases/semantic-1/src/misc64/misc64.rx |
+| misc65 | 0 | 0 | ✅ PASS | ../RCompiler-Testcases/semantic-1/src/misc65/misc65.rx |
 | misc7 | 0 | 0 | ✅ PASS | ../RCompiler-Testcases/semantic-1/src/misc7/misc7.rx |
 | misc8 | 0 | 0 | ✅ PASS | ../RCompiler-Testcases/semantic-1/src/misc8/misc8.rx |
 | misc9 | 0 | 0 | ✅ PASS | ../RCompiler-Testcases/semantic-1/src/misc9/misc9.rx |
@@ -477,56 +482,6 @@
 | type4 | -1 | -1 | ✅ PASS | ../RCompiler-Testcases/semantic-1/src/type4/type4.rx |
 | type5 | -1 | -1 | ✅ PASS | ../RCompiler-Testcases/semantic-1/src/type5/type5.rx |
 | type6 | -1 | -1 | ✅ PASS | ../RCompiler-Testcases/semantic-1/src/type6/type6.rx |
+| type7 | -1 | -1 | ✅ PASS | ../RCompiler-Testcases/semantic-1/src/type7/type7.rx |
 | type8 | -1 | -1 | ✅ PASS | ../RCompiler-Testcases/semantic-1/src/type8/type8.rx |
 | type9 | -1 | -1 | ✅ PASS | ../RCompiler-Testcases/semantic-1/src/type9/type9.rx |
-| misc29 | 0 | -1 | ❌ FAIL | ../RCompiler-Testcases/semantic-1/src/misc29/misc29.rx |
-| misc57 | -1 | 0 | ❌ FAIL | ../RCompiler-Testcases/semantic-1/src/misc57/misc57.rx |
-| misc58 | -1 | 0 | ❌ FAIL | ../RCompiler-Testcases/semantic-1/src/misc58/misc58.rx |
-| misc60 | -1 | 0 | ❌ FAIL | ../RCompiler-Testcases/semantic-1/src/misc60/misc60.rx |
-| misc65 | 0 | -1 | ❌ FAIL | ../RCompiler-Testcases/semantic-1/src/misc65/misc65.rx |
-| type7 | -1 | 0 | ❌ FAIL | ../RCompiler-Testcases/semantic-1/src/type7/type7.rx |
-
-## 失败/错误测试详情
-
-### misc29
-
-- **文件路径**: `../RCompiler-Testcases/semantic-1/src/misc29/misc29.rx`
-- **期望结果**: 0
-- **实际结果**: -1
-- **状态**: FAIL
-
-### misc57
-
-- **文件路径**: `../RCompiler-Testcases/semantic-1/src/misc57/misc57.rx`
-- **期望结果**: -1
-- **实际结果**: 0
-- **状态**: FAIL
-
-### misc58
-
-- **文件路径**: `../RCompiler-Testcases/semantic-1/src/misc58/misc58.rx`
-- **期望结果**: -1
-- **实际结果**: 0
-- **状态**: FAIL
-
-### misc60
-
-- **文件路径**: `../RCompiler-Testcases/semantic-1/src/misc60/misc60.rx`
-- **期望结果**: -1
-- **实际结果**: 0
-- **状态**: FAIL
-
-### misc65
-
-- **文件路径**: `../RCompiler-Testcases/semantic-1/src/misc65/misc65.rx`
-- **期望结果**: 0
-- **实际结果**: -1
-- **状态**: FAIL
-
-### type7
-
-- **文件路径**: `../RCompiler-Testcases/semantic-1/src/type7/type7.rx`
-- **期望结果**: -1
-- **实际结果**: 0
-- **状态**: FAIL
-
