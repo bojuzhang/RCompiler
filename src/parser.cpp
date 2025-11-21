@@ -882,6 +882,9 @@ std::shared_ptr<FunctionParameters> Parser::parseFunctionParameters() {
     
     while (match(Token::kComma)) {
         advance();
+        if (match(Token::krightParenthe)) {
+            break;
+        }
         auto param = parseFunctionParam();
         if (param == nullptr) {
             return nullptr;
