@@ -104,7 +104,7 @@ public:
     void visit(BlockExpression& node) override;
     void visit(IfExpression& node) override {}
     
-    void visit(GroupedExpression& node) override {}
+    void visit(GroupedExpression& node) override;
     void visit(IndexExpression& node) override {}
     void visit(TupleExpression& node) override {}
     void visit(StructExpression& node) override {}
@@ -182,6 +182,7 @@ private:
     std::shared_ptr<ConstantValue> EvaluatePathExpression(PathExpression& expr);
     std::shared_ptr<ConstantValue> EvaluateBlockExpression(BlockExpression& expr);
     std::shared_ptr<ConstantValue> EvaluateIfExpression(IfExpression& expr);
+    std::shared_ptr<ConstantValue> EvaluateGroupedExpression(GroupedExpression& expr);
     
     bool IsCompileTimeConstant(Expression& expr);
     void ReportError(const std::string& message);

@@ -116,6 +116,14 @@ void ConstantEvaluator::visit(ExpressionStatement& node) {
     PopNode();
 }
 
+void ConstantEvaluator::visit(GroupedExpression& node) {
+    PushNode(node);
+    if (node.expression) {
+        node.expression->accept(*this);
+    }
+    PopNode();
+}
+
 void ConstantEvaluator::visit(BlockExpression& node) {
     PushNode(node);
     
@@ -150,6 +158,8 @@ std::shared_ptr<ConstantValue> ConstantEvaluator::EvaluateExpression(Expression&
         return EvaluateBinaryExpression(*binary);
     } else if (auto unary = dynamic_cast<UnaryExpression*>(&expr)) {
         return EvaluateUnaryExpression(*unary);
+    } else if (auto grouped = dynamic_cast<GroupedExpression*>(&expr)) {
+        return EvaluateGroupedExpression(*grouped);
     } else if (auto array = dynamic_cast<ArrayExpression*>(&expr)) {
         return EvaluateArrayExpression(*array);
     } else if (auto path = dynamic_cast<PathExpression*>(&expr)) {
@@ -423,6 +433,14 @@ std::shared_ptr<ConstantValue> ConstantEvaluator::EvaluateIfExpression(IfExpress
     }
 }
 
+std::shared_ptr<ConstantValue> ConstantEvaluator::EvaluateGroupedExpression(GroupedExpression& expr) {
+    // 分组表达式直接返回内部表达式的值
+    if (expr.expression) {
+        return EvaluateExpression(*expr.expression);
+    }
+    return nullptr;
+}
+
 bool ConstantEvaluator::IsCompileTimeConstant(Expression& expr) {
     // 检查表达式是否可以在编译时求值
     if (dynamic_cast<LiteralExpression*>(&expr)) {
@@ -444,6 +462,9 @@ bool ConstantEvaluator::IsCompileTimeConstant(Expression& expr) {
     } else if (dynamic_cast<UnaryExpression*>(&expr)) {
         auto unary = dynamic_cast<UnaryExpression*>(&expr);
         return IsCompileTimeConstant(*unary->expression);
+    } else if (dynamic_cast<GroupedExpression*>(&expr)) {
+        auto grouped = dynamic_cast<GroupedExpression*>(&expr);
+        return grouped && grouped->expression && IsCompileTimeConstant(*grouped->expression);
     } else if (dynamic_cast<ArrayExpression*>(&expr)) {
         auto array = dynamic_cast<ArrayExpression*>(&expr);
         if (array && array->arrayelements) {
