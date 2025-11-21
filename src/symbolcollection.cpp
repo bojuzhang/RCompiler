@@ -320,6 +320,13 @@ void SymbolCollector::visit(PredicateLoopExpression& node) {
 void SymbolCollector::CollectFunctionSymbol(Function& node) {
     std::string funcName = node.identifier_name;
     
+    // 检查在可见作用域范围内是否已经存在同名的函数符号
+    auto existingSymbol = root->LookupSymbol(funcName);
+    if (existingSymbol && existingSymbol->kind == SymbolKind::Function) {
+        ReportError("Function '" + funcName + "' is already defined");
+        return;
+    }
+    
     std::shared_ptr<SemanticType> returnType;
     if (node.functionreturntype != nullptr && node.functionreturntype->type != nullptr) {
         returnType = ResolveTypeFromNode(*node.functionreturntype->type);
@@ -716,6 +723,14 @@ void SymbolCollector::CollectAssociatedItem(AssociatedItem& item,
                 }
             }
         }
+    }
+    
+    // 检查在可见作用域范围内是否已经存在同名的函数符号
+    auto existingSymbol = root->LookupSymbol(funcName);
+    if (existingSymbol && existingSymbol->kind == SymbolKind::Function) {
+        ReportError("Method '" + funcName + "' is already defined");
+        root->ExitScope();
+        return;
     }
     
     // 现在插入函数符号，避免重复定义错误
