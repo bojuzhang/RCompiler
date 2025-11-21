@@ -94,6 +94,7 @@ std::shared_ptr<Expression> Parser::parsePrefixPratt() {
         case Token::kPathSep:
         case Token::kIDENTIFIER:
         case Token::kself:
+        case Token::kSelf:
             return parsePathExpression();
 
         case Token::kEnd: {

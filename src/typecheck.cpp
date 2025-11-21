@@ -581,6 +581,23 @@ std::shared_ptr<SemanticType> TypeChecker::ResolveType(const std::string& typeNa
         if (selfSymbol && selfSymbol->kind == SymbolKind::TypeAlias) {
             return selfSymbol->type;
         }
+        
+        // 如果找不到 Self 符号，尝试从当前 impl 上下文获取目标类型
+        if (!currentImpl.empty()) {
+            std::stack<ASTNode*> implStack = nodeStack;
+            while (!implStack.empty()) {
+                auto implNode = implStack.top();
+                implStack.pop();
+                
+                if (auto impl = dynamic_cast<InherentImpl*>(implNode)) {
+                    auto targetType = GetImplTargetType(*impl);
+                    if (targetType) {
+                        return targetType;
+                    }
+                    break;
+                }
+            }
+        }
     }
     
     // 特殊处理 unit 类型 ()，确保它总是被认为是有效的
@@ -1170,8 +1187,41 @@ void TypeChecker::visit(CallExpression& node) {
                     std::string typeName = pathExpr->simplepath->simplepathsegements[0]->identifier;
                     std::string functionName = pathExpr->simplepath->simplepathsegements[1]->identifier;
                     
+                    // 修复：特殊处理 Self 关键字
+                    if (pathExpr->simplepath->simplepathsegements[0]->isSelf) {
+                        typeName = "Self";
+                    }
+                    
                     // 检查第一段是否是有效的类型
-                    auto typeSymbol = FindSymbol(typeName);
+                    std::shared_ptr<Symbol> typeSymbol = nullptr;
+                    
+                    // 特殊处理 Self：在 impl 块中，Self 代表当前 impl 的目标类型
+                    if (typeName == "Self") {
+                        if (!currentImpl.empty()) {
+                            // 从 impl 获取目标类型
+                            std::stack<ASTNode*> implStack = nodeStack;
+                            while (!implStack.empty()) {
+                                auto implNode = implStack.top();
+                                implStack.pop();
+                                
+                                if (auto impl = dynamic_cast<InherentImpl*>(implNode)) {
+                                    auto targetType = GetImplTargetType(*impl);
+                                    if (targetType) {
+                                        // 使用目标类型名查找结构体符号
+                                        std::string targetTypeName = targetType->tostring();
+                                        typeSymbol = FindStruct(targetTypeName);
+                                        if (!typeSymbol) {
+                                            // 如果找不到结构体符号，创建一个临时的类型符号
+                                            typeSymbol = std::make_shared<StructSymbol>(targetTypeName);
+                                        }
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                    } else {
+                        typeSymbol = FindSymbol(typeName);
+                    }
                     
                     if (typeSymbol && (typeSymbol->kind == SymbolKind::Struct ||
                                       typeSymbol->kind == SymbolKind::Enum ||
@@ -1339,8 +1389,42 @@ std::shared_ptr<SemanticType> TypeChecker::InferCallExpressionType(CallExpressio
                 std::string typeName = pathExpr->simplepath->simplepathsegements[0]->identifier;
                 std::string secondName = pathExpr->simplepath->simplepathsegements[1]->identifier;
                 
+                // 修复：特殊处理 Self 关键字
+                if (pathExpr->simplepath->simplepathsegements[0]->isSelf) {
+                    typeName = "Self";
+                }
+                
                 // 检查第一段是否是有效的类型
-                auto typeSymbol = FindSymbol(typeName);
+                std::shared_ptr<Symbol> typeSymbol = nullptr;
+                
+                // 特殊处理 Self：在 impl 块中，Self 代表当前 impl 的目标类型
+                if (typeName == "Self") {
+                    if (!currentImpl.empty()) {
+                        // 从 impl 获取目标类型
+                        std::stack<ASTNode*> implStack = nodeStack;
+                        while (!implStack.empty()) {
+                            auto implNode = implStack.top();
+                            implStack.pop();
+                            
+                            if (auto impl = dynamic_cast<InherentImpl*>(implNode)) {
+                                auto targetType = GetImplTargetType(*impl);
+                                if (targetType) {
+                                    // 使用目标类型名查找结构体符号
+                                    std::string targetTypeName = targetType->tostring();
+                                    typeSymbol = FindStruct(targetTypeName);
+                                    if (!typeSymbol) {
+                                        // 如果找不到结构体符号，创建一个临时的类型符号
+                                        typeSymbol = std::make_shared<StructSymbol>(targetTypeName);
+                                    }
+                                }
+                                break;
+                            }
+                        }
+                    }
+                } else {
+                    typeSymbol = FindSymbol(typeName);
+                }
+                
                 if (typeSymbol && (typeSymbol->kind == SymbolKind::Struct ||
                                   typeSymbol->kind == SymbolKind::Enum ||
                                   typeSymbol->kind == SymbolKind::BuiltinType)) {
@@ -1367,6 +1451,32 @@ std::shared_ptr<SemanticType> TypeChecker::InferCallExpressionType(CallExpressio
                             if (method->name == secondName) {
                                 // 找到关联函数，返回其返回类型
                                 return method->returntype;
+                            }
+                        }
+                    } else if (typeName == "Self") {
+                        // 特殊处理 Self：如果找不到结构体符号，尝试从当前 impl 上下文获取目标类型
+                        if (!currentImpl.empty()) {
+                            std::stack<ASTNode*> implStack = nodeStack;
+                            while (!implStack.empty()) {
+                                auto implNode = implStack.top();
+                                implStack.pop();
+                                
+                                if (auto impl = dynamic_cast<InherentImpl*>(implNode)) {
+                                    auto targetType = GetImplTargetType(*impl);
+                                    if (targetType) {
+                                        std::string targetTypeName = targetType->tostring();
+                                        // 尝试查找目标类型的方法
+                                        if (auto targetStructSymbol = FindStruct(targetTypeName)) {
+                                            for (const auto& method : targetStructSymbol->methods) {
+                                                if (method->name == secondName) {
+                                                    // 找到关联函数，返回其返回类型
+                                                    return method->returntype;
+                                                }
+                                            }
+                                        }
+                                    }
+                                    break;
+                                }
                             }
                         }
                     }
