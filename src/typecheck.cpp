@@ -225,6 +225,68 @@ void TypeChecker::CheckStructFieldType(StructField& field) {
     // 不创建符号，只进行类型检查
 }
 
+void TypeChecker::CheckStructInitialization(StructExpression& node) {
+    // 获取结构体名称
+    if (!node.pathexpression || !node.pathexpression->simplepath ||
+        node.pathexpression->simplepath->simplepathsegements.empty()) {
+        ReportError("Invalid struct expression: missing struct name");
+        return;
+    }
+    
+    std::string structName = node.pathexpression->simplepath->simplepathsegements[0]->identifier;
+    
+    // 查找结构体符号
+    auto structSymbol = FindStruct(structName);
+    if (!structSymbol) {
+        ReportError("Unknown struct type: " + structName);
+        return;
+    }
+    
+    // 获取结构体定义的所有字段
+    std::unordered_set<std::string> requiredFields;
+    std::unordered_map<std::string, std::shared_ptr<Symbol>> fieldMap;
+    
+    for (const auto& field : structSymbol->fields) {
+        requiredFields.insert(field->name);
+        fieldMap[field->name] = field;
+    }
+    
+    // 检查是否是 StructExprFields（字段初始化）
+    if (auto structExprFields = dynamic_cast<StructExprFields*>(node.structinfo.get())) {
+        std::unordered_set<std::string> providedFields;
+        
+        // 检查每个提供的字段
+        for (const auto& fieldExpr : structExprFields->structexprfields) {
+            if (!fieldExpr) continue;
+            
+            std::string fieldName = fieldExpr->identifier;
+            
+            // 检查字段是否存在于结构体中
+            if (fieldMap.find(fieldName) == fieldMap.end()) {
+                ReportError("Struct '" + structName + "' has no field named '" + fieldName + "'");
+                continue;
+            }
+            
+            // 检查字段是否重复初始化
+            if (providedFields.find(fieldName) != providedFields.end()) {
+                ReportError("Field '" + fieldName + "' specified more than once in struct initialization");
+                continue;
+            }
+            
+            providedFields.insert(fieldName);
+        }
+        
+        // 检查是否有未初始化的必需字段
+        for (const auto& requiredField : requiredFields) {
+            if (providedFields.find(requiredField) == providedFields.end()) {
+                ReportError("Struct '" + structName + "' missing field '" + requiredField + "' in initialization");
+            }
+        }
+    }
+    // 如果是 StructBase（基础结构体），暂时跳过检查
+    // 这种情况通常是结构体更新语法，如 Struct { field: value, ..base }
+}
+
 void TypeChecker::CheckInherentImpl(InherentImpl& node) {
     auto targetType = GetImplTargetType(node);
     if (!targetType) {
@@ -2590,6 +2652,9 @@ void TypeChecker::visit(StructExpression& node) {
         nodeTypeMap[&node] = structType;
     }
     
+    // 添加结构体初始化字段检查
+    CheckStructInitialization(node);
+    
     PopNode();
 }
 
@@ -3830,6 +3895,9 @@ std::shared_ptr<SemanticType> TypeChecker::InferBlockExpressionType(BlockExpress
         if (stmt) {
             stmt->accept(*this);
         }
+    }
+    if (expr.expressionwithoutblock) {
+        expr.expressionwithoutblock->accept(*this);
     }
     
     // 分析块中的返回语句

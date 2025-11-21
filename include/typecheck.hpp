@@ -126,6 +126,7 @@ private:
     
     void CheckStructFields(StructStruct& node);
     void CheckStructFieldType(StructField& field);
+    void CheckStructInitialization(StructExpression& node);
     
     void CheckInherentImpl(InherentImpl& node);
     void CheckTraitImpl(InherentImpl& node);
