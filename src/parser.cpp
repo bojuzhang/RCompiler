@@ -28,6 +28,21 @@ std::string Parser::getstring() {
 
 
 // Pratt parser
+std::shared_ptr<Expression> Parser::parseExpressionWithBlock() {
+    auto type = peek();
+    switch (type) {
+        case Token::kif:
+            return parseIfExpression();
+        case Token::kwhile:
+            return parsePredicateLoopExpression();
+        case Token::kloop:
+            return parseInfiniteLoopExpression();
+        case Token::kleftCurly:
+            return parseBlockExpression();
+        default:
+            return nullptr;
+    }
+}
 std::shared_ptr<Expression> Parser::parseExpression() {
     return parseExpressionPratt(0);
 }
@@ -1101,6 +1116,17 @@ std::shared_ptr<LetStatement> Parser::parseLetStatement() {
 }
 
 std::shared_ptr<ExpressionStatement> Parser::parseExpressionStatement() {
+    auto tmp = pos;
+    auto expressionwithblock = parseExpressionWithBlock();
+    if (expressionwithblock != nullptr) {
+        bool hassemi = false;
+        if (match(Token::kSemi)) {
+            hassemi = true;
+            advance();
+        }
+        return std::make_shared<ExpressionStatement>(std::move(expressionwithblock), hassemi);
+    }
+    pos = tmp;
     auto expression = parseExpression();
     if (expression == nullptr) {
         return nullptr;

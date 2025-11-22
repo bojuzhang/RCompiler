@@ -133,6 +133,7 @@ public:
 
     // Pratt parser
     std::shared_ptr<Expression> parseExpression();
+    std::shared_ptr<Expression> parseExpressionWithBlock();
     std::shared_ptr<Expression> parseExpressionPratt(int minbp = 0);
     std::shared_ptr<Expression> parsePrefixPratt();
     std::shared_ptr<Expression> parseInfixPratt(std::shared_ptr<Expression> lhs, int minbp);
