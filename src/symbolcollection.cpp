@@ -286,11 +286,11 @@ void SymbolCollector::visit(InfiniteLoopExpression& node) {
     
     bool wasInLoop = inLoop;
     inLoop = true;
-    root->EnterScope(Scope::ScopeType::Loop, &node);
+    // root->EnterScope(Scope::ScopeType::Loop, &node);
     if (node.blockexpression) {
         node.blockexpression->accept(*this);
     }
-    root->ExitScope();
+    // root->ExitScope();
     
     inLoop = wasInLoop;
     PopNode();
@@ -305,14 +305,14 @@ void SymbolCollector::visit(PredicateLoopExpression& node) {
         node.conditions->expression->accept(*this);
     }
     
-    // conditions 不应该在 while 的 scope 内。
-    root->EnterScope(Scope::ScopeType::Loop, &node);
+    // // conditions 不应该在 while 的 scope 内。
+    // root->EnterScope(Scope::ScopeType::Loop, &node);
     
     if (node.blockexpression) {
         node.blockexpression->accept(*this);
     }
     
-    root->ExitScope();
+    // root->ExitScope();
     inLoop = wasInLoop;
     PopNode();
 }
@@ -344,22 +344,22 @@ void SymbolCollector::CollectFunctionSymbol(Function& node) {
     // 确保函数符号的type字段也被设置
     funcSymbol->type = returnType;
     
-    // 修复：所有函数都应该插入到根作用域中，这样它们就可以从任何地方访问
-    auto rootScope = root->GetRootScope();
-    auto originalScope = root->GetCurrentScope();
+    // // 修复：所有函数都应该插入到根作用域中，这样它们就可以从任何地方访问
+    // auto rootScope = root->GetRootScope();
+    // auto originalScope = root->GetCurrentScope();
     
-    // 临时切换到根作用域
-    root->GoToNode(nullptr);
+    // // 临时切换到根作用域
+    // root->GoToNode(nullptr);
     
     bool insertSuccess = root->InsertSymbol(funcName, funcSymbol);
     
-    // 恢复到原来的作用域
-    root->GoToNode(nullptr);
-    if (originalScope) {
-        // 需要找到原来的作用域节点
-        // 这里简化处理，直接回到原来的作用域
-        // 在实际实现中，可能需要更复杂的作用域恢复逻辑
-    }
+    // // 恢复到原来的作用域
+    // root->GoToNode(nullptr);
+    // if (originalScope) {
+    //     // 需要找到原来的作用域节点
+    //     // 这里简化处理，直接回到原来的作用域
+    //     // 在实际实现中，可能需要更复杂的作用域恢复逻辑
+    // }
 }
 
 void SymbolCollector::CollectConstantSymbol(ConstantItem& node) {
@@ -1010,7 +1010,9 @@ void SymbolCollector::visit(CallExpression& node) {
     }
     
     if (node.callparams) {
-        node.callparams->accept(*this);
+        for (const auto &expression : node.callparams->expressions) {
+            expression->accept(*this);
+        }
     }
     
     PopNode();
