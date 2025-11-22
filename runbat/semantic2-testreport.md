@@ -1,15 +1,15 @@
 # RCompiler Semantic-2 测试评测报告
 
-**生成时间**: 2025-11-22 20:20:59
-**执行时间**: 345.80 秒
+**生成时间**: 2025-11-22 21:37:03
+**执行时间**: 140.42 秒
 
 ## 总体统计
 
 | 指标 | 数量 | 百分比 |
 |------|------|--------|
 | 总测试数 | 50 | 100.0% |
-| 通过 | 48 | 96.0% |
-| 失败 | 2 | 4.0% |
+| 通过 | 50 | 100.0% |
+| 失败 | 0 | 0.0% |
 | 错误 | 0 | 0.0% |
 
 ## 按期望结果分类统计
@@ -18,8 +18,8 @@
 
 | 实际结果 | 数量 | 占比 |
 |----------|------|------|
-| 0 (正确) | 48 | 96.0% |
-| -1 (错误) | 2 | 4.0% |
+| 0 (正确) | 50 | 100.0% |
+| -1 (错误) | 0 | 0.0% |
 | -2 (异常) | 0 | 0.0% |
 | **总计** | 50 | 100.0% |
 
@@ -33,6 +33,7 @@
 
 | 模块 | 总数 | 通过 | 失败 | 错误 | 通过率 |
 |------|------|------|------|------|--------|
+| comprehensive1 | 1 | 1 | 0 | 0 | 100.0% |
 | comprehensive10 | 1 | 1 | 0 | 0 | 100.0% |
 | comprehensive11 | 1 | 1 | 0 | 0 | 100.0% |
 | comprehensive12 | 1 | 1 | 0 | 0 | 100.0% |
@@ -53,6 +54,7 @@
 | comprehensive26 | 1 | 1 | 0 | 0 | 100.0% |
 | comprehensive27 | 1 | 1 | 0 | 0 | 100.0% |
 | comprehensive28 | 1 | 1 | 0 | 0 | 100.0% |
+| comprehensive29 | 1 | 1 | 0 | 0 | 100.0% |
 | comprehensive3 | 1 | 1 | 0 | 0 | 100.0% |
 | comprehensive30 | 1 | 1 | 0 | 0 | 100.0% |
 | comprehensive31 | 1 | 1 | 0 | 0 | 100.0% |
@@ -81,13 +83,12 @@
 | comprehensive7 | 1 | 1 | 0 | 0 | 100.0% |
 | comprehensive8 | 1 | 1 | 0 | 0 | 100.0% |
 | comprehensive9 | 1 | 1 | 0 | 0 | 100.0% |
-| comprehensive1 | 1 | 0 | 1 | 0 | 0.0% |
-| comprehensive29 | 1 | 0 | 1 | 0 | 0.0% |
 
 ## 详细测试结果
 
 | 测试名称 | 期望 | 实际 | 状态 | 文件路径 |
 |----------|------|------|------|----------|
+| comprehensive1 | 0 | 0 | ✅ PASS | ../RCompiler-Testcases/semantic-2/src/comprehensive1/comprehensive1.rx |
 | comprehensive10 | 0 | 0 | ✅ PASS | ../RCompiler-Testcases/semantic-2/src/comprehensive10/comprehensive10.rx |
 | comprehensive11 | 0 | 0 | ✅ PASS | ../RCompiler-Testcases/semantic-2/src/comprehensive11/comprehensive11.rx |
 | comprehensive12 | 0 | 0 | ✅ PASS | ../RCompiler-Testcases/semantic-2/src/comprehensive12/comprehensive12.rx |
@@ -108,6 +109,7 @@
 | comprehensive26 | 0 | 0 | ✅ PASS | ../RCompiler-Testcases/semantic-2/src/comprehensive26/comprehensive26.rx |
 | comprehensive27 | 0 | 0 | ✅ PASS | ../RCompiler-Testcases/semantic-2/src/comprehensive27/comprehensive27.rx |
 | comprehensive28 | 0 | 0 | ✅ PASS | ../RCompiler-Testcases/semantic-2/src/comprehensive28/comprehensive28.rx |
+| comprehensive29 | 0 | 0 | ✅ PASS | ../RCompiler-Testcases/semantic-2/src/comprehensive29/comprehensive29.rx |
 | comprehensive3 | 0 | 0 | ✅ PASS | ../RCompiler-Testcases/semantic-2/src/comprehensive3/comprehensive3.rx |
 | comprehensive30 | 0 | 0 | ✅ PASS | ../RCompiler-Testcases/semantic-2/src/comprehensive30/comprehensive30.rx |
 | comprehensive31 | 0 | 0 | ✅ PASS | ../RCompiler-Testcases/semantic-2/src/comprehensive31/comprehensive31.rx |
@@ -136,22 +138,3 @@
 | comprehensive7 | 0 | 0 | ✅ PASS | ../RCompiler-Testcases/semantic-2/src/comprehensive7/comprehensive7.rx |
 | comprehensive8 | 0 | 0 | ✅ PASS | ../RCompiler-Testcases/semantic-2/src/comprehensive8/comprehensive8.rx |
 | comprehensive9 | 0 | 0 | ✅ PASS | ../RCompiler-Testcases/semantic-2/src/comprehensive9/comprehensive9.rx |
-| comprehensive1 | 0 | -1 | ❌ FAIL | ../RCompiler-Testcases/semantic-2/src/comprehensive1/comprehensive1.rx |
-| comprehensive29 | 0 | -1 | ❌ FAIL | ../RCompiler-Testcases/semantic-2/src/comprehensive29/comprehensive29.rx |
-
-## 失败/错误测试详情
-
-### comprehensive1
-
-- **文件路径**: `../RCompiler-Testcases/semantic-2/src/comprehensive1/comprehensive1.rx`
-- **期望结果**: 0
-- **实际结果**: -1
-- **状态**: FAIL
-
-### comprehensive29
-
-- **文件路径**: `../RCompiler-Testcases/semantic-2/src/comprehensive29/comprehensive29.rx`
-- **期望结果**: 0
-- **实际结果**: -1
-- **状态**: FAIL
-
