@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+#include <stack>
 #include "symbol.hpp"
 
 class Scope : public std::enable_shared_from_this<Scope> {

@@ -36,9 +36,9 @@ std::vector<std::pair<Token, std::string>> Lexer::lexString(std::string s) {
             auto tokentype = patterns[j].first;
             auto regexrule = patterns[j].second;
 
-            std::smatch match;
+            boost::smatch match;
             auto sub = s.substr(i);  // 从当前位置开始截取
-            if (std::regex_search(sub, match, regexrule) && match.position() == 0) {
+            if (boost::regex_search(sub, match, regexrule) && match.position() == 0) {
                 auto matchstr = match.str();
                 if (matchstr.size() > bestlen) {
                     bestlen = matchstr.size();
