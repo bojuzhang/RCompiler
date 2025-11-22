@@ -822,13 +822,17 @@ bool TypeChecker::AreTypesCompatible(std::shared_ptr<SemanticType> expected, std
 bool TypeChecker::CanPerformBinaryOperation(std::shared_ptr<SemanticType> leftType, std::shared_ptr<SemanticType> rightType, Token op) {
     if (!leftType || !rightType) return false;
     
+    // 特殊处理左移右移运算符：两边只要都是整数类型即可
+    if (op == Token::kShl || op == Token::kShr) {
+        return IsIntegerType(leftType) && IsIntegerType(rightType);
+    }
+    
     // 对于算术运算符、比较运算符和位运算符，使用 AreTypesCompatible 检查双向兼容性
-    if (op == Token::kPlus || op == Token::kMinus || op == Token::kStar || op == Token::kSlash || 
-        op == Token::kPercent || 
+    if (op == Token::kPlus || op == Token::kMinus || op == Token::kStar || op == Token::kSlash ||
+        op == Token::kPercent ||
         op == Token::kEqEq || op == Token::kNe || op == Token::kLt || op == Token::kGt ||
         op == Token::kLe || op == Token::kGe ||
-        op == Token::kAnd || op == Token::kOr || op == Token::kCaret ||
-        op == Token::kShl || op == Token::kShr) {
+        op == Token::kAnd || op == Token::kOr || op == Token::kCaret) {
         // 检查左操作数是否可以与右操作数运算，或者右操作数是否可以与左操作数运算
         return AreTypesCompatible(leftType, rightType) || AreTypesCompatible(rightType, leftType);
     }
@@ -839,6 +843,16 @@ bool TypeChecker::CanPerformBinaryOperation(std::shared_ptr<SemanticType> leftTy
     }
     
     return false;
+}
+
+bool TypeChecker::IsIntegerType(std::shared_ptr<SemanticType> type) {
+    if (!type) return false;
+    
+    std::string typeStr = type->tostring();
+    
+    // 检查是否为整数类型：i32, u32, isize, usize, Int, SignedInt, UnsignedInt
+    return (typeStr == "i32" || typeStr == "u32" || typeStr == "isize" || typeStr == "usize" ||
+            typeStr == "Int" || typeStr == "SignedInt" || typeStr == "UnsignedInt");
 }
 
 std::shared_ptr<SemanticType> TypeChecker::GetBinaryOperationResultType(std::shared_ptr<SemanticType> leftType, std::shared_ptr<SemanticType> rightType, Token op) {

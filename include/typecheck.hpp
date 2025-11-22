@@ -222,6 +222,9 @@ private:
     bool CanPerformBinaryOperation(std::shared_ptr<SemanticType> leftType, std::shared_ptr<SemanticType> rightType, Token op);
     std::shared_ptr<SemanticType> GetBinaryOperationResultType(std::shared_ptr<SemanticType> leftType, std::shared_ptr<SemanticType> rightType, Token op);
     
+    // 整数类型检查辅助函数
+    bool IsIntegerType(std::shared_ptr<SemanticType> type);
+    
     // 内置方法支持
     bool IsBuiltinMethodCall(const std::string& receiverType, const std::string& methodName);
     std::shared_ptr<SemanticType> GetBuiltinMethodReturnType(const std::string& receiverType, const std::string& methodName);
