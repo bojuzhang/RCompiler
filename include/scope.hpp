@@ -16,6 +16,9 @@ public:
     int depth;
     bool isFunctionScope;
     
+    // 用于跟踪在 typecheck 阶段添加的符号
+    std::vector<std::string> typecheckAddedSymbols;
+    
 public:
     enum class ScopeType {
         Global,
@@ -30,8 +33,11 @@ public:
 
     Scope(std::shared_ptr<Scope> parent = nullptr, bool isFunctionScope = false);
     
-    bool Insert(const std::string& name, std::shared_ptr<Symbol> symbol);
+    bool Insert(const std::string& name, std::shared_ptr<Symbol> symbol, bool isFromTypecheck = false);
     std::shared_ptr<Symbol> Lookup(const std::string& name, bool iscurrent = 0);
+    
+    // 清理在 typecheck 阶段添加的符号
+    void ClearTypecheckAddedSymbols();
     
     std::shared_ptr<Scope> AddChild(bool isFunctionScope = false);
     std::shared_ptr<Scope> GetParent() const;
@@ -60,7 +66,7 @@ public:
     std::shared_ptr<Scope> FindScopeForNode(ASTNode* node);
     std::vector<std::shared_ptr<Scope>> GetPathToCurrentScope();
     
-    bool InsertSymbol(const std::string& name, std::shared_ptr<Symbol> symbol);
+    bool InsertSymbol(const std::string& name, std::shared_ptr<Symbol> symbol, bool isFromTypecheck = false);
     std::shared_ptr<Symbol> LookupSymbol(const std::string& name);
     std::shared_ptr<Symbol> LookupSymbolInCurrentScope(const std::string& name);
     

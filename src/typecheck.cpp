@@ -2993,11 +2993,55 @@ void TypeChecker::visit(LetStatement& node) {
         }
     }
     
-    // 检查模式并注册变量
+    // 修复：在类型检查阶段收集变量符号
     if (node.patternnotopalt) {
-        std::shared_ptr<SemanticType> varType = declaredType ? declaredType : std::make_shared<SimpleType>("inferred");
-        CheckPattern(*node.patternnotopalt, varType);
+        if (auto identPattern = dynamic_cast<IdentifierPattern*>(node.patternnotopalt.get())) {
+            std::string varName = identPattern->identifier;
+            
+            // 获取变量类型
+            std::shared_ptr<SemanticType> varType;
+            if (node.type) {
+                varType = declaredType;
+            } else if (node.expression) {
+                // 如果没有声明类型，从初始化表达式推断
+                varType = InferExpressionType(*node.expression);
+                if (!varType) {
+                    ReportError("Unable to infer type for let statement for variable: " + varName);
+                    PopNode();
+                    return;
+                }
+            } else {
+                ReportError("Let statement without type annotation or initialization expression");
+                PopNode();
+                return;
+            }
+            
+            // 创建变量符号
+            std::shared_ptr<Symbol> varSymbol;
+            varSymbol = std::make_shared<Symbol>(
+                varName,
+                SymbolKind::Variable,
+                varType,
+                identPattern->hasmut,
+                &node
+            );
+            
+            // 插入到符号表中，变量可以覆盖同名变量，标记为来自 typecheck
+            bool success = scopeTree->InsertSymbol(varName, varSymbol, true);
+            if (!success) {
+                // 如果插入失败且不是变量覆盖，报告错误
+                auto existingSymbol = scopeTree->LookupSymbolInCurrentScope(varName);
+                if (existingSymbol && existingSymbol->kind != SymbolKind::Variable) {
+                    ReportError("Cannot shadow non-variable symbol: " + varName);
+                }
+            }
+        } else {
+            // 对于非标识符模式，使用原有的检查方法
+            std::shared_ptr<SemanticType> varType = declaredType ? declaredType : std::make_shared<SimpleType>("inferred");
+            CheckPattern(*node.patternnotopalt, varType);
+        }
     }
+    
     PopNode();
 }
 

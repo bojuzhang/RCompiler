@@ -28,12 +28,36 @@ Scope::Scope(std::shared_ptr<Scope> parent, bool isFunctionScope)
     : parent(parent), depth(parent ? parent->depth + 1 : 0), 
       isFunctionScope(isFunctionScope) {}
 
-bool Scope::Insert(const std::string& name, std::shared_ptr<Symbol> symbol) {
-    if (symbols.find(name) != symbols.end()) {
+bool Scope::Insert(const std::string& name, std::shared_ptr<Symbol> symbol, bool isFromTypecheck) {
+    // 如果是从 typecheck 添加的，记录这个符号名
+    if (isFromTypecheck) {
+        typecheckAddedSymbols.push_back(name);
+    }
+    
+    // 修复：对于变量，在同一个 scope 下重复定义时，符号插入应该被覆盖而不是什么都不做
+    auto it = symbols.find(name);
+    if (it != symbols.end()) {
+        // 如果符号已存在，且是变量，则允许覆盖
+        if (symbol->kind == SymbolKind::Variable && it->second->kind == SymbolKind::Variable) {
+            symbols[name] = symbol;
+            return true;
+        }
+        // 其他类型的符号不允许覆盖
         return false;
     }
     symbols[name] = symbol;
     return true;
+}
+
+void Scope::ClearTypecheckAddedSymbols() {
+    // 删除在 typecheck 阶段添加的所有符号
+    for (const auto& symbolName : typecheckAddedSymbols) {
+        auto it = symbols.find(symbolName);
+        if (it != symbols.end()) {
+            symbols.erase(it);
+        }
+    }
+    typecheckAddedSymbols.clear();
 }
 
 std::shared_ptr<Symbol> Scope::Lookup(const std::string& name, bool iscurrent) {
@@ -84,6 +108,9 @@ void ScopeTree::EnterExistingScope(ASTNode* node) {
     // 查找已经存在的作用域
     auto it = nodeToScopeMap.find(node);
     if (it != nodeToScopeMap.end()) {
+        // 在进入作用域时，清理之前可能添加的符号
+        // 这样可以防止多次访问同一个作用域时的符号污染
+        it->second->ClearTypecheckAddedSymbols();
         currentNode = it->second;
     }
 }
@@ -140,8 +167,8 @@ std::vector<std::shared_ptr<Scope>> ScopeTree::GetPathToCurrentScope() {
     return path;
 }
 
-bool ScopeTree::InsertSymbol(const std::string& name, std::shared_ptr<Symbol> symbol) {
-    bool success = currentNode->Insert(name, symbol);
+bool ScopeTree::InsertSymbol(const std::string& name, std::shared_ptr<Symbol> symbol, bool isFromTypecheck) {
+    bool success = currentNode->Insert(name, symbol, isFromTypecheck);
     return success;
 }
 

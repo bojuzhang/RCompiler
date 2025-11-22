@@ -211,51 +211,8 @@ void SymbolCollector::visit(Statement& node) {
 void SymbolCollector::visit(LetStatement& node) {
     PushNode(node);
     
-    // 收集变量符号
-    if (node.patternnotopalt) {
-        if (auto identPattern = dynamic_cast<IdentifierPattern*>(node.patternnotopalt.get())) {
-            std::string varName = identPattern->identifier;
-            
-            // 获取变量类型
-            std::shared_ptr<SemanticType> varType;
-            if (node.type) {
-                varType = ResolveTypeFromNode(*node.type);
-            } else {
-                varType = CreateSimpleType("inferred");
-            }
-            
-            // 检查是否是 const 声明（在 Rust 中，const 可以在函数内部声明）
-            // 这里我们需要从上下文判断，因为 LetStatement 本身没有 const 字段
-            // 修复：正确的常量判断应该基于 IdentifierPattern 的 hasmut 字段
-            // 如果 hasmut 为 false，且初始化表达式是字面量，则可能是常量
-            bool isConstant = false;
-            // 只有在非可变且初始化表达式是字面量时才考虑为常量
-            if (!identPattern->hasmut && node.expression && dynamic_cast<LiteralExpression*>(node.expression.get())) {
-                isConstant = true;
-            }
-            
-            // 如果是常量，创建常量符号
-            std::shared_ptr<Symbol> varSymbol;
-            if (isConstant) {
-                varSymbol = std::make_shared<ConstantSymbol>(
-                    varName,
-                    varType
-                );
-            } else {
-                varSymbol = std::make_shared<Symbol>(
-                    varName,
-                    SymbolKind::Variable,
-                    varType,
-                    identPattern->hasmut,
-                    &node
-                );
-            }
-            
-            bool success = root->InsertSymbol(varName, varSymbol);
-        }
-    }
-    
-    // 访问初始化表达式
+    // 修复：不在符号收集阶段收集变量，而是在类型检查阶段收集
+    // 这里只访问初始化表达式以收集其中的符号（如函数调用等）
     if (node.expression) {
         node.expression->accept(*this);
     }
