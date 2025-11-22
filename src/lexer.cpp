@@ -9,6 +9,29 @@ std::vector<std::pair<Token, std::string>> Lexer::lexString(std::string s) {
     while (i < s.size()) {
         int bestlen = 0;
         std::pair<Token, std::string> bestmatch;
+        if (s.substr(i, 2) == "//") {
+            uint32_t cur = 0;
+            while (s[i + cur] != '\n' && s[i + cur] != '\r') {
+                cur++;
+            }
+            ans.push_back({Token::kCOMMENT, s.substr(i, cur)});
+            i += cur;
+            continue;
+        }
+        if (s.substr(i, 2) == "/*") {
+            uint32_t cur = 2, cnt = 1;
+            while (cnt > 0) {
+                if (s.substr(i + cur, 2) == "/*") {
+                    cnt++;
+                } else if (s.substr(i + cur, 2) == "*/") {
+                    cnt--;
+                }
+                cur++;
+            }
+            ans.push_back({Token::kCOMMENT, s.substr(i, cur + 2)});
+            i += cur + 2;
+            continue;
+        }
         for (size_t j = 0; j < patterns.size(); j++) {
             auto tokentype = patterns[j].first;
             auto regexrule = patterns[j].second;

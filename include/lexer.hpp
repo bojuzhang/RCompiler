@@ -191,7 +191,7 @@ private:
 
         {Token::kIDENTIFIER, std::regex("[a-zA-Z][a-zA-Z0-9_]*")},
         {Token::kCHAR_LITERAL, std::regex(R"('(([^'\\\n\r\t])|(\\')|(\\")|(\\x[0-7][0-9a-fA-F])|(\\n)|(\\r)|(\\t)|(\\\\)|(\\0))'([a-zA-Z][a-zA-Z0-9_]*)?)")},
-        {Token::kSTRING_LITERAL, std::regex(R"("(([^"\\\r\t])|(\\')|(\\")|((\\x[0-7][0-9a-fA-F])|(\\n)|(\\r)|(\\t)|(\\\\)|(\\0))|(\\\n))*"([a-zA-Z][a-zA-Z0-9_]*)?)")},
+        {Token::kSTRING_LITERAL, std::regex(R"("([^"\\\r]|\\[nrt'"\\0]|\\x[0-9a-fA-F]{2}|\\\r)*")")},
         {Token::kRAW_STRING_LITERAL, std::regex(R"(r([#]+)([^\r])*?(\1))")},
         {Token::kBYTE_LITERAL, std::regex(R"(b'(([^'\\\r\t\n])|(0x[0-7][0-9a-fA-F]|\n|\r|\t|\\\\|\0)|(\\\n)|(\\')|(\\"))'([a-zA-Z][a-zA-Z0-9_]*)?)")},
         {Token::kBYTE_STRING_LITERAL, std::regex(R"delimeter(b"(([^"\\\r])|(0x[0-7][0-9a-fA-F]|\n|\r|\t|\\\\|\0)|((\\\n)|(\\')|(\\")|(\\\n)))*"([a-zA-Z][a-zA-Z0-9_]*)?)delimeter")},
@@ -258,7 +258,7 @@ private:
         {Token::kleftParenthe, std::regex(R"(\()")},
         {Token::krightParenthe, std::regex(R"(\))")},
 
-        {Token::kCOMMENT, std::regex(R"((//([^\n])*(\n)?)|(/\*[\s\S]*\*/))")},
+        // {Token::kCOMMENT, std::regex(R"((//([^\n])*(\n)?)|(/\*[\s\S]*\*/))")},
     };
 
 public:
