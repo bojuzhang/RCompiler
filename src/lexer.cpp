@@ -32,6 +32,7 @@ std::vector<std::pair<Token, std::string>> Lexer::lexString(std::string s) {
             i += cur + 2;
             continue;
         }
+        const auto &patterns = (('a' <= s[i] && s[i] <= 'z') || ('A' <= s[i] && s[i] <= 'Z')) ? letterpatterns : nonletterpatterns;
         for (size_t j = 0; j < patterns.size(); j++) {
             auto tokentype = patterns[j].first;
             auto regexrule = patterns[j].second;
