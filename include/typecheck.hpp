@@ -123,6 +123,7 @@ private:
     bool TypeExists(const std::string& typeName);
     bool IsTypeVisible(const std::string& typeName);
     bool AreTypesCompatible(std::shared_ptr<SemanticType> expected, std::shared_ptr<SemanticType> actual);
+    bool AreTypesCompatibleNonRecursive(std::shared_ptr<SemanticType> expected, std::shared_ptr<SemanticType> actual);
     
     void CheckStructFields(StructStruct& node);
     void CheckStructFieldType(StructField& field);
@@ -229,8 +230,17 @@ private:
     bool IsBuiltinMethodCall(const std::string& receiverType, const std::string& methodName);
     std::shared_ptr<SemanticType> GetBuiltinMethodReturnType(const std::string& receiverType, const std::string& methodName);
     
+    // 引用信息结构体
+    struct ReferenceInfo {
+        bool isReference;
+        bool isMutable;
+        int level;
+    };
+    
     // 多层引用解析辅助函数
     std::string RemoveAllReferences(const std::string& typeName);
+    std::shared_ptr<SemanticType> FullyDereference(std::shared_ptr<SemanticType> type);
+    ReferenceInfo GetReferenceInfo(std::shared_ptr<SemanticType> type);
     
     // exit 函数检查
     void CheckExitFunctionUsage(CallExpression& expr);

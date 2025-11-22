@@ -717,45 +717,51 @@ bool TypeChecker::AreTypesCompatible(std::shared_ptr<SemanticType> expected, std
         return true;
     }
     
-    // 处理引用级别的转换：&mut A 可以转换为 &A，但 &A 不能转换为 &mut A
-    auto expectedRef = dynamic_cast<ReferenceTypeWrapper*>(expected.get());
-    auto actualRef = dynamic_cast<ReferenceTypeWrapper*>(actual.get());
+    // 获取引用层级信息
+    auto expectedRefInfo = GetReferenceInfo(expected);
+    auto actualRefInfo = GetReferenceInfo(actual);
     
-    if (expectedRef && actualRef) {
-        // 两者都是引用类型，检查目标类型是否兼容
-        auto expectedTarget = expectedRef->getTargetType();
-        auto actualTarget = actualRef->getTargetType();
-        
-        // 如果目标类型兼容
-        if (AreTypesCompatible(expectedTarget, actualTarget)) {
-            // 检查引用级别：&mut A 可以转换为 &A
-            if (!expectedRef->GetIsMutable() && actualRef->GetIsMutable()) {
-                // 期望不可变引用，实际是可变引用：允许转换
-                return true;
-            } else if (expectedRef->GetIsMutable() && !actualRef->GetIsMutable()) {
-                // 期望可变引用，实际是不可变引用：不允许转换
-                return false;
-            } else {
-                // 两者可变性相同
-                return true;
-            }
-        }
-    }
+    // 完全解引用两个类型，得到最底层的类型
+    auto expectedDeref = FullyDereference(expected);
+    auto actualDeref = FullyDereference(actual);
     
-    // 处理期望是引用，实际不是引用的情况
-    if (expectedRef && !actualRef) {
-        // 检查实际类型是否与期望的引用目标类型兼容
-        if (AreTypesCompatible(expectedRef->getTargetType(), actual)) {
-            // 但这通常不应该发生，因为非引用不能隐式转换为引用
-            // 这里保持保守，返回 false
+    // 检查底层类型兼容性（避免递归调用，直接比较字符串）
+    std::string expectedDerefStr = expectedDeref ? expectedDeref->tostring() : "";
+    std::string actualDerefStr = actualDeref ? actualDeref->tostring() : "";
+    
+    if (expectedDerefStr != actualDerefStr) {
+        // 底层类型不同，检查是否可以进行隐式类型转换
+        // 这里调用原始的 AreTypesCompatible 逻辑，但只处理非引用类型
+        if (!AreTypesCompatibleNonRecursive(expectedDeref, actualDeref)) {
             return false;
         }
     }
     
+    // 检查引用兼容性：&mut T 可以传递给 &T，也可以传递给 &&T
+    // 根据任务描述，&mut T 可以传递给 &&T
+    if (expectedRefInfo.isReference && actualRefInfo.isReference) {
+        // 两者都是引用类型
+        if (expectedRefInfo.isMutable && !actualRefInfo.isMutable) {
+            // 期望可变引用，实际是不可变引用：不允许转换
+            return false;
+        }
+        
+        // 根据任务描述，&mut T 可以传递给 &&T
+        // 所以这里不应该阻止这种转换
+        // 只要底层类型兼容，且不是期望可变但实际不可变的情况，就允许转换
+        return true;
+    }
+    
+    // 处理期望是引用，实际不是引用的情况
+    if (expectedRefInfo.isReference && !actualRefInfo.isReference) {
+        // 非引用不能隐式转换为引用
+        return false;
+    }
+    
     // 处理期望不是引用，实际是引用的情况
-    if (!expectedRef && actualRef) {
+    if (!expectedRefInfo.isReference && actualRefInfo.isReference) {
         // 检查引用的目标类型是否与期望类型兼容
-        return AreTypesCompatible(expected, actualRef->getTargetType());
+        return AreTypesCompatibleNonRecursive(expected, actualDeref);
     }
     
     // 实现隐式转换规则：
@@ -4286,5 +4292,126 @@ std::string TypeChecker::RemoveAllReferences(const std::string& typeName) {
     }
     
     return RemoveAllReferences(result);
+}
+
+// 完全解引用类型，返回最底层的类型
+std::shared_ptr<SemanticType> TypeChecker::FullyDereference(std::shared_ptr<SemanticType> type) {
+    if (!type) return nullptr;
+    
+    std::shared_ptr<SemanticType> current = type;
+    int depth = 0;
+    while (current && depth < 10) { // 防止无限循环
+        if (auto refType = dynamic_cast<ReferenceTypeWrapper*>(current.get())) {
+            current = refType->getTargetType();
+            depth++;
+        } else {
+            // 不是引用类型，返回当前类型
+            break;
+        }
+    }
+    return current;
+}
+
+// 获取类型的引用信息
+TypeChecker::ReferenceInfo TypeChecker::GetReferenceInfo(std::shared_ptr<SemanticType> type) {
+    ReferenceInfo info = {false, false, 0};
+    
+    if (!type) return info;
+    
+    std::shared_ptr<SemanticType> current = type;
+    int depth = 0;
+    while (current && depth < 10) { // 防止无限循环
+        if (auto refType = dynamic_cast<ReferenceTypeWrapper*>(current.get())) {
+            info.isReference = true;
+            info.isMutable = refType->GetIsMutable();
+            info.level++;
+            current = refType->getTargetType();
+            depth++;
+        } else {
+            // 不是引用类型，停止
+            break;
+        }
+    }
+    
+    return info;
+}
+
+// 非递归的类型兼容性检查，只处理非引用类型
+bool TypeChecker::AreTypesCompatibleNonRecursive(std::shared_ptr<SemanticType> expected, std::shared_ptr<SemanticType> actual) {
+    if (!expected || !actual) return false;
+    
+    std::string expectedStr = expected->tostring();
+    std::string actualStr = actual->tostring();
+    
+    // 简化类型兼容性检查
+    if (expectedStr == actualStr) {
+        return true;
+    }
+    // 推断类型与任何类型兼容
+    if (actualStr == "_" || actualStr == "!") {
+        return true;
+    }
+    
+    // 处理期望是引用，实际不是引用的情况（这里不应该发生，因为我们已经解引用了）
+    // 处理期望不是引用，实际是引用的情况（这里不应该发生，因为我们已经解引用了）
+    
+    // 实现隐式转换规则：
+    // 1) Int 可以为 usize,isize,i32,u32
+    // 2) SignedInt 可以为 i32,isize
+    // 3) UnsignedInt 可以为 u32,usize
+    // 4) 其余usize,isize,u32,i32 类型之间不应该有任何的隐式类型转化
+    
+    if (expectedStr == "Int") {
+        return (actualStr == "usize" || actualStr == "isize" || actualStr == "i32" || actualStr == "u32" || actualStr == "SignedInt" || actualStr == "UnsignedInt");
+    }
+    
+    if (actualStr == "Int") {
+        return (expectedStr == "usize" || expectedStr == "isize" || expectedStr == "i32" || expectedStr == "u32" || expectedStr == "SignedInt" || expectedStr == "UnsignedInt");
+    }
+    
+    if (expectedStr == "SignedInt") {
+        return (actualStr == "i32" || actualStr == "isize" || actualStr == "Int");
+    }
+    
+    if (actualStr == "SignedInt") {
+        return (expectedStr == "i32" || expectedStr == "isize" || expectedStr == "Int");
+    }
+    
+    if (expectedStr == "UnsignedInt") {
+        return (actualStr == "u32" || actualStr == "usize" || actualStr == "Int");
+    }
+    
+    if (actualStr == "UnsignedInt") {
+        return (expectedStr == "u32" || expectedStr == "usize" || expectedStr == "Int");
+    }
+    
+    // 特殊处理数组类型的兼容性检查
+    auto expectedArray = dynamic_cast<ArrayTypeWrapper*>(expected.get());
+    auto actualArray = dynamic_cast<ArrayTypeWrapper*>(actual.get());
+    
+    if (expectedArray && actualArray) {
+        // 检查元素类型是否兼容（支持双向隐式转换）
+        if (!AreTypesCompatibleNonRecursive(expectedArray->GetElementType(), actualArray->GetElementType()) &&
+            !AreTypesCompatibleNonRecursive(actualArray->GetElementType(), expectedArray->GetElementType())) {
+            return false;
+        }
+        
+        // 检查数组大小是否匹配
+        auto expectedSizeExpr = expectedArray->GetSizeExpression();
+        auto actualSizeExpr = actualArray->GetSizeExpression();
+        
+        if (expectedSizeExpr && actualSizeExpr) {
+            int64_t expectedSize = EvaluateArraySize(*expectedSizeExpr);
+            int64_t actualSize = EvaluateArraySize(*actualSizeExpr);
+            
+            if (expectedSize >= 0 && actualSize >= 0 && expectedSize != actualSize) {
+                return false;
+            }
+        }
+        
+        return true;
+    }
+    
+    return false;
 }
 
