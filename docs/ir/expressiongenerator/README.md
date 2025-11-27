@@ -92,6 +92,7 @@ ExpressionGenerator 将表达式分为以下几类进行处理：
 ```cpp
 // 前向声明
 class StatementGenerator;
+class FunctionCodegen;
 
 class ExpressionGenerator {
 public:
@@ -100,8 +101,9 @@ public:
                       std::shared_ptr<ScopeTree> scopeTree,
                       const NodeTypeMap& nodeTypeMap);
     
-    // 设置 StatementGenerator 引用（解决循环依赖）
+    // 设置依赖组件
     void setStatementGenerator(std::shared_ptr<StatementGenerator> stmtGen);
+    void setFunctionCodegen(std::shared_ptr<FunctionCodegen> funcGen);
     
     // 主要生成接口
     std::string generateExpression(std::shared_ptr<Expression> expr);
@@ -154,6 +156,7 @@ private:
     std::shared_ptr<ScopeTree> scopeTree;
     const NodeTypeMap& nodeTypeMap;
     std::shared_ptr<StatementGenerator> statementGenerator;  // 解决循环依赖
+    std::shared_ptr<FunctionCodegen> functionCodegen;       // 用于处理函数调用
     
     // 辅助方法
     std::string generateIntegerLiteral(const std::string& value, const std::string& type);
@@ -173,6 +176,9 @@ private:
     std::string generateExplicitConversion(const std::string& value,
                                          const std::string& fromType,
                                          const std::string& toType);
+    
+    // 函数调用辅助方法
+    std::string generateRegularFunctionCall(std::shared_ptr<CallExpression> expr);
 };
 ```
 
@@ -888,10 +894,22 @@ std::string ExpressionGenerator::generateCallExpression(std::shared_ptr<CallExpr
     // 获取函数名
     std::string functionName = getFunctionName(expr->expression);
     
+    // 检查是否为内置函数
+    if (functionCodegen && functionCodegen->isBuiltinFunction(functionName)) {
+        return functionCodegen->generateBuiltinCall(expr);
+    }
+    
+    // 处理普通函数调用
+    return generateRegularFunctionCall(expr);
+}
+
+std::string ExpressionGenerator::generateRegularFunctionCall(std::shared_ptr<CallExpression> expr) {
+    // 获取函数名
+    std::string functionName = getFunctionName(expr->expression);
+    
     // 查找函数符号
     auto functionSymbol = scopeTree->LookupSymbol(functionName);
     if (!functionSymbol || functionSymbol->kind != SymbolKind::Function) {
-        reportError("Undefined function: " + functionName);
         return "null";
     }
     
@@ -901,21 +919,14 @@ std::string ExpressionGenerator::generateCallExpression(std::shared_ptr<CallExpr
     auto callParams = expr->callparams->expressions;
     
     for (size_t i = 0; i < callParams.size(); ++i) {
-        std::string argReg = generateExpression(callParams[i]);
-        std::string argType = getExpressionType(callParams[i]);
-        std::string paramType = typeMapper->mapSemanticTypeToLLVM(params[i]->type);
-        
-        // 类型转换（如果需要）
-        if (argType != paramType) {
-            argReg = generateImplicitConversion(argReg, argType, paramType);
-        }
-        
+        // 调用 FunctionCodegen 处理参数
+        std::string argReg = functionCodegen->generateArgument(callParams[i], params[i]->type);
         argRegs.push_back(argReg);
     }
     
     // 通过 IRBuilder 分配结果寄存器并生成函数调用
     std::string resultReg = irBuilder->newRegister();
-    std::string returnType = typeMapper->mapSemanticTypeToLLVM(getFunctionReturnType(functionSymbol));
+    std::string returnType = typeMapper->mapTypeToLLVM(getFunctionReturnType(functionSymbol));
     
     irBuilder->emitCall(resultReg, functionName, argRegs, returnType);
     
@@ -1741,10 +1752,15 @@ result = exprGen.generateExpression(binaryExpr);
 // 输出：%_1 = add i32 10, 20
 ```
 
-### 高级使用
+### 组件协作使用
 
 ```cpp
-// 生成函数调用
+// 创建 FunctionCodegen 并设置组件间通信
+auto functionCodegen = std::make_shared<FunctionCodegen>(irBuilder, typeMapper, scopeTree);
+exprGen.setFunctionCodegen(functionCodegen);
+functionCodegen->setExpressionGenerator(exprGen);
+
+// 生成普通函数调用
 auto funcPath = std::make_shared<PathExpression>(
     std::make_shared<SimplePath>("calculate", false, false));
 auto callParams = std::make_shared<CallParams>(
@@ -1756,6 +1772,18 @@ auto callExpr = std::make_shared<CallExpression>(funcPath, callParams);
 
 std::string result = exprGen.generateExpression(callExpr);
 // 输出：%_2 = call i32 @calculate(i32 100, i32 200)
+
+// 生成内置函数调用（自动调用 FunctionCodegen）
+auto builtinCall = std::make_shared<PathExpression>(
+    std::make_shared<SimplePath>("printlnInt", false, false));
+auto builtinParams = std::make_shared<CallParams>(
+    std::vector<std::shared_ptr<Expression>>{
+        std::make_shared<LiteralExpression>("42", Token::kINTEGER_LITERAL)
+    });
+auto builtinExpr = std::make_shared<CallExpression>(builtinCall, builtinParams);
+
+result = exprGen.generateExpression(builtinExpr);
+// 输出：call void @printlnInt(i32 42)
 
 // 生成方法调用
 auto receiver = std::make_shared<PathExpression>(
