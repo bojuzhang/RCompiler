@@ -80,6 +80,9 @@ ExpressionGenerator 将表达式分为以下几类进行处理：
 14. **赋值表达式**
     - 简单赋值：`x = value`
     - 复合赋值：`x += value`, `x *= value`
+    - 成员访问赋值：`obj.field = value`
+    - 数组索引赋值：`arr[i] = value`
+    - 嵌套赋值：`obj.arr[i].field = value`
 
 15. **类型转换表达式**（TypeCastExpression）
     - 显式类型转换：`expr as target_type`
@@ -174,6 +177,437 @@ private:
 ```
 
 ## 实现策略
+
+### 赋值表达式生成
+
+赋值表达式是Rx语言中的核心操作，负责将值存储到可变的位置。ExpressionGenerator必须智能地处理从简单标量赋值到复杂聚合类型赋值的各种场景，特别是要解决大型聚合类型的性能优化问题。
+
+#### 赋值表达式分类与处理策略
+
+赋值表达式根据左值（LValue）的复杂程度分为以下几类：
+
+1. **简单变量赋值**：`x = value`
+2. **成员访问赋值**：`obj.field = value`
+3. **数组索引赋值**：`arr[i] = value`
+4. **嵌套访问赋值**：`obj.arr[i].field = value`
+
+每种类型的赋值都需要不同的地址计算和存储策略。
+
+#### 核心设计：智能赋值策略选择
+
+为了解决大型聚合类型的性能问题，ExpressionGenerator实现了智能的赋值策略选择机制：
+
+```cpp
+enum class AssignmentStrategy {
+    DIRECT_LOAD_STORE,    // 直接的 load/store 序列
+    MEMORY_COPY,          // 使用 memcpy
+};
+```
+
+**策略选择的核心原则**：
+- **小型聚合类型**（≤ 16字节）：使用直接的 load/store 序列
+- **大型聚合类型**（> 16字节）：使用直接的 memcpy 调用
+
+#### 类型内省与大小分析系统
+
+为了实现智能策略选择，ExpressionGenerator需要精确的类型内省能力：
+
+```cpp
+class TypeInfoAnalyzer {
+public:
+    // 获取类型的精确字节大小
+    static uint64_t getTypeByteSize(std::shared_ptr<SemanticType> type);
+    
+    // 检查类型是否为聚合类型
+    static bool isAggregateType(std::shared_ptr<SemanticType> type);
+    
+    // 检查类型是否为平凡可复制类型
+    static bool isTriviallyCopyable(std::shared_ptr<SemanticType> type);
+    
+    // 获取类型的对齐要求
+    static uint64_t getTypeAlignment(std::shared_ptr<SemanticType> type);
+    
+    // 分析类型的内存布局
+    static TypeLayoutInfo analyzeTypeLayout(std::shared_ptr<SemanticType> type);
+};
+
+struct TypeLayoutInfo {
+    uint64_t byteSize;           // 类型的字节大小
+    uint64_t alignment;          // 对齐要求
+    bool isAggregate;            // 是否为聚合类型
+    bool isTriviallyCopyable;    // 是否为平凡可复制
+    bool hasPadding;             // 是否包含填充字节
+    std::vector<FieldInfo> fields; // 字段信息（仅结构体）
+};
+```
+
+**类型内省的实现细节**：
+
+```cpp
+uint64_t TypeInfoAnalyzer::getTypeByteSize(std::shared_ptr<SemanticType> type) {
+    if (!type) return 0;
+    
+    // 基础类型的大小查询
+    if (auto simpleType = dynamic_cast<SimpleType*>(type.get())) {
+        return getBasicTypeSize(simpleType->typeName);
+    }
+    
+    // 数组类型：元素大小 × 元素数量
+    if (auto arrayType = dynamic_cast<ArrayTypeWrapper*>(type.get())) {
+        uint64_t elementSize = getTypeByteSize(arrayType->GetElementType());
+        uint64_t elementCount = getArrayElementCount(arrayType);
+        return elementSize * elementCount;
+    }
+    
+    // 结构体类型：递归计算所有字段大小
+    if (auto structType = dynamic_cast<StructType*>(type.get())) {
+        return calculateStructSize(structType);
+    }
+    
+    // 引用类型：指针大小（32位系统为4字节）
+    if (auto refType = dynamic_cast<ReferenceTypeWrapper*>(type.get())) {
+        return 4; // 指针大小
+    }
+    
+    return 0;
+}
+
+bool TypeInfoAnalyzer::isAggregateType(std::shared_ptr<SemanticType> type) {
+    if (!type) return false;
+    
+    // 数组和结构体都是聚合类型
+    return (dynamic_cast<ArrayTypeWrapper*>(type.get()) != nullptr) ||
+           (dynamic_cast<StructType*>(type.get()) != nullptr);
+}
+```
+
+#### GenerateAssignment函数的完整实现
+
+```cpp
+std::string ExpressionGenerator::generateAssignmentExpression(
+    std::shared_ptr<AssignmentExpression> expr) {
+    
+    // 1. 获取左右表达式的类型信息
+    auto leftType = getExpressionType(expr->leftexpression);
+    auto rightType = getExpressionType(expr->rightexpression);
+    
+    // 2. 分析左值的地址计算策略
+    LValueInfo lvalueInfo = analyzeLValue(expr->leftexpression);
+    
+    // 3. 选择赋值策略
+    AssignmentStrategy strategy = selectAssignmentStrategy(leftType, lvalueInfo);
+    
+    // 4. 根据策略生成相应的IR代码
+    switch (strategy) {
+        case AssignmentStrategy::DIRECT_LOAD_STORE:
+            return generateDirectStoreAssignment(expr, lvalueInfo);
+        case AssignmentStrategy::MEMORY_COPY:
+            return generateMemcpyAssignment(expr, lvalueInfo);
+    }
+    
+    return generateDefaultValue(leftType);
+}
+```
+
+#### 左值分析与地址计算
+
+左值分析是赋值表达式的关键步骤，需要确定如何计算目标地址：
+
+```cpp
+struct LValueInfo {
+    enum class LValueKind {
+        VARIABLE,          // 简单变量
+        FIELD_ACCESS,      // 字段访问
+        ARRAY_INDEX,       // 数组索引
+        NESTED_ACCESS      // 嵌套访问
+    } kind;
+    
+    std::string basePointer;      // 基础指针寄存器
+    std::vector<std::string> indices; // 索引序列
+    std::string finalAddress;     // 最终地址寄存器
+    std::shared_ptr<SemanticType> targetType; // 目标类型
+};
+
+LValueInfo ExpressionGenerator::analyzeLValue(std::shared_ptr<Expression> lvalue) {
+    LValueInfo info;
+    
+    if (auto pathExpr = dynamic_cast<PathExpression*>(lvalue.get())) {
+        // 简单变量访问
+        info.kind = LValueInfo::LValueKind::VARIABLE;
+        info.basePointer = getVariablePointer(pathExpr->simplepath);
+        info.finalAddress = info.basePointer;
+        info.targetType = getExpressionType(lvalue);
+        
+    } else if (auto fieldExpr = dynamic_cast<FieldExpression*>(lvalue.get())) {
+        // 字段访问：obj.field
+        info.kind = LValueInfo::LValueKind::FIELD_ACCESS;
+        info = analyzeFieldAccess(fieldExpr);
+        
+    } else if (auto indexExpr = dynamic_cast<IndexExpression*>(lvalue.get())) {
+        // 数组索引：arr[i]
+        info.kind = LValueInfo::LValueKind::ARRAY_INDEX;
+        info = analyzeArrayIndex(indexExpr);
+        
+    } else {
+        reportError("Invalid lvalue in assignment");
+    }
+    
+    return info;
+}
+```
+
+#### 字段访问的地址计算
+
+```cpp
+LValueInfo ExpressionGenerator::analyzeFieldAccess(
+    std::shared_ptr<FieldExpression> fieldExpr) {
+    
+    LValueInfo info;
+    info.kind = LValueInfo::LValueKind::FIELD_ACCESS;
+    
+    // 递归分析接收者表达式
+    auto receiverInfo = analyzeLValue(fieldExpr->expression);
+    info.basePointer = receiverInfo.finalAddress;
+    
+    // 获取字段信息
+    std::string fieldName = fieldExpr->identifier;
+    auto fieldType = getFieldType(receiverInfo.targetType, fieldName);
+    
+    // 生成 getelementptr 指令计算字段地址
+    std::string fieldPtrReg = irBuilder->newRegister();
+    uint32_t fieldIndex = getFieldIndex(receiverInfo.targetType, fieldName);
+    
+    std::vector<std::pair<std::string, std::string>> indices = {
+        {"0", "i32"},  // 结构体第一个元素
+        {std::to_string(fieldIndex), "i32"}  // 字段索引
+    };
+    
+    irBuilder->emitGetElementPtr(fieldPtrReg, receiverInfo.finalAddress, indices);
+    
+    info.finalAddress = fieldPtrReg;
+    info.targetType = fieldType;
+    info.indices = receiverInfo.indices;
+    info.indices.push_back(std::to_string(fieldIndex));
+    
+    return info;
+}
+```
+
+#### 数组索引的地址计算
+
+```cpp
+LValueInfo ExpressionGenerator::analyzeArrayIndex(
+    std::shared_ptr<IndexExpression> indexExpr) {
+    
+    LValueInfo info;
+    info.kind = LValueInfo::LValueKind::ARRAY_INDEX;
+    
+    // 分析数组基础表达式
+    auto arrayInfo = analyzeLValue(indexExpr->expressionout);
+    info.basePointer = arrayInfo.finalAddress;
+    
+    // 生成索引表达式
+    std::string indexReg = generateExpression(indexExpr->expressionin);
+    
+    // 获取元素类型
+    auto elementType = getElementType(arrayInfo.targetType);
+    
+    // 生成 getelementptr 指令计算元素地址
+    std::string elemPtrReg = irBuilder->newRegister();
+    
+    if (isPointerType(arrayInfo.targetType)) {
+        // 指针索引：ptr[i]
+        irBuilder->emitGetElementPtr(elemPtrReg, arrayInfo.finalAddress,
+                                   indexReg, "", elementType + "*");
+    } else {
+        // 数组索引：arr[i]
+        irBuilder->emitGetElementPtr(elemPtrReg, arrayInfo.finalAddress,
+                                   "0", indexReg, elementType + "*");
+    }
+    
+    info.finalAddress = elemPtrReg;
+    info.targetType = elementType;
+    info.indices = arrayInfo.indices;
+    info.indices.push_back(indexReg);
+    
+    return info;
+}
+```
+
+#### 直接存储策略的实现
+
+```cpp
+std::string ExpressionGenerator::generateDirectStoreAssignment(
+    std::shared_ptr<AssignmentExpression> expr,
+    const LValueInfo& lvalueInfo) {
+    
+    // 生成右值表达式
+    std::string valueReg = generateExpression(expr->rightexpression);
+    std::string valueType = getExpressionType(expr->rightexpression);
+    
+    // 类型转换（如果需要）
+    std::string targetLLVMType = typeMapper->mapSemanticTypeToLLVM(lvalueInfo.targetType);
+    if (valueType != targetLLVMType) {
+        valueReg = generateImplicitConversion(valueReg, valueType, targetLLVMType);
+    }
+    
+    // 直接存储到目标地址
+    irBuilder->emitStore(valueReg, lvalueInfo.finalAddress, targetLLVMType);
+    
+    // 返回赋值表达式的值（右值）
+    return valueReg;
+}
+```
+
+#### memcpy优化策略的实现
+
+```cpp
+std::string ExpressionGenerator::generateMemcpyAssignment(
+    std::shared_ptr<AssignmentExpression> expr,
+    const LValueInfo& lvalueInfo) {
+    
+    // 为右值创建临时存储空间
+    std::string tempReg = irBuilder->newRegister();
+    std::string llvmType = typeMapper->mapSemanticTypeToLLVM(lvalueInfo.targetType);
+    irBuilder->emitAlloca(tempReg, llvmType);
+    
+    // 生成右值表达式并存储到临时空间
+    std::string valueReg = generateExpression(expr->rightexpression);
+    irBuilder->emitStore(valueReg, tempReg, llvmType);
+    
+    // 计算类型大小
+    uint64_t typeSize = TypeInfoAnalyzer::getTypeByteSize(lvalueInfo.targetType);
+    std::string sizeReg = irBuilder->newRegister();
+    irBuilder->emitInstruction("%" + sizeReg + " = add i32 " +
+                             std::to_string(typeSize) + ", 0");
+    
+    // 生成 memcpy 调用
+    std::string memcpyResult = irBuilder->newRegister();
+    std::vector<std::string> memcpyArgs = {
+        lvalueInfo.finalAddress,  // 目标地址
+        tempReg,                  // 源地址
+        sizeReg                   // 大小
+    };
+    irBuilder->emitCall(memcpyResult, "llvm.memcpy.p0i8.p0i8.i32",
+                       memcpyArgs, "void");
+    
+    // 返回赋值表达式的值
+    return valueReg;
+}
+```
+
+
+#### 复合赋值表达式的处理
+
+```cpp
+std::string ExpressionGenerator::generateCompoundAssignmentExpression(
+    std::shared_ptr<CompoundAssignmentExpression> expr) {
+    
+    // 生成左值地址
+    LValueInfo lvalueInfo = analyzeLValue(expr->leftexpression);
+    
+    // 加载当前值
+    std::string currentValReg = irBuilder->newRegister();
+    std::string llvmType = typeMapper->mapSemanticTypeToLLVM(lvalueInfo.targetType);
+    irBuilder->emitLoad(currentValReg, lvalueInfo.finalAddress, llvmType);
+    
+    // 生成右值表达式
+    std::string rightValReg = generateExpression(expr->rightexpression);
+    
+    // 执行二元运算
+    std::string resultReg = irBuilder->newRegister();
+    std::string op = mapBinaryOperator(expr->type);
+    
+    switch (expr->type) {
+        case Token::kPlusEq:
+            irBuilder->emitAdd(resultReg, currentValReg, rightValReg, llvmType);
+            break;
+        case Token::kMinusEq:
+            irBuilder->emitSub(resultReg, currentValReg, rightValReg, llvmType);
+            break;
+        case Token::kMulEq:
+            irBuilder->emitMul(resultReg, currentValReg, rightValReg, llvmType);
+            break;
+        case Token::kDivEq:
+            irBuilder->emitDiv(resultReg, currentValReg, rightValReg, llvmType);
+            break;
+        // ... 其他复合运算符
+    }
+    
+    // 存储结果
+    irBuilder->emitStore(resultReg, lvalueInfo.finalAddress, llvmType);
+    
+    return resultReg;
+}
+```
+
+#### 嵌套赋值表达式的优化
+
+对于复杂的嵌套赋值表达式，如 `obj.arr[i].field = value`，ExpressionGenerator采用递归分析方法：
+
+```cpp
+LValueInfo ExpressionGenerator::analyzeNestedAccess(
+    std::shared_ptr<Expression> expr) {
+    
+    if (auto fieldExpr = dynamic_cast<FieldExpression*>(expr.get())) {
+        // 字段访问：递归分析接收者
+        auto receiverInfo = analyzeNestedAccess(fieldExpr->expression);
+        
+        // 计算字段地址
+        std::string fieldPtrReg = irBuilder->newRegister();
+        uint32_t fieldIndex = getFieldIndex(receiverInfo.targetType,
+                                         fieldExpr->identifier);
+        
+        std::vector<std::pair<std::string, std::string>> indices = {
+            {"0", "i32"},
+            {std::to_string(fieldIndex), "i32"}
+        };
+        
+        irBuilder->emitGetElementPtr(fieldPtrReg, receiverInfo.finalAddress, indices);
+        
+        LValueInfo info;
+        info.kind = LValueInfo::LValueKind::NESTED_ACCESS;
+        info.basePointer = receiverInfo.basePointer;
+        info.finalAddress = fieldPtrReg;
+        info.targetType = getFieldType(receiverInfo.targetType,
+                                    fieldExpr->identifier);
+        info.indices = receiverInfo.indices;
+        info.indices.push_back(std::to_string(fieldIndex));
+        
+        return info;
+        
+    } else if (auto indexExpr = dynamic_cast<IndexExpression*>(expr.get())) {
+        // 数组索引：递归分析数组基础
+        auto arrayInfo = analyzeNestedAccess(indexExpr->expressionout);
+        
+        // 计算索引地址
+        std::string indexReg = generateExpression(indexExpr->expressionin);
+        std::string elemPtrReg = irBuilder->newRegister();
+        auto elementType = getElementType(arrayInfo.targetType);
+        
+        irBuilder->emitGetElementPtr(elemPtrReg, arrayInfo.finalAddress,
+                                   "0", indexReg, elementType + "*");
+        
+        LValueInfo info;
+        info.kind = LValueInfo::LValueKind::NESTED_ACCESS;
+        info.basePointer = arrayInfo.basePointer;
+        info.finalAddress = elemPtrReg;
+        info.targetType = elementType;
+        info.indices = arrayInfo.indices;
+        info.indices.push_back(indexReg);
+        
+        return info;
+        
+    } else {
+        // 基础情况：简单变量
+        return analyzeLValue(expr);
+    }
+}
+```
+
+
+
+通过这些实现，ExpressionGenerator的赋值表达式生成功能解决了大型聚合类型的处理问题，确保生成的IR代码正确高效。
 
 ### 字面量表达式生成
 
@@ -1280,189 +1714,6 @@ std::string ExpressionGenerator::generateVariableAccess(const std::string& varNa
 }
 ```
 
-## 错误处理
-
-### 表达式错误检测
-
-```cpp
-class ExpressionGenerator {
-private:
-    bool hasErrors;
-    std::vector<std::string> errorMessages;
-    
-public:
-    void reportError(const std::string& message) {
-        hasErrors = true;
-        errorMessages.push_back(message);
-        std::cerr << "Expression Error: " << message << std::endl;
-    }
-    
-    void reportTypeError(const std::string& expected, const std::string& actual, 
-                        const std::string& context) {
-        reportError("Type error in " + context + 
-                   ": expected '" + expected + "', found '" + actual + "'");
-    }
-    
-    bool hasGenerationErrors() const {
-        return hasErrors;
-    }
-    
-    const std::vector<std::string>& getErrorMessages() const {
-        return errorMessages;
-    }
-};
-```
-
-### 错误恢复策略
-
-```cpp
-std::string ExpressionGenerator::generateExpressionWithErrorRecovery(std::shared_ptr<Expression> expr) {
-    try {
-        return generateExpression(expr);
-    } catch (const GenerationError& error) {
-        reportError(error.what());
-        
-        // 生成默认值
-        std::string exprType = getExpressionType(expr);
-        return generateDefaultValue(exprType);
-    }
-}
-
-std::string ExpressionGenerator::generateDefaultValue(const std::string& type) {
-    if (type == "i32" || type == "i1") {
-        return "0";
-    } else if (type == "bool") {
-        return "false";
-    } else if (isPointerType(type)) {
-        return "null";
-    } else {
-        // 对于复合类型，返回未初始化的值
-        std::string reg = irBuilder->newRegister();
-        irBuilder->emitAlloca(reg, type);
-        return reg;
-    }
-}
-```
-
-## 性能优化
-
-### 常量折叠
-
-```cpp
-std::string ExpressionGenerator::tryConstantFolding(std::shared_ptr<BinaryExpression> expr) {
-    if (!isConstantExpression(expr->leftexpression) || 
-        !isConstantExpression(expr->rightexpression)) {
-        return "";
-    }
-    
-    std::string leftValue = getConstantValue(expr->leftexpression);
-    std::string rightValue = getConstantValue(expr->rightexpression);
-    
-    // 执行常量运算
-    std::string result = evaluateConstantBinaryOp(leftValue, rightValue, expr->binarytype);
-    
-    if (!result.empty()) {
-        return result;
-    }
-    
-    return "";
-}
-```
-
-### 公共子表达式消除
-
-```cpp
-class ExpressionGenerator {
-private:
-    std::unordered_map<std::string, std::string> expressionCache;
-    
-public:
-    std::string generateExpressionWithCaching(std::shared_ptr<Expression> expr) {
-        std::string exprKey = getExpressionKey(expr);
-        
-        auto it = expressionCache.find(exprKey);
-        if (it != expressionCache.end()) {
-            return it->second;
-        }
-        
-        std::string result = generateExpression(expr);
-        expressionCache[exprKey] = result;
-        
-        return result;
-    }
-};
-```
-
-## 测试策略
-
-### 单元测试
-
-```cpp
-// 字面量表达式测试
-TEST(ExpressionGeneratorTest, LiteralExpression) {
-    setupGenerator();
-    
-    // 整数字面量
-    auto intLiteral = std::make_shared<LiteralExpression>("42", Token::kINTEGER_LITERAL);
-    std::string result = generator->generateExpression(intLiteral);
-    EXPECT_EQ(result, "42");
-    
-    // 布尔字面量
-    auto boolLiteral = std::make_shared<LiteralExpression>("true", Token::kTRUE);
-    result = generator->generateExpression(boolLiteral);
-    EXPECT_EQ(result, "true");
-}
-
-// 二元表达式测试
-TEST(ExpressionGeneratorTest, BinaryExpression) {
-    setupGenerator();
-    
-    auto left = std::make_shared<LiteralExpression>("10", Token::kINTEGER_LITERAL);
-    auto right = std::make_shared<LiteralExpression>("20", Token::kINTEGER_LITERAL);
-    auto binaryExpr = std::make_shared<BinaryExpression>(left, right, Token::kPlus);
-    
-    std::string result = generator->generateExpression(binaryExpr);
-    EXPECT_TRUE(result.find("_") == 0); // 应该是寄存器名
-}
-
-// 函数调用测试
-TEST(ExpressionGeneratorTest, FunctionCall) {
-    setupGenerator();
-    
-    auto funcPath = std::make_shared<PathExpression>(
-        std::make_shared<SimplePath>("test_func", false, false));
-    auto callParams = std::make_shared<CallParams>(
-        std::vector<std::shared_ptr<Expression>>{
-            std::make_shared<LiteralExpression>("42", Token::kINTEGER_LITERAL)
-        });
-    auto callExpr = std::make_shared<CallExpression>(funcPath, callParams);
-    
-    std::string result = generator->generateExpression(callExpr);
-    EXPECT_TRUE(result.find("_") == 0); // 应该是寄存器名
-}
-```
-
-### 集成测试
-
-```cpp
-// 复杂表达式测试
-TEST(ExpressionGeneratorIntegrationTest, ComplexExpression) {
-    setupGenerator();
-    
-    // 测试表达式：func(arr[i] + 10, obj.method(x * 2))
-    auto arrIndex = std::make_shared<IndexExpression>(
-        std::make_shared<PathExpression>(std::make_shared<SimplePath>("arr", false, false)),
-        std::make_shared<LiteralExpression>("i", Token::kINTEGER_LITERAL));
-    
-    auto addExpr = std::make_shared<BinaryExpression>(arrIndex, 
-        std::make_shared<LiteralExpression>("10", Token::kINTEGER_LITERAL), Token::kPlus);
-    
-    // ... 构建完整表达式
-    
-    std::string result = generator->generateExpression(complexExpr);
-    EXPECT_FALSE(result.empty());
-}
-```
 
 ## 使用示例
 
@@ -1532,9 +1783,7 @@ ExpressionGenerator 组件是 IR 生成阶段的核心组件，提供了完整�
    - **嵌套循环支持**：正确处理多层嵌套循环中的 break/continue 语义
 4. **类型安全**：与 TypeMapper 紧密集成，确保类型正确性
 5. **寄存器管理**：高效的寄存器分配和生命周期管理
-6. **错误处理**：完善的错误检测和恢复机制
-7. **性能优化**：常量折叠、公共子表达式消除、循环展开等优化
-8. **语义集成**：与语义分析结果完全集成
-9. **易于扩展**：清晰的接口设计，便于添加新的表达式类型
+6. **语义集成**：与语义分析结果完全集成
+7. **易于扩展**：清晰的接口设计，便于添加新的表达式类型
 
 通过 ExpressionGenerator，IR 生成器可以将复杂的 Rx 语言表达式正确地转换为高效的 LLVM IR 代码，并正确处理 BlockExpression 和循环表达式的特殊语义。
