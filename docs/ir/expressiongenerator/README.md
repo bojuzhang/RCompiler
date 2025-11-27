@@ -56,28 +56,32 @@ ExpressionGenerator 将表达式分为以下几类进行处理：
    - 结构体字段访问：`obj.field`
    - 元组索引访问：`tuple.0`
 
-10. **控制流表达式**
+10. **块表达式**（BlockExpression）
+    - 语句块：`{ stmt1; stmt2; expr }`
+    - 无尾表达式块：`{ stmt1; stmt2; }`（值为 unit）
+
+11. **控制流表达式**
     - if 表达式：`if condition { value1 } else { value2 }`
     - loop 表达式：`loop { break value }`
     - while 表达式：`while condition { body }`
 
-11. **一元表达式**（UnaryExpression）
+12. **一元表达式**（UnaryExpression）
     - 取负：`-x`
     - 逻辑非：`!expr`
     - 解引用：`*ptr`
     - 取引用：`&expr`, `&mut expr`
 
-12. **二元表达式**（BinaryExpression）
+13. **二元表达式**（BinaryExpression）
     - 算术运算：`+`, `-`, `*`, `/`, `%`
     - 位运算：`&`, `|`, `^`, `<<`, `>>`
     - 比较运算：`==`, `!=`, `<`, `<=`, `>`, `>=`
     - 逻辑运算：`&&`, `||`
 
-13. **赋值表达式**
+14. **赋值表达式**
     - 简单赋值：`x = value`
     - 复合赋值：`x += value`, `x *= value`
 
-14. **类型转换表达式**（TypeCastExpression）
+15. **类型转换表达式**（TypeCastExpression）
     - 显式类型转换：`expr as target_type`
 
 ### 组件接口设计
@@ -115,6 +119,9 @@ public:
     std::string generateCompoundAssignmentExpression(std::shared_ptr<CompoundAssignmentExpression> expr);
     std::string generateTypeCastExpression(std::shared_ptr<TypeCastExpression> expr);
     
+    // 块表达式
+    std::string generateBlockExpression(std::shared_ptr<BlockExpression> expr);
+    
     // 控制流表达式
     std::string generateIfExpression(std::shared_ptr<IfExpression> expr);
     std::string generateLoopExpression(std::shared_ptr<InfiniteLoopExpression> expr);
@@ -123,13 +130,20 @@ public:
     std::string generateContinueExpression(std::shared_ptr<ContinueExpression> expr);
     std::string generateReturnExpression(std::shared_ptr<ReturnExpression> expr);
     
-    // BlockExpression 处理（需要调用 StatementGenerator）
-    std::string generateBlockExpression(std::shared_ptr<BlockExpression> expr);
+    // 辅助方法：生成 BlockExpression 中的语句
+    void generateBlockStatements(std::shared_ptr<BlockExpression> block);
+    
+    // 辅助方法：生成单元类型值
+    std::string generateUnitValue();
     
     // 工具方法
     std::string getExpressionType(std::shared_ptr<Expression> expr);
     bool isLValue(std::shared_ptr<Expression> expr);
     std::string getLValuePointer(std::shared_ptr<Expression> expr);
+    
+    // BlockExpression 辅助方法
+    void generateBlockStatements(std::shared_ptr<BlockExpression> block);
+    std::string generateUnitValue();
 
 private:
     std::shared_ptr<IRBuilder> irBuilder;
@@ -619,33 +633,337 @@ std::string ExpressionGenerator::generateIfExpression(std::shared_ptr<IfExpressi
 
 #### loop 表达式
 
+loop 表达式是一种无限循环，只能通过 break 语句退出。它的值来自于 break 语句提供的值，如果没有 break 语句或 break 不带值，则为 unit 类型。
+
 ```cpp
 std::string ExpressionGenerator::generateLoopExpression(std::shared_ptr<InfiniteLoopExpression> expr) {
     // 创建基本块
     std::string loopBB = irBuilder->newBasicBlock("loop.start");
     std::string endBB = irBuilder->newBasicBlock("loop.end");
     
-    // 设置循环上下文
-    pushLoopContext(endBB);
+    // 创建循环上下文，用于处理 break/continue
+    LoopContext context;
+    context.loopStartBB = loopBB;
+    context.loopEndBB = endBB;
+    context.hasBreak = false;
+    context.breakValueReg = "";  // 初始化为空，表示没有 break 值
+    context.breakValueType = "unit";  // 默认为 unit 类型
+    
+    // 将循环上下文压入栈
+    pushLoopContext(context);
     
     // 跳转到循环开始
     irBuilder->emitBr(loopBB);
     
     // 生成循环体
     irBuilder->emitLabel(loopBB);
-    std::string bodyReg = generateExpression(expr->blockexpression);
     
-    // 如果循环体没有 break，继续循环
+    // 注意：循环体的值不直接使用，因为 loop 表达式的值来自 break
+    generateExpression(expr->blockexpression);
+    
+    // 如果循环体执行到这里，说明没有遇到 break，继续循环
     irBuilder->emitBr(loopBB);
     
-    // 循环结束
+    // 循环结束标签
+    irBuilder->emitLabel(endBB);
+    
+    // 获取循环上下文中的 break 信息
+    context = getCurrentLoopContext();
+    
+    // 清理循环上下文
+    popLoopContext();
+    
+    // 处理 loop 表达式的返回值
+    if (context.hasBreak) {
+        // 有 break 语句，返回 break 提供的值
+        if (context.breakValueReg.empty()) {
+            // break 不带值，返回 unit 类型
+            return generateUnitValue();
+        } else {
+            // break 带值，返回 break 的值
+            return context.breakValueReg;
+        }
+    } else {
+        // 没有 break 语句，返回 unit 类型
+        return generateUnitValue();
+    }
+}
+```
+
+##### break 表达式的值处理
+
+break 表达式可以带值或不带值，它的值成为整个 loop 表达式的返回值：
+
+```cpp
+std::string ExpressionGenerator::generateBreakExpression(std::shared_ptr<BreakExpression> expr) {
+    // 获取当前循环上下文
+    LoopContext& context = getCurrentLoopContext();
+    context.hasBreak = true;
+    
+    // 处理 break 表达式的值（如果有）
+    if (expr->expression) {
+        // break 带值：break value
+        std::string breakValueReg = generateExpression(expr->expression);
+        context.breakValueReg = breakValueReg;
+        context.breakValueType = getExpressionType(expr->expression);
+        
+        // 跳转到循环结束
+        irBuilder->emitBr(context.loopEndBB);
+    } else {
+        // break 不带值
+        context.breakValueReg = "";  // 空字符串表示没有值
+        context.breakValueType = "unit";
+        
+        // 跳转到循环结束
+        irBuilder->emitBr(context.loopEndBB);
+    }
+    
+    // break 表达式本身不产生值，因为它会中断控制流
+    // 这里返回一个哑值，实际不会使用
+    return generateUnitValue();
+}
+```
+
+##### continue 表达式的跳转处理
+
+continue 表达式用于跳过当前迭代，直接进入下一次迭代：
+
+```cpp
+std::string ExpressionGenerator::generateContinueExpression(std::shared_ptr<ContinueExpression> expr) {
+    // 获取当前循环上下文
+    LoopContext& context = getCurrentLoopContext();
+    
+    // 跳转到循环开始
+    irBuilder->emitBr(context.loopStartBB);
+    
+    // continue 表达式本身不产生值，因为它会中断控制流
+    // 这里返回一个哑值，实际不会使用
+    return generateUnitValue();
+}
+```
+
+##### 循环上下文管理
+
+为了正确处理 break/continue 的跳转，需要维护循环上下文栈：
+
+```cpp
+class ExpressionGenerator {
+private:
+    struct LoopContext {
+        std::string loopStartBB;      // 循环开始基本块
+        std::string loopEndBB;        // 循环结束基本块
+        bool hasBreak;                // 是否有 break 语句
+        std::string breakValueReg;    // break 语句的值寄存器
+        std::string breakValueType;   // break 值的类型
+    };
+    
+    std::vector<LoopContext> loopContextStack;  // 循环上下文栈
+    
+    // 压入新的循环上下文
+    void pushLoopContext(const LoopContext& context) {
+        loopContextStack.push_back(context);
+    }
+    
+    // 弹出当前循环上下文
+    void popLoopContext() {
+        if (!loopContextStack.empty()) {
+            loopContextStack.pop_back();
+        }
+    }
+    
+    // 获取当前循环上下文
+    LoopContext& getCurrentLoopContext() {
+        if (loopContextStack.empty()) {
+            reportError("No loop context available for break/continue");
+            // 返回一个默认上下文，避免崩溃
+            static LoopContext defaultContext;
+            return defaultContext;
+        }
+        return loopContextStack.back();
+    }
+};
+```
+
+#### while 表达式
+
+while 表达式是条件循环，当条件为真时重复执行循环体，条件为假时退出。与 loop 不同，while 表达式的值**恒定为 unit 类型**，无论是否有 break 语句。
+
+```cpp
+std::string ExpressionGenerator::generateWhileExpression(std::shared_ptr<PredicateLoopExpression> expr) {
+    // 创建基本块
+    std::string condBB = irBuilder->newBasicBlock("while.cond");
+    std::string bodyBB = irBuilder->newBasicBlock("while.body");
+    std::string endBB = irBuilder->newBasicBlock("while.end");
+    
+    // 创建循环上下文，用于处理 break/continue
+    LoopContext context;
+    context.loopStartBB = condBB;  // while 循环的"开始"是条件检查
+    context.loopEndBB = endBB;
+    context.hasBreak = false;
+    context.breakValueReg = "";    // while 不需要 break 值，因为返回值始终是 unit
+    context.breakValueType = "unit";
+    
+    // 将循环上下文压入栈
+    pushLoopContext(context);
+    
+    // 跳转到条件检查
+    irBuilder->emitBr(condBB);
+    
+    // 生成条件检查
+    irBuilder->emitLabel(condBB);
+    std::string condReg = generateExpression(expr->conditions->expression);
+    
+    // 条件为假时跳转到循环结束
+    irBuilder->emitCondBr(condReg, bodyBB, endBB);
+    
+    // 生成循环体
+    irBuilder->emitLabel(bodyBB);
+    generateExpression(expr->blockexpression);
+    
+    // 循环体执行完毕，跳回条件检查
+    irBuilder->emitBr(condBB);
+    
+    // 循环结束标签
     irBuilder->emitLabel(endBB);
     
     // 清理循环上下文
     popLoopContext();
     
-    // 返回 break 值或单元类型
-    return getLoopBreakValue(bodyReg);
+    // while 表达式的值恒定为 unit 类型
+    return generateUnitValue();
+}
+```
+
+##### while 循环中的 break 表达式
+
+在 while 循环中，break 语句可以提前退出循环，但不会影响 while 表达式的返回值（始终为 unit）：
+
+```cpp
+std::string ExpressionGenerator::generateBreakExpression(std::shared_ptr<BreakExpression> expr) {
+    // 获取当前循环上下文
+    LoopContext& context = getCurrentLoopContext();
+    context.hasBreak = true;
+    
+    // 处理 break 表达式的值（如果有）
+    if (expr->expression) {
+        // break 带值：break value
+        // 在 while 循环中，break 的值被忽略，但仍需生成表达式以处理副作用
+        std::string breakValueReg = generateExpression(expr->expression);
+        context.breakValueReg = breakValueReg;
+        context.breakValueType = getExpressionType(expr->expression);
+    } else {
+        // break 不带值
+        context.breakValueReg = "";
+        context.breakValueType = "unit";
+    }
+    
+    // 跳转到循环结束
+    irBuilder->emitBr(context.loopEndBB);
+    
+    // break 表达式本身不产生值，因为它会中断控制流
+    return generateUnitValue();
+}
+```
+
+##### while 循环中的 continue 表达式
+
+在 while 循环中，continue 语句会跳转到条件检查，而不是循环体开始：
+
+```cpp
+std::string ExpressionGenerator::generateContinueExpression(std::shared_ptr<ContinueExpression> expr) {
+    // 获取当前循环上下文
+    LoopContext& context = getCurrentLoopContext();
+    
+    // 对于 while 循环，continue 跳转到条件检查
+    irBuilder->emitBr(context.loopStartBB);
+    
+    // continue 表达式本身不产生值，因为它会中断控制流
+    return generateUnitValue();
+}
+```
+
+##### loop 与 while 的关键区别
+
+1. **返回值**：
+   - `loop` 表达式的值来自 `break` 语句，没有 `break` 时为 `unit`
+   - `while` 表达式的值**恒定为 `unit`**，不受 `break` 影响
+
+2. **跳转目标**：
+   - `loop` 中 `continue` 跳转到循环体开始
+   - `while` 中 `continue` 跳转到条件检查
+
+3. **break 值的处理**：
+   - `loop` 中 `break` 的值成为整个表达式的返回值
+   - `while` 中 `break` 的值被忽略（但仍需生成以处理副作用）
+
+##### 嵌套循环的处理
+
+对于嵌套循环，每个循环都有自己的上下文，break/continue 只影响最内层的循环：
+
+```cpp
+// 示例：loop { while condition { break; } break 42; }
+
+// 外层 loop 上下文
+LoopContext outerContext;
+outerContext.loopStartBB = outerLoopBB;
+outerContext.loopEndBB = outerEndBB;
+pushLoopContext(outerContext);
+
+// 内层 while 上下文
+LoopContext innerContext;
+innerContext.loopStartBB = whileCondBB;
+innerContext.loopEndBB = whileEndBB;
+pushLoopContext(innerContext);
+
+// 内层 break 只退出 while 循环
+// 外层 break 退出 loop 循环并返回值 42
+```
+
+##### 循环中的值传递与优化
+
+在循环中，特别是 loop 表达式中，break 值的传递需要特别处理：
+
+```cpp
+// 处理不同类型的 break 值
+std::string ExpressionGenerator::handleLoopBreakValue(const LoopContext& context) {
+    if (!context.hasBreak) {
+        return generateUnitValue();
+    }
+    
+    if (context.breakValueReg.empty()) {
+        // break 不带值
+        return generateUnitValue();
+    }
+    
+    // break 带值，可能需要类型转换
+    std::string expectedType = getExpectedLoopReturnType();
+    std::string actualType = context.breakValueType;
+    
+    if (expectedType != actualType) {
+        // 需要类型转换
+        return generateImplicitConversion(context.breakValueReg, actualType, expectedType);
+    }
+    
+    return context.breakValueReg;
+}
+```
+
+##### 循环展开与优化
+
+对于某些简单的循环，可以在编译时进行循环展开：
+
+```cpp
+std::string ExpressionGenerator::tryLoopUnrolling(std::shared_ptr<InfiniteLoopExpression> expr) {
+    // 检查是否是简单的计数循环
+    if (isSimpleCountingLoop(expr)) {
+        int iterations = getLoopIterationCount(expr);
+        if (iterations > 0 && iterations <= MAX_UNROLL_COUNT) {
+            return generateUnrolledLoop(expr, iterations);
+        }
+    }
+    
+    // 无法展开，使用标准循环生成
+    return generateLoopExpression(expr);
 }
 ```
 
@@ -686,6 +1004,168 @@ std::string ExpressionGenerator::generateExplicitConversion(const std::string& v
         reportError("Unsupported type conversion from " + fromType + " to " + toType);
         return value;
     }
+    
+    return resultReg;
+}
+```
+
+### BlockExpression 生成
+
+BlockExpression 是一种特殊的表达式，它包含一系列语句和一个可选的尾表达式。BlockExpression 的值是尾表达式的值，如果没有尾表达式，则为单元类型值。
+
+```cpp
+std::string ExpressionGenerator::generateBlockExpression(std::shared_ptr<BlockExpression> expr) {
+    if (!statementGenerator) {
+        reportError("StatementGenerator not set for BlockExpression");
+        return generateUnitValue();
+    }
+    
+    // 创建新的作用域
+    scopeTree->EnterScope();
+    irBuilder->enterScope();
+    
+    // 生成块内的所有语句
+    generateBlockStatements(expr);
+    
+    // 处理尾表达式（如果有）
+    std::string resultValue;
+    if (expr->expressionwithoutblock) {
+        resultValue = generateExpression(expr->expressionwithoutblock);
+    } else {
+        // 没有尾表达式，返回单元类型
+        resultValue = generateUnitValue();
+    }
+    
+    // 退出作用域
+    irBuilder->exitScope();
+    scopeTree->ExitScope();
+    
+    return resultValue;
+}
+
+void ExpressionGenerator::generateBlockStatements(std::shared_ptr<BlockExpression> block) {
+    // 遍历块内的所有语句，使用 StatementGenerator 生成
+    for (const auto& stmt : block->statements) {
+        statementGenerator->generateStatement(stmt);
+    }
+}
+
+std::string ExpressionGenerator::generateUnitValue() {
+    // 生成单元类型的值
+    std::string unitReg = irBuilder->newRegister();
+    irBuilder->emitInstruction("%" + unitReg + " = add i8 0, 0  ; unit value");
+    return unitReg;
+}
+```
+
+#### BlockExpression 的值处理
+
+BlockExpression 作为表达式，必须有返回值：
+
+1. **有尾表达式的情况**：
+   ```cpp
+   // 示例：{ let x = 1; let y = 2; x + y }
+   // BlockExpression 的值是 x + y 的结果
+   std::string ExpressionGenerator::generateBlockExpression(std::shared_ptr<BlockExpression> expr) {
+       // ... 生成语句 ...
+       
+       if (expr->expressionwithoutblock) {
+           // 返回尾表达式的值
+           return generateExpression(expr->expressionwithoutblock);
+       }
+       // ...
+   }
+   ```
+
+2. **无尾表达式的情况**：
+   ```cpp
+   // 示例：{ let x = 1; printlnInt(x); }
+   // BlockExpression 的值是单元类型
+   std::string ExpressionGenerator::generateBlockExpression(std::shared_ptr<BlockExpression> expr) {
+       // ... 生成语句 ...
+       
+       if (!expr->expressionwithoutblock) {
+           // 返回单元类型值
+           return generateUnitValue();
+       }
+       // ...
+   }
+   ```
+
+#### 嵌套 BlockExpression 处理
+
+BlockExpression 可以嵌套，每个块都有自己的作用域：
+
+```cpp
+std::string ExpressionGenerator::generateNestedBlockExpression(std::shared_ptr<BlockExpression> expr) {
+    // 外层块作用域
+    scopeTree->EnterScope();
+    irBuilder->enterScope();
+    
+    // 生成外层块语句
+    generateBlockStatements(expr);
+    
+    // 处理内层块表达式
+    std::string result;
+    if (expr->expressionwithoutblock) {
+        if (auto innerBlock = std::dynamic_pointer_cast<BlockExpression>(expr->expressionwithoutblock)) {
+            // 递归处理内层块
+            result = generateBlockExpression(innerBlock);
+        } else {
+            // 普通表达式
+            result = generateExpression(expr->expressionwithoutblock);
+        }
+    } else {
+        result = generateUnitValue();
+    }
+    
+    // 退出外层块作用域
+    irBuilder->exitScope();
+    scopeTree->ExitScope();
+    
+    return result;
+}
+```
+
+#### BlockExpression 在控制流中的使用
+
+BlockExpression 常用于控制流表达式中：
+
+```cpp
+// if 表达式中的 BlockExpression
+std::string ExpressionGenerator::generateIfExpression(std::shared_ptr<IfExpression> expr) {
+    // 生成条件
+    std::string condReg = generateExpression(expr->conditions->expression);
+    
+    // 创建基本块
+    std::string thenBB = irBuilder->newBasicBlock("if.then");
+    std::string elseBB = irBuilder->newBasicBlock("if.else");
+    std::string endBB = irBuilder->newBasicBlock("if.end");
+    
+    // 生成条件跳转
+    irBuilder->emitCondBr(condReg, thenBB, elseBB);
+    
+    // 生成 then 分支（BlockExpression）
+    irBuilder->emitLabel(thenBB);
+    std::string thenReg = generateBlockExpression(expr->ifblockexpression);
+    irBuilder->emitBr(endBB);
+    
+    // 生成 else 分支（BlockExpression 或其他表达式）
+    irBuilder->emitLabel(elseBB);
+    std::string elseReg;
+    if (expr->elseexpression) {
+        elseReg = generateExpression(expr->elseexpression);
+    } else {
+        elseReg = generateUnitValue();
+    }
+    irBuilder->emitBr(endBB);
+    
+    // 生成 phi 节点
+    irBuilder->emitLabel(endBB);
+    std::string resultReg = irBuilder->newRegister();
+    std::string resultType = getExpressionType(expr);
+    std::string llvmType = typeMapper->mapRxTypeToLLVM(resultType);
+    irBuilder->emitPhi(resultReg, llvmType, {thenReg, elseReg}, {thenBB, elseBB});
     
     return resultReg;
 }
@@ -1043,12 +1523,18 @@ result = exprGen.generateExpression(methodCall);
 
 ExpressionGenerator 组件是 IR 生成阶段的核心组件，提供了完整的表达式生成功能：
 
-1. **完整的表达式支持**：支持所有 Rx 语言表达式类型的 IR 生成
-2. **类型安全**：与 TypeMapper 紧密集成，确保类型正确性
-3. **寄存器管理**：高效的寄存器分配和生命周期管理
-4. **错误处理**：完善的错误检测和恢复机制
-5. **性能优化**：常量折叠、公共子表达式消除等优化
-6. **语义集成**：与语义分析结果完全集成
-7. **易于扩展**：清晰的接口设计，便于添加新的表达式类型
+1. **完整的表达式支持**：支持所有 Rx 语言表达式类型的 IR 生成，包括 BlockExpression
+2. **BlockExpression 处理**：完整支持块表达式的语句生成和值计算，正确处理尾表达式和单元类型
+3. **循环表达式处理**：
+   - **loop 表达式**：详细说明如何从 break 处获取表达式的值（没有则为 unit）
+   - **while 表达式**：明确其值恒定为 unit，不受 break 影响
+   - **break/continue 跳转处理**：完善的循环上下文管理和控制流处理
+   - **嵌套循环支持**：正确处理多层嵌套循环中的 break/continue 语义
+4. **类型安全**：与 TypeMapper 紧密集成，确保类型正确性
+5. **寄存器管理**：高效的寄存器分配和生命周期管理
+6. **错误处理**：完善的错误检测和恢复机制
+7. **性能优化**：常量折叠、公共子表达式消除、循环展开等优化
+8. **语义集成**：与语义分析结果完全集成
+9. **易于扩展**：清晰的接口设计，便于添加新的表达式类型
 
-通过 ExpressionGenerator，IR 生成器可以将复杂的 Rx 语言表达式正确地转换为高效的 LLVM IR 代码。
+通过 ExpressionGenerator，IR 生成器可以将复杂的 Rx 语言表达式正确地转换为高效的 LLVM IR 代码，并正确处理 BlockExpression 和循环表达式的特殊语义。

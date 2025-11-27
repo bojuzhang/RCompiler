@@ -362,6 +362,7 @@ public:
     std::string generateCall(const CallExpression* call);
     std::string generateIndex(const IndexExpression* index);
     std::string generateField(const FieldExpression* field);
+    std::string generateBlock(const BlockExpression* block);  // 新增：BlockExpression 处理
     std::string generateIf(const IfExpression* ifExpr);
     std::string generateLoop(const LoopExpression* loopExpr);
     std::string generateBreak(const BreakExpression* breakExpr);
@@ -615,6 +616,33 @@ void StatementCodegen::generateBreak(const BreakStatement* breakStmt) {
         return;
     }
     generator.getBuilder().emitBr(loopStack.back().breakTarget);
+}
+```
+
+#### BlockExpression 处理的职责划分
+```cpp
+// ExpressionCodegen 处理 BlockExpression
+std::string ExpressionCodegen::generateBlock(const BlockExpression* block) {
+    // 创建新作用域
+    generator.getBuilder().enterScope();
+    
+    // 处理块内语句（通过 StatementCodegen）
+    for (const auto& stmt : block->statements) {
+        generator.getStatementCodegen().generateStatement(stmt);
+    }
+    
+    // 处理尾表达式
+    std::string result;
+    if (block->expressionwithoutblock) {
+        result = generateExpression(block->expressionwithoutblock);
+    } else {
+        result = generateUnitValue();
+    }
+    
+    // 退出作用域
+    generator.getBuilder().exitScope();
+    
+    return result;
 }
 ```
 

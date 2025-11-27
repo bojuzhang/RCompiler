@@ -35,12 +35,13 @@ IR 生成器由以下主要组件组成：
 4. **ExpressionGenerator（表达式代码生成器）**
    - 为各种表达式生成 LLVM IR 文本
    - 管理表达式值的计算和寄存器分配
-   - 处理 BlockExpression 中的语句（通过 StatementGenerator 接口）
+   - 完全处理 BlockExpression，包括其中的语句和尾表达式值
 
 5. **StatementGenerator（语句代码生成器）**
-   - 为控制流语句生成 LLVM IR 文本
+   - 为真正的语句生成 LLVM IR 文本
    - 管理基本块和跳转指令
-   - 处理 Let 语句、Item 语句和 ExpressionStatement
+   - 只处理 Let 语句、Item 语句和 ExpressionStatement
+   - 不再处理 BlockExpression
 
 6. **FunctionCodegen（函数代码生成器）**
    - 处理函数定义和调用
@@ -70,9 +71,10 @@ AST → 符号表 → 类型信息 → IRGenerator → ExpressionGenerator/State
 2. **接口分离**：将循环依赖的操作分离到独立接口
 3. **延迟初始化**：通过构造函数后初始化解决循环引用
 4. **职责明确**：
-   - `StatementGenerator`：处理真正的语句（Let、Item、ExpressionStatement）
-   - `ExpressionGenerator`：处理表达式和控制流表达式
-   - `BlockExpression`：由 `ExpressionGenerator` 调用 `StatementGenerator` 处理其中的语句
+   - `StatementGenerator`：只处理真正的语句（Let、Item、ExpressionStatement）
+   - `ExpressionGenerator`：处理所有表达式，包括 BlockExpression 和控制流表达式
+   - `BlockExpression`：完全由 `ExpressionGenerator` 处理，包括语句生成和值计算
+   - `BlockExpression` 的值：尾表达式的值（如果有），否则为单元类型
 
 ## 详细工作流程
 
@@ -183,47 +185,62 @@ AST → 符号表 → 类型信息 → IRGenerator → ExpressionGenerator/State
    - Item 语句：函数定义、结构体定义等
 
 2. **循环依赖处理**
-   ```cpp
-   // ExpressionGenerator 处理 BlockExpression 时调用 StatementGenerator
-   std::string ExpressionGenerator::generateBlockExpression(std::shared_ptr<BlockExpression> expr) {
-       if (!statementGenerator) {
-           reportError("StatementGenerator not set");
-           return generateUnitValue();
-       }
-       
-       // 处理块内的所有语句
-       for (const auto& stmt : expr->statements) {
-           statementGenerator->generateStatement(stmt);
-       }
-       
-       // 处理结尾表达式
-       if (expr->expressionwithoutblock) {
-           return generateExpression(expr->expressionwithoutblock);
-       } else {
-           return generateUnitValue();
-       }
-   }
-   ```
+    ```cpp
+    // ExpressionGenerator 完全处理 BlockExpression
+    std::string ExpressionGenerator::generateBlockExpression(std::shared_ptr<BlockExpression> expr) {
+        if (!statementGenerator) {
+            reportError("StatementGenerator not set");
+            return generateUnitValue();
+        }
+        
+        // 创建新作用域
+        scopeTree->EnterScope();
+        irBuilder->enterScope();
+        
+        // 处理块内的所有语句（通过 StatementGenerator）
+        for (const auto& stmt : expr->statements) {
+            statementGenerator->generateStatement(stmt);
+        }
+        
+        // 处理尾表达式
+        std::string resultValue;
+        if (expr->expressionwithoutblock) {
+            resultValue = generateExpression(expr->expressionwithoutblock);
+        } else {
+            // 没有尾表达式，返回单元类型
+            resultValue = generateUnitValue();
+        }
+        
+        // 退出作用域
+        irBuilder->exitScope();
+        scopeTree->ExitScope();
+        
+        return resultValue;
+    }
+    ```
 
 3. **寄存器和作用域管理**
-   ```cpp
-   // StatementGenerator 处理 Let 语句
-   void StatementGenerator::generateLetStatement(std::shared_ptr<LetStatement> stmt) {
-       // 分配变量空间
-       std::string varPtrReg = irBuilder->newRegister(varName, "ptr");
-       irBuilder->emitAlloca(varPtrReg, varType);
-       
-       // 生成初始化表达式（调用 ExpressionGenerator）
-       if (stmt->expression && exprGenerator) {
-           std::string initReg = exprGenerator->generateExpression(stmt->expression);
-           irBuilder->emitStore(initReg, varPtrReg, varType);
-       }
-       
-       // 注册变量到作用域
-       scopeTree->InsertSymbol(varName, symbol);
-       irBuilder->setVariableRegister(varName, varPtrReg);
-   }
-   ```
+    ```cpp
+    // StatementGenerator 处理 Let 语句
+    void StatementGenerator::generateLetStatement(std::shared_ptr<LetStatement> stmt) {
+        // 分配变量空间
+        std::string varPtrReg = irBuilder->newRegister(varName, "ptr");
+        irBuilder->emitAlloca(varPtrReg, varType);
+        
+        // 生成初始化表达式（调用 ExpressionGenerator）
+        if (stmt->expression && exprGenerator) {
+            std::string initReg = exprGenerator->generateExpression(stmt->expression);
+            irBuilder->emitStore(initReg, varPtrReg, varType);
+        }
+        
+        // 注册变量到作用域
+        scopeTree->InsertSymbol(varName, symbol);
+        irBuilder->setVariableRegister(varName, varPtrReg);
+    }
+    
+    // 注意：StatementGenerator 不再处理 BlockExpression
+    // BlockExpression 完全由 ExpressionGenerator 处理
+    ```
 
 ### 阶段 5：语句生成
 
@@ -580,5 +597,7 @@ int main(int argc, char* argv[]) {
 3. **内置函数声明**：只声明内置函数，与 builtin.c 联合编译
 4. **stdout 输出**：直接输出到 stdout，便于管道操作
 5. **模块化设计**：保持清晰的组件分离和接口定义
+6. **职责明确**：BlockExpression 完全由 ExpressionGenerator 处理，StatementGenerator 只处理真正的语句
+7. **值语义正确**：BlockExpression 有明确的值（尾表达式的值或单元类型）
 
-这种设计确保了 IR 生成器的独立性、可控性和与现有编译器架构的良好集成。
+这种设计确保了 IR 生成器的独立性、可控性和与现有编译器架构的良好集成，同时正确处理了 BlockExpression 的特殊语义。

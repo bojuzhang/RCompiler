@@ -36,7 +36,7 @@ StatementGenerator 组件负责将 Rx 语言的语句转换为 LLVM IR 文本。
    - 常量定义：`const NAME: type = value`
 
 4. **复合语句**（通过 Statement 组合处理）
-   - 块语句：通过 Statement 处理 BlockExpression
+   - 注意：BlockExpression 现在由 ExpressionGenerator 处理，StatementGenerator 不再处理
 
 ### 循环依赖解决策略
 
@@ -49,6 +49,10 @@ StatementGenerator 组件负责将 Rx 语言的语句转换为 LLVM IR 文本。
 1. **前向声明**：两个组件互相前向声明
 2. **接口分离**：将循环依赖的操作分离到独立接口
 3. **延迟初始化**：通过构造函数后初始化解决循环引用
+4. **职责明确**：
+   - `StatementGenerator`：只处理真正的语句（Let、Item、ExpressionStatement）
+   - `ExpressionGenerator`：处理所有表达式，包括 BlockExpression 和控制流表达式
+   - `BlockExpression`：完全由 `ExpressionGenerator` 处理，通过调用 `StatementGenerator` 处理其中的语句
 
 ### 组件接口设计
 
@@ -103,17 +107,10 @@ private:
     void addContinueTarget(const std::string& label);
     std::string getCurrentBreakTarget();
     std::string getCurrentContinueTarget();
-    
-    // 处理 BlockExpression 的私有方法
-    void generateBlockExpressionStatements(std::shared_ptr<BlockExpression> block);
 };
 
-// 独立的 BlockExpression 处理接口
-class BlockExpressionProcessor {
-public:
-    static void processBlockExpression(std::shared_ptr<BlockExpression> block,
-                                  std::shared_ptr<StatementGenerator> stmtGen);
-};
+// 注意：BlockExpression 现在完全由 ExpressionGenerator 处理
+// StatementGenerator 只提供 generateStatement 方法供 ExpressionGenerator 调用
 ```
 
 ## 实现策略
@@ -173,7 +170,7 @@ void StatementGenerator::generateLetStatement(std::shared_ptr<LetStatement> stmt
 ```cpp
 void StatementGenerator::generateExpressionStatement(std::shared_ptr<ExpressionStatement> stmt) {
     // 表达式语句存储的是 Expression（可能是控制流表达式）
-    // 需要根据实际的表达式类型来处理
+    // 注意：BlockExpression 现在由 ExpressionGenerator 完全处理
     if (!exprGenerator) {
         reportError("ExpressionGenerator not set for ExpressionStatement");
         return;
@@ -190,6 +187,9 @@ void StatementGenerator::generateExpressionStatement(std::shared_ptr<ExpressionS
         exprGenerator->generateBreakExpression(breakExpr);
     } else if (auto returnExpr = std::dynamic_pointer_cast<ReturnExpression>(stmt->astnode)) {
         exprGenerator->generateReturnExpression(returnExpr);
+    } else if (auto blockExpr = std::dynamic_pointer_cast<BlockExpression>(stmt->astnode)) {
+        // BlockExpression 现在由 ExpressionGenerator 处理
+        exprGenerator->generateBlockExpression(blockExpr);
     } else {
         // 普通表达式，生成并丢弃结果
         std::string exprReg = exprGenerator->generateExpression(stmt->astnode);
@@ -241,7 +241,12 @@ void StatementGenerator::generateIfStatement(std::shared_ptr<IfExpression> stmt)
     // 生成 then 分支
     irBuilder->setCurrentBasicBlock(thenBB);
     irBuilder->enterScope(); // then 块的作用域
-    generateStatement(std::make_shared<Statement>(stmt->ifblockexpression));
+    // 注意：BlockExpression 现在由 ExpressionGenerator 处理
+    if (auto blockExpr = std::dynamic_pointer_cast<BlockExpression>(stmt->ifblockexpression)) {
+        exprGenerator->generateBlockExpression(blockExpr);
+    } else {
+        generateStatement(std::make_shared<Statement>(stmt->ifblockexpression));
+    }
     irBuilder->exitScope();
     
     // 检查 then 分支是否以终止符结束
@@ -289,7 +294,12 @@ void StatementGenerator::generateLoopStatement(std::shared_ptr<InfiniteLoopExpre
     irBuilder->enterScope(); // 循环体作用域
     
     // 生成循环体语句
-    generateStatement(std::make_shared<Statement>(stmt->blockexpression));
+    // 注意：BlockExpression 现在由 ExpressionGenerator 处理
+    if (auto blockExpr = std::dynamic_pointer_cast<BlockExpression>(stmt->blockexpression)) {
+        exprGenerator->generateBlockExpression(blockExpr);
+    } else {
+        generateStatement(std::make_shared<Statement>(stmt->blockexpression));
+    }
     
     irBuilder->exitScope();
     
@@ -329,7 +339,12 @@ void StatementGenerator::generateWhileStatement(std::shared_ptr<PredicateLoopExp
     irBuilder->setCurrentBasicBlock(bodyBB);
     irBuilder->enterScope(); // 循环体作用域
     
-    generateStatement(std::make_shared<Statement>(stmt->blockexpression));
+    // 注意：BlockExpression 现在由 ExpressionGenerator 处理
+    if (auto blockExpr = std::dynamic_pointer_cast<BlockExpression>(stmt->blockexpression)) {
+        exprGenerator->generateBlockExpression(blockExpr);
+    } else {
+        generateStatement(std::make_shared<Statement>(stmt->blockexpression));
+    }
     
     irBuilder->exitScope();
     
@@ -544,20 +559,9 @@ public:
 ### 与 ScopeTree 的集成
 
 ```cpp
-void StatementGenerator::generateBlockStatement(std::shared_ptr<BlockExpression> block) {
-    // 进入新作用域
-    scopeTree->EnterScope();
-    irBuilder->enterScope();
-    
-    // 生成块内语句
-    for (const auto& stmt : block->statements) {
-        generateStatement(stmt);
-    }
-    
-    // 退出作用域
-    irBuilder->exitScope();
-    scopeTree->ExitScope();
-}
+// 注意：BlockExpression 现在完全由 ExpressionGenerator 处理
+// StatementGenerator 不再直接处理 BlockExpression
+// ExpressionGenerator 会调用 StatementGenerator::generateStatement 来处理 BlockExpression 中的语句
 ```
 
 ## 错误处理
@@ -791,10 +795,11 @@ StatementGenerator 组件是 IR 生成阶段的核心组件，提供了完整的
 
 1. **完整的语句支持**：支持所有 Rx 语言语句类型的 IR 生成
 2. **与 ExpressionGenerator 协作**：无缝集成表达式生成，共享寄存器管理
-3. **控制流管理**：正确处理复杂嵌套控制流结构
-4. **作用域感知**：与 ScopeTree 和 IRBuilder 完全集成
-5. **错误处理**：完善的错误检测和恢复机制
-6. **性能优化**：死代码消除、基本块合并等优化
-7. **易于扩展**：清晰的接口设计，便于添加新的语句类型
+3. **职责明确**：只处理真正的语句（Let、Item、ExpressionStatement），不处理 BlockExpression
+4. **控制流管理**：正确处理复杂嵌套控制流结构
+5. **作用域感知**：与 ScopeTree 和 IRBuilder 完全集成
+6. **错误处理**：完善的错误检测和恢复机制
+7. **性能优化**：死代码消除、基本块合并等优化
+8. **易于扩展**：清晰的接口设计，便于添加新的语句类型
 
 通过 StatementGenerator，IR 生成器可以将复杂的 Rx 语言语句正确地转换为高效的 LLVM IR 代码，并与 ExpressionGenerator、IRBuilder、TypeMapper 等组件形成完整的代码生成流水线。
