@@ -43,413 +43,184 @@ FunctionCodegen 处理以下函数相关任务：
 
 ### 组件接口设计
 
-```cpp
-// 前向声明
-class ExpressionGenerator;
-class StatementGenerator;
+**构造函数**
+- 接收 IRBuilder、TypeMapper、ScopeTree 作为核心依赖
+- 初始化函数上下文栈和内置函数缓存
+- 设置组件的基本状态
 
-class FunctionCodegen {
-public:
-    FunctionCodegen(std::shared_ptr<IRBuilder> irBuilder,
-                   std::shared_ptr<TypeMapper> typeMapper,
-                   std::shared_ptr<ScopeTree> scopeTree);
-    
-    // 设置依赖组件
-    void setExpressionGenerator(std::shared_ptr<ExpressionGenerator> exprGen);
-    void setStatementGenerator(std::shared_ptr<StatementGenerator> stmtGen);
-    
-    // 主要生成接口
-    void generateFunction(const Function* function);
-    void generateFunctionDeclaration(const Function* function);
-    void generateFunctionBody(const Function* function);
-    
-    // 内置函数调用生成（供 ExpressionGenerator 调用）
-    std::string generateBuiltinCall(const CallExpression* call);
-    
-    // 参数处理
-    void generateParameters(const Function* function);
-    std::string generateArgumentLoad(const Parameter* param, const std::string& arg);
-    void generateParameterAlloca(const Parameter* param, const std::string& arg);
-    
-    // 返回值处理
-    void generateReturnStatement(const ReturnExpression* returnExpr);
-    std::string generateReturnValue(const Expression* returnExpr);
-    void generateReturnPhi();
-    void generateTailExpressionReturn(const Statement* body);
-    void generateDefaultReturn();
-    
-    // 函数签名生成
-    std::string generateFunctionSignature(const Function* function);
-    std::vector<std::pair<std::string, std::string>> generateParameterList(const Function* function);
-    std::string generateFunctionType(const Function* function);
-    
-    // 工具方法（供 ExpressionGenerator 调用）
-    std::string getFunctionName(const Function* function);
-    std::string getMangledName(const Function* function);
-    bool isBuiltinFunction(const std::string& name);
-    std::string getBuiltinFunctionType(const std::string& name);
-    std::string generateArgument(const Expression* arg, const Type* paramType);
-    std::string generateStructArgument(const std::string& arg, const std::string& structType);
+**依赖组件设置**
+- `setExpressionGenerator()`: 设置表达式生成器引用，用于处理返回值表达式
+- `setStatementGenerator()`: 设置语句生成器引用，用于生成函数体语句
 
-private:
-    std::shared_ptr<IRBuilder> irBuilder;
-    std::shared_ptr<TypeMapper> typeMapper;
-    std::shared_ptr<ScopeTree> scopeTree;
-    std::shared_ptr<ExpressionGenerator> expressionGenerator;
-    std::shared_ptr<StatementGenerator> statementGenerator;
-    
-    // 函数上下文管理
-    struct FunctionContext {
-        std::string functionName;
-        std::string returnType;
-        std::string returnBlock;
-        std::string returnPhiReg;
-        bool hasReturn;
-        std::vector<std::string> parameters;
-        std::unordered_map<std::string, std::string> parameterRegs;
-    };
-    
-    std::vector<FunctionContext> functionStack;
-    FunctionContext* currentFunction;
-    
-    // 内置函数类型缓存
-    std::unordered_map<std::string, std::string> builtinFunctionTypes;
-    
-    // 辅助方法
-    void enterFunction(const Function* function);
-    void exitFunction();
-    void generatePrologue(const Function* function);
-    void generateEpilogue(const Function* function);
-    void handleReturnValue(const std::string& value, const std::string& type);
-    std::string generateParameterType(const Parameter* param);
-    std::string generateParameterName(const Parameter* param, int index);
-    void setupParameterScope(const Function* function);
-};
-```
+**主要生成接口**
+- `generateFunction()`: 完整的函数生成入口，包括签名、参数、函数体和返回值处理
+- `generateFunctionDeclaration()`: 仅生成函数声明，用于外部函数声明
+- `generateFunctionBody()`: 仅生成函数体，用于函数定义的主体部分
+
+**内置函数调用生成**
+- `generateBuiltinCall()`: 生成内置函数调用的 IR 代码
+- 支持各种内置函数：print、println、printInt、printlnInt、getString、getInt、malloc、memset、memcpy
+- 提供与 ExpressionGenerator 的协作接口
+
+**参数处理接口**
+- `generateParameters()`: 生成函数参数的处理代码，包括栈分配和寄存器映射
+- `generateArgumentLoad()`: 生成参数加载代码，处理值类型和引用类型
+- `generateParameterAlloca()`: 为参数分配栈空间并存储参数值
+
+**返回值处理接口**
+- `generateReturnStatement()`: 生成 return 语句的 IR 代码
+- `generateReturnValue()`: 生成返回值表达式的代码
+- `generateReturnPhi()`: 生成返回值的 PHI 节点，处理多返回点
+- `generateTailExpressionReturn()`: 处理尾表达式返回的情况
+- `generateDefaultReturn()`: 生成默认返回值，用于无显式返回的情况
+
+**函数签名生成接口**
+- `generateFunctionSignature()`: 生成函数签名字符串
+- `generateParameterList()`: 生成参数列表，包含名称和类型对
+- `generateFunctionType()`: 生成函数类型字符串
+
+**工具方法接口**
+- `getFunctionName()`: 获取函数名称，处理名称修饰
+- `getMangledName()`: 获取修饰后的函数名
+- `isBuiltinFunction()`: 检查是否为内置函数
+- `getBuiltinFunctionType()`: 获取内置函数的类型信息
+- `generateArgument()`: 生成函数调用的参数处理代码
+- `generateStructArgument()`: 处理结构体参数的特殊传递方式
+
+**内部数据结构**
+- **FunctionContext**: 函数上下文结构，包含函数名、返回类型、返回块、返回值寄存器等
+- **functionStack**: 函数上下文栈，支持嵌套函数调用
+- **currentFunction**: 当前函数上下文指针
+- **builtinFunctionTypes**: 内置函数类型缓存，提高查找效率
+
+**内部辅助方法**
+- `enterFunction()`/`exitFunction()`: 进入/退出函数上下文
+- `generatePrologue()`/`generateEpilogue()`: 生成函数序言和尾声
+- `handleReturnValue()`: 处理返回值的通用逻辑
+- `setupParameterScope()`: 设置参数作用域和符号表
 
 ## 实现策略
 
 ### 函数定义生成
 
-```cpp
-void FunctionCodegen::generateFunction(const Function* function) {
-    // 进入函数上下文
-    enterFunction(function);
-    
-    // 生成函数签名
-    std::string signature = generateFunctionSignature(function);
-    irBuilder->emitFunctionDef(signature, generateParameterList(function));
-    
-    // 创建入口基本块
-    std::string entryBB = irBuilder->newBasicBlock("entry");
-    irBuilder->emitLabel(entryBB);
-    
-    // 生成函数序言
-    generatePrologue(function);
-    
-    // 处理参数
-    generateParameters(function);
-    
-    // 设置参数作用域
-    setupParameterScope(function);
-    
-    // 生成函数体
-    generateFunctionBody(function);
-    
-    // 生成函数尾声
-    generateEpilogue(function);
-    
-    // 结束函数定义
-    irBuilder->emitFunctionEnd();
-    
-    // 退出函数上下文
-    exitFunction();
-}
+函数定义生成采用以下策略：
 
-void FunctionCodegen::generateFunctionSignature(const Function* function) {
-    std::string functionName = getFunctionName(function);
-    std::string returnType = typeMapper->mapTypeToLLVM(function->getReturnType());
-    
-    // 获取参数类型列表
-    std::vector<std::string> paramTypes;
-    for (const auto& param : function->getParameters()) {
-        std::string paramType = generateParameterType(param.get());
-        paramTypes.push_back(paramType);
-    }
-    
-    // 生成函数类型字符串
-    std::string functionType = returnType + " (";
-    for (size_t i = 0; i < paramTypes.size(); ++i) {
-        if (i > 0) functionType += ", ";
-        functionType += paramTypes[i];
-    }
-    functionType += ")";
-    
-    // 缓存函数类型
-    currentFunction->returnType = returnType;
-    currentFunction->functionName = functionName;
-}
+1. **函数上下文管理**：
+   - 进入函数时创建新的函数上下文
+   - 设置函数名、返回类型等基本信息
+   - 维护函数上下文栈以支持嵌套函数
 
-std::vector<std::pair<std::string, std::string>> FunctionCodegen::generateParameterList(const Function* function) {
-    std::vector<std::pair<std::string, std::string>> paramList;
-    
-    for (size_t i = 0; i < function->getParameters().size(); ++i) {
-        const auto& param = function->getParameters()[i];
-        std::string paramName = generateParameterName(param.get(), i);
-        std::string paramType = generateParameterType(param.get());
-        
-        paramList.push_back({paramName, paramType});
-        currentFunction->parameters.push_back(paramName);
-    }
-    
-    return paramList;
-}
-```
+2. **函数签名生成**：
+   - 获取函数名和返回类型信息
+   - 处理参数类型列表的生成
+   - 生成符合 LLVM 语法的函数签名字符串
+   - 缓存函数类型信息供后续使用
+
+3. **参数列表生成**：
+   - 为每个参数生成名称和类型对
+   - 处理参数的命名规则和唯一性
+   - 维护参数列表供函数定义使用
+
+4. **函数结构生成**：
+   - 创建入口基本块并设置标签
+   - 生成函数序言（栈帧设置等）
+   - 处理参数分配和作用域设置
+   - 生成函数体和尾声
+   - 结束函数定义并清理上下文
 
 ### 参数处理
 
-```cpp
-void FunctionCodegen::generateParameters(const Function* function) {
-    const auto& parameters = function->getParameters();
-    
-    for (size_t i = 0; i < parameters.size(); ++i) {
-        const auto& param = parameters[i];
-        std::string paramName = generateParameterName(param.get(), i);
-        std::string paramType = generateParameterType(param.get());
-        
-        // 为参数分配栈空间（如果需要）
-        if (shouldAllocateParameter(param.get())) {
-            std::string allocaReg = irBuilder->newRegister(paramName, "ptr");
-            irBuilder->emitAlloca(allocaReg, paramType);
-            
-            // 存储参数值到栈空间
-            irBuilder->emitStore(paramName, allocaReg, paramType);
-            
-            // 记录参数寄存器映射
-            currentFunction->parameterRegs[paramName] = allocaReg;
-        } else {
-            // 直接使用参数寄存器
-            currentFunction->parameterRegs[paramName] = "%" + paramName;
-        }
-    }
-}
+参数处理采用以下策略：
 
-void FunctionCodegen::generateParameterAlloca(const Parameter* param, const std::string& arg) {
-    std::string paramName = param->getName();
-    std::string paramType = typeMapper->mapTypeToLLVM(param->getType());
-    
-    // 分配参数栈空间
-    std::string allocaReg = irBuilder->newRegister(paramName, "ptr");
-    irBuilder->emitAlloca(allocaReg, paramType);
-    
-    // 存储参数值
-    irBuilder->emitStore(arg, allocaReg, paramType);
-    
-    // 注册到作用域
-    auto currentScope = scopeTree->GetCurrentScope();
-    auto symbol = std::make_shared<Symbol>(paramName, SymbolKind::Parameter,
-                                          param->getType(), false, nullptr);
-    scopeTree->InsertSymbol(paramName, symbol);
-    irBuilder->setVariableRegister(paramName, allocaReg);
-}
+1. **参数分配策略**：
+   - 根据参数类型决定是否需要栈分配
+   - 为需要栈空间的参数分配 alloca
+   - 存储参数值到分配的栈空间
+   - 记录参数寄存器映射关系
 
-std::string FunctionCodegen::generateArgumentLoad(const Parameter* param, const std::string& arg) {
-    std::string paramType = typeMapper->mapTypeToLLVM(param->getType());
-    
-    // 如果参数是值类型且需要复制，则加载
-    if (isByValueParameter(param)) {
-        std::string loadReg = irBuilder->newRegister();
-        irBuilder->emitLoad(loadReg, arg, paramType);
-        return loadReg;
-    }
-    
-    return arg;
-}
+2. **参数类型处理**：
+   - 区分值类型和引用类型的参数
+   - 处理不同类型的参数传递方式
+   - 确保参数类型与函数签名匹配
 
-void FunctionCodegen::setupParameterScope(const Function* function) {
-    // 为函数创建新的作用域
-    scopeTree->EnterScope();
-    irBuilder->enterScope();
-    
-    // 注册所有参数到符号表
-    for (const auto& param : function->getParameters()) {
-        std::string paramName = param->getName();
-        auto it = currentFunction->parameterRegs.find(paramName);
-        
-        if (it != currentFunction->parameterRegs.end()) {
-            auto symbol = std::make_shared<Symbol>(paramName, SymbolKind::Parameter,
-                                                  param->getType(), false, nullptr);
-            scopeTree->InsertSymbol(paramName, symbol);
-            irBuilder->setVariableRegister(paramName, it->second);
-        }
-    }
-}
-```
+3. **参数作用域设置**：
+   - 为函数创建新的作用域
+   - 注册所有参数到符号表
+   - 设置 IRBuilder 的变量寄存器映射
+   - 确保参数在函数体内的正确访问
+
+4. **参数加载优化**：
+   - 对值类型参数进行必要的加载
+   - 避免不必要的内存访问
+   - 优化参数传递的性能
+
+5. **参数验证**：
+   - 验证参数数量和类型的正确性
+   - 处理参数不匹配的错误情况
+   - 提供详细的错误信息
 
 ### 函数体生成
 
-```cpp
-void FunctionCodegen::generateFunctionBody(const Function* function) {
-    if (!function->getBody()) {
-        // 空函数体，生成默认返回
-        generateDefaultReturn();
-        return;
-    }
-    
-    // 创建返回基本块
-    currentFunction->returnBlock = irBuilder->newBasicBlock("return");
-    currentFunction->returnPhiReg = irBuilder->newRegister("return", "phi");
-    currentFunction->hasReturn = false;
-    
-    // 生成函数体语句
-    if (statementGenerator) {
-        statementGenerator->generateStatement(function->getBody());
-    }
-    
-    // 如果函数体没有返回语句，尝试返回尾表达式的值
-    if (!currentFunction->hasReturn) {
-        generateTailExpressionReturn(function->getBody());
-    }
-    
-    // 生成返回基本块
-    irBuilder->emitLabel(currentFunction->returnBlock);
-    
-    // 生成返回 PHI 节点（如果有多个返回点）
-    if (hasMultipleReturns()) {
-        generateReturnPhi();
-    }
-    
-    // 生成最终返回指令
-    if (currentFunction->returnType == "void") {
-        irBuilder->emitRet("", "void");
-    } else {
-        irBuilder->emitRet(currentFunction->returnPhiReg, currentFunction->returnType);
-    }
-}
+函数体生成采用以下策略：
 
-void FunctionCodegen::generateTailExpressionReturn(const Statement* body) {
-    // 检查函数体是否是块表达式
-    auto blockExpr = dynamic_cast<const BlockExpression*>(body);
-    if (!blockExpr || blockExpr->getStatements().empty()) {
-        generateDefaultReturn();
-        return;
-    }
-    
-    // 获取最后一个语句
-    const auto& statements = blockExpr->getStatements();
-    const auto& lastStmt = statements.back();
-    
-    // 检查最后一个语句是否是表达式
-    auto exprStmt = dynamic_cast<const ExpressionStatement*>(lastStmt);
-    if (!exprStmt) {
-        generateDefaultReturn();
-        return;
-    }
-    
-    // 生成尾表达式的值
-    std::string tailValue = expressionGenerator->generateExpression(exprStmt->getExpression());
-    std::string tailType = expressionGenerator->getExpressionType(exprStmt->getExpression());
-    
-    // 类型转换（如果需要）
-    if (tailType != currentFunction->returnType) {
-        tailValue = generateTypeConversion(tailValue, tailType, currentFunction->returnType);
-    }
-    
-    // 跳转到返回基本块
-    irBuilder->emitBr(currentFunction->returnBlock);
-    
-    // 在返回基本块中添加 PHI 节点的输入
-    addReturnPhiInput(tailValue);
-}
+1. **空函数体处理**：
+   - 检查函数体是否存在
+   - 对于空函数体生成默认返回值
+   - 确保函数总是有返回语句
 
-void FunctionCodegen::generateDefaultReturn() {
-    if (currentFunction->returnType == "void") {
-        irBuilder->emitRet("", "void");
-    } else {
-        // 返回类型的默认值
-        std::string defaultValue = generateDefaultValue(currentFunction->returnType);
-        irBuilder->emitRet(defaultValue, currentFunction->returnType);
-    }
-}
+2. **返回基本块设置**：
+   - 创建统一的返回基本块
+   - 分配返回值的 PHI 节点寄存器
+   - 初始化返回状态标志
 
-std::string FunctionCodegen::generateDefaultValue(const std::string& type) {
-    if (type == "i32" || type == "i64") {
-        return "0";
-    } else if (type == "i1") {
-        return "false";
-    } else if (type == "float" || type == "double") {
-        return "0.0";
-    } else if (type.find("*") != std::string::npos) {
-        return "null";
-    } else {
-        // 对于结构体等复杂类型，分配未初始化的内存
-        std::string reg = irBuilder->newRegister();
-        irBuilder->emitAlloca(reg, type);
-        return reg;
-    }
-}
-```
+3. **函数体语句生成**：
+   - 委托给 StatementGenerator 生成函数体语句
+   - 处理函数体中的所有语句和表达式
+   - 维护正确的控制流和作用域
+
+4. **尾表达式返回处理**：
+   - 检查函数体是否包含显式返回语句
+   - 对于无显式返回的情况，尝试返回尾表达式的值
+   - 处理块表达式的尾表达式提取
+
+5. **返回值合并**：
+   - 生成返回基本块的标签
+   - 为多返回点生成 PHI 节点
+   - 处理不同返回路径的值合并
+
+6. **默认返回值生成**：
+   - 根据返回类型生成适当的默认值
+   - 处理基本类型、指针类型和结构体类型
+   - 确保返回值的类型正确性
 
 ### 内置函数处理
 
-```cpp
-std::string FunctionCodegen::generateBuiltinCall(const CallExpression* call) {
-    std::string functionName = getFunctionNameFromCall(call);
-    
-    if (functionName == "print" || functionName == "println") {
-        return generatePrintCall(call, functionName == "println");
-    } else if (functionName == "printInt" || functionName == "printlnInt") {
-        return generatePrintIntCall(call, functionName == "printlnInt");
-    } else if (functionName == "getString") {
-        return generateGetStringCall(call);
-    } else if (functionName == "getInt") {
-        return generateGetIntCall(call);
-    } else if (functionName == "malloc") {
-        return generateMallocCall(call);
-    } else if (functionName == "memset" || functionName == "memcpy") {
-        return generateMemoryCall(call, functionName);
-    } else {
-        return "null";
-    }
-}
+内置函数处理采用以下策略：
 
-std::string FunctionCodegen::generateArgument(const Expression* arg,
-                                            const Type* paramType) {
-    if (!expressionGenerator) {
-        return "null";
-    }
-    
-    // 生成参数表达式
-    std::string argReg = expressionGenerator->generateExpression(arg);
-    std::string argType = expressionGenerator->getExpressionType(arg);
-    std::string paramTypeLLVM = typeMapper->mapTypeToLLVM(paramType);
-    
-    // 类型转换（如果需要）
-    if (argType != paramTypeLLVM) {
-        argReg = generateTypeConversion(argReg, argType, paramTypeLLVM);
-    }
-    
-    // 处理大结构体参数（通过引用传递）
-    if (isLargeStructType(paramTypeLLVM)) {
-        return generateStructArgument(argReg, paramTypeLLVM);
-    }
-    
-    return argReg;
-}
+1. **函数识别与分发**：
+   - 从调用表达式中提取函数名
+   - 根据函数名分发到相应的生成方法
+   - 支持 print、println、printInt、printlnInt、getString、getInt、malloc、memset、memcpy 等内置函数
 
-std::string FunctionCodegen::generateStructArgument(const std::string& arg,
-                                                  const std::string& structType) {
-    // 为结构体参数分配临时空间
-    std::string tempReg = irBuilder->newRegister("temp", "ptr");
-    irBuilder->emitAlloca(tempReg, structType);
-    
-    // 复制结构体到临时空间
-    irBuilder->emitMemcpy(tempReg, arg, getTypeSize(structType));
-    
-    // 返回指针
-    return tempReg;
-}
-```
+2. **参数处理策略**：
+   - 通过 ExpressionGenerator 生成参数表达式
+   - 获取参数的类型信息并进行必要的类型转换
+   - 处理大结构体参数的特殊传递方式
+
+3. **结构体参数优化**：
+   - 对大型结构体使用引用传递
+   - 分配临时空间并复制结构体内容
+   - 返回指针而非值，提高传递效率
+
+4. **类型安全保证**：
+   - 验证参数类型与函数签名的匹配
+   - 生成必要的类型转换代码
+   - 确保内置函数调用的类型正确性
+
+5. **错误处理**：
+   - 对不支持的内置函数返回错误值
+   - 提供详细的错误信息
+   - 保持编译过程的稳定性
 
 ## 子组件通信
 
@@ -472,311 +243,162 @@ FunctionCodegen 与 ExpressionGenerator 通过以下方式进行协作：
 
 ### 通信接口
 
-```cpp
-// ExpressionGenerator 中的函数调用处理
-class ExpressionGenerator {
-private:
-    std::shared_ptr<FunctionCodegen> functionCodegen;
-    
-public:
-    void setFunctionCodegen(std::shared_ptr<FunctionCodegen> funcGen) {
-        functionCodegen = funcGen;
-    }
-    
-    std::string generateCallExpression(const CallExpression* call) {
-        std::string functionName = getFunctionName(call);
-        
-        // 检查是否为内置函数
-        if (functionCodegen && functionCodegen->isBuiltinFunction(functionName)) {
-            return functionCodegen->generateBuiltinCall(call);
-        }
-        
-        // 处理普通函数调用
-        return generateRegularFunctionCall(call);
-    }
-    
-    std::string generateRegularFunctionCall(const CallExpression* call) {
-        // 查找函数符号
-        auto functionSymbol = scopeTree->LookupSymbol(functionName);
-        if (!functionSymbol || functionSymbol->kind != SymbolKind::Function) {
-            return "null";
-        }
-        
-        // 生成参数表达式
-        std::vector<std::string> argRegs;
-        auto functionType = std::dynamic_pointer_cast<FunctionType>(functionSymbol->type);
-        
-        if (functionType && functionType->parameters.size() == call->getArguments().size()) {
-            for (size_t i = 0; i < call->getArguments().size(); ++i) {
-                // 调用 FunctionCodegen 处理参数
-                std::string argReg = functionCodegen->generateArgument(
-                    call->getArguments()[i],
-                    functionType->parameters[i]
-                );
-                argRegs.push_back(argReg);
-            }
-        }
-        
-        // 生成函数调用
-        std::string resultReg = irBuilder->newRegister();
-        std::string returnType = typeMapper->mapTypeToLLVM(functionType->returnType);
-        
-        irBuilder->emitCall(resultReg, functionName, argRegs, returnType);
-        
-        return resultReg;
-    }
-};
-```
+### 通信接口设计
 
+1. **双向引用设置**：
+   - ExpressionGenerator 通过 setFunctionCodegen 设置 FunctionCodegen 引用
+   - FunctionCodegen 通过 setExpressionGenerator 设置 ExpressionGenerator 引用
+   - 建立组件间的双向通信机制
+
+2. **函数调用分发**：
+   - ExpressionGenerator 在 generateCallExpression 中检查函数类型
+   - 对内置函数调用委托给 FunctionCodegen 处理
+   - 对普通函数调用直接生成 call 指令
+
+3. **参数处理协作**：
+   - FunctionCodegen 提供参数处理的专业方法
+   - 处理类型转换、结构体参数传递等复杂情况
+   - 确保参数传递的正确性和效率
+
+4. **返回值处理协作**：
+   - FunctionCodegen 调用 ExpressionGenerator 生成返回值表达式
+   - ExpressionGenerator 提供表达式类型信息用于类型转换
+   - 协作处理复杂的返回值情况
 
 ### 返回值处理
 
-```cpp
-void FunctionCodegen::generateReturnStatement(const ReturnExpression* returnExpr) {
-    if (!currentFunction) {
-        return;
-    }
-    
-    currentFunction->hasReturn = true;
-    
-    if (returnExpr->getExpression()) {
-        // 有返回值的 return
-        std::string valueReg = generateReturnValue(returnExpr->getExpression());
-        std::string valueType = expressionGenerator->getExpressionType(returnExpr->getExpression());
-        
-        // 类型转换（如果需要）
-        if (valueType != currentFunction->returnType) {
-            valueReg = generateTypeConversion(valueReg, valueType, currentFunction->returnType);
-        }
-        
-        // 跳转到返回基本块
-        irBuilder->emitBr(currentFunction->returnBlock);
-        
-        // 在返回基本块中添加 PHI 节点的输入
-        addReturnPhiInput(valueReg);
-        
-    } else {
-        // 无返回值的 return
-        // 跳转到返回基本块
-        irBuilder->emitBr(currentFunction->returnBlock);
-    }
-    
-    // 标记代码为不可达
-    handleUnreachableCode();
-}
+返回值处理采用以下策略：
 
-std::string FunctionCodegen::generateReturnValue(const Expression* returnExpr) {
-    if (!expressionGenerator) {
-        return "null";
-    }
-    
-    return expressionGenerator->generateExpression(returnExpr);
-}
+1. **返回语句处理**：
+   - 检查当前函数上下文的有效性
+   - 标记函数中有返回语句
+   - 区分有返回值和无返回值的情况
 
-void FunctionCodegen::generateReturnPhi() {
-    if (currentFunction->returnValues.empty()) {
-        return;
-    }
-    
-    // 生成 PHI 节点
-    std::vector<std::string> values;
-    std::vector<std::string> blocks;
-    
-    for (const auto& returnValue : currentFunction->returnValues) {
-        values.push_back(returnValue.first);
-        blocks.push_back(returnValue.second);
-    }
-    
-    irBuilder->emitPhi(currentFunction->returnPhiReg, currentFunction->returnType, 
-                      values, blocks);
-}
+2. **返回值类型转换**：
+   - 获取返回值表达式的类型信息
+   - 进行必要的类型转换以匹配函数返回类型
+   - 确保返回值的类型正确性
 
-void FunctionCodegen::addReturnPhiInput(const std::string& value) {
-    std::string currentBB = irBuilder->getCurrentBasicBlock();
-    currentFunction->returnValues.push_back({value, currentBB});
-}
-```
+3. **控制流处理**：
+   - 生成跳转到返回基本块的指令
+   - 在返回基本块中添加 PHI 节点的输入
+   - 标记后续代码为不可达
 
+4. **PHI 节点管理**：
+   - 收集所有返回路径的值和基本块
+   - 生成 PHI 节点合并多个返回值
+   - 处理多返回点的复杂情况
 
 ## 函数上下文管理
 
 ### 上下文栈管理
 
-```cpp
-void FunctionCodegen::enterFunction(const Function* function) {
-    FunctionContext context;
-    context.functionName = getFunctionName(function);
-    context.returnType = typeMapper->mapTypeToLLVM(function->getReturnType());
-    context.hasReturn = false;
-    
-    functionStack.push_back(context);
-    currentFunction = &functionStack.back();
-}
+函数上下文管理采用以下策略：
 
-void FunctionCodegen::exitFunction() {
-    if (!functionStack.empty()) {
-        functionStack.pop_back();
-    }
-    
-    currentFunction = functionStack.empty() ? nullptr : &functionStack.back();
-}
+1. **上下文结构**：
+   - FunctionContext 包含函数名、返回类型、返回块等信息
+   - 维护参数列表和参数寄存器映射
+   - 跟踪返回状态和返回值
 
-bool FunctionCodegen::isInFunction() const {
-    return currentFunction != nullptr;
-}
+2. **栈管理**：
+   - enterFunction 创建新的函数上下文并压入栈
+   - exitFunction 弹出当前函数上下文
+   - currentFunction 始终指向栈顶元素
 
-const FunctionContext* FunctionCodegen::getCurrentFunction() const {
-    return currentFunction;
-}
-```
+3. **状态跟踪**：
+   - isInFunction 检查是否在函数上下文中
+   - getCurrentFunction 获取当前函数上下文
+   - 维护函数嵌套的正确性
 
 ### 返回值管理
 
-```cpp
-void FunctionCodegen::handleReturnValue(const std::string& value, const std::string& type) {
-    if (!currentFunction) {
-        return;
-    }
-    
-    // 记录返回值
-    currentFunction->hasReturn = true;
-    addReturnPhiInput(value);
-    
-    // 跳转到返回基本块
-    irBuilder->emitBr(currentFunction->returnBlock);
-}
+返回值管理采用以下策略：
 
-bool FunctionCodegen::hasMultipleReturns() const {
-    return currentFunction && currentFunction->returnValues.size() > 1;
-}
-```
+1. **返回值记录**：
+   - 记录函数中有返回语句
+   - 添加返回值到 PHI 节点输入列表
+   - 维护返回值和来源基本块的对应关系
 
+2. **多返回点处理**：
+   - hasMultipleReturns 检查是否有多个返回点
+   - 为多返回点生成 PHI 节点
+   - 合并不同返回路径的值
 
+3. **返回值类型统一**：
+   - 确保所有返回值的类型一致
+   - 进行必要的类型转换
+   - 维护类型系统的完整性
 
 ## 测试策略
 
 ### 单元测试
 
-```cpp
-// 函数定义测试
-TEST(FunctionCodegenTest, FunctionDefinition) {
-    setupGenerator();
-    
-    auto function = createSimpleFunction("test", "i32", {"a", "b"}, {"i32", "i32"});
-    generator->generateFunction(function);
-    
-    std::string ir = getGeneratedIR();
-    EXPECT_TRUE(ir.find("define i32 @test(i32 %a, i32 %b)") != std::string::npos);
-    EXPECT_TRUE(ir.find("ret i32") != std::string::npos);
-}
+单元测试采用以下策略：
 
-// 内置函数测试
-TEST(FunctionCodegenTest, BuiltinFunction) {
-    setupGenerator();
-    
-    auto call = createFunctionCall("printlnInt", {createLiteral("42")});
-    std::string result = generator->generateBuiltinCall(call);
-    
-    std::string ir = getGeneratedIR();
-    EXPECT_TRUE(ir.find("call void @printlnInt(i32 42)") != std::string::npos);
-}
+1. **函数定义测试**：
+   - 测试简单函数的 IR 生成
+   - 验证函数签名、参数和返回值的正确性
+   - 检查生成的 IR 符合 LLVM 语法
 
-// 尾表达式返回测试
-TEST(FunctionCodegenTest, TailExpressionReturn) {
-    setupGenerator();
-    
-    auto function = createFunctionWithTailExpression("add", "i32", {"a", "b"}, {"i32", "i32"});
-    generator->generateFunction(function);
-    
-    std::string ir = getGeneratedIR();
-    EXPECT_TRUE(ir.find("ret i32") != std::string::npos);
-}
-```
+2. **内置函数测试**：
+   - 测试各种内置函数的调用生成
+   - 验证参数传递和返回值处理
+   - 确保内置函数调用的正确性
+
+3. **尾表达式返回测试**：
+   - 测试尾表达式返回的生成
+   - 验证尾表达式值的正确提取
+   - 检查返回值的类型转换
 
 ### 集成测试
 
-```cpp
-// 复杂函数测试
-TEST(FunctionCodegenIntegrationTest, ComplexFunction) {
-    setupGenerator();
-    
-    // 测试递归函数
-    auto recursiveFunction = createRecursiveFunction("factorial", "i32", {"n"}, {"i32"});
-    generator->generateFunction(recursiveFunction);
-    
-    // 验证生成的 IR 正确性
-    std::string ir = getGeneratedIR();
-    EXPECT_TRUE(verifyFunctionIR(ir));
-}
-```
+集成测试采用以下策略：
+
+1. **复杂函数测试**：
+   - 测试递归函数的 IR 生成
+   - 验证复杂控制流的正确处理
+   - 检查函数调用的嵌套处理
+
+2. **IR 正确性验证**：
+   - 使用 LLVM 验证器检查生成的 IR
+   - 确保生成的 IR 可以被正确解析
+   - 验证 IR 的语义正确性
+
+3. **性能测试**：
+   - 测试大型函数的生成性能
+   - 验证内存使用的合理性
+   - 检查生成效率的优化
 
 ## 使用示例
 
 ### 基本使用
 
-```cpp
-// 创建 FunctionCodegen
-auto irBuilder = std::make_shared<IRBuilder>(scopeTree);
-auto typeMapper = std::make_shared<TypeMapper>(scopeTree);
-auto scopeTree = semanticAnalyzer->getScopeTree();
+1. **组件初始化**：
+   - 创建 IRBuilder、TypeMapper、ScopeTree 等依赖组件
+   - 初始化 FunctionCodegen 实例
+   - 设置组件的基本状态
 
-FunctionCodegen funcGen(irBuilder, typeMapper, scopeTree);
+2. **依赖组件设置**：
+   - 设置 ExpressionGenerator 和 StatementGenerator 引用
+   - 建立组件间的双向通信
+   - 确保组件协作的正确性
 
-// 设置依赖组件
-funcGen.setExpressionGenerator(expressionGenerator);
-funcGen.setStatementGenerator(statementGenerator);
-
-// 设置组件间的双向通信
-expressionGenerator->setFunctionCodegen(funcGen);
-
-// 生成函数定义
-auto function = createFunction("add", "i32", {"a", "b"}, {"i32", "i32"});
-funcGen.generateFunction(function);
-// 输出：
-// define i32 @add(i32 %a, i32 %b) {
-// entry:
-//   %a_ptr = alloca i32
-//   store i32 %a, i32* %a_ptr
-//   %b_ptr = alloca i32
-//   store i32 %b, i32* %b_ptr
-//   ; ... 函数体 ...
-// }
-```
+3. **函数生成**：
+   - 生成函数定义的完整 IR
+   - 处理函数签名、参数和函数体
+   - 验证生成结果的正确性
 
 ### 组件协作示例
 
-```cpp
-// 在 ExpressionGenerator 中处理函数调用
-class ExpressionGenerator {
-private:
-    std::shared_ptr<FunctionCodegen> functionCodegen;
-    
-public:
-    std::string generateExpression(const Expression* expr) {
-        if (auto callExpr = dynamic_cast<const CallExpression*>(expr)) {
-            return generateCallExpression(callExpr);
-        }
-        // ... 其他表达式处理
-    }
-    
-    std::string generateCallExpression(const CallExpression* call) {
-        std::string functionName = getFunctionName(call);
-        
-        // 检查是否为内置函数
-        if (functionCodegen && functionCodegen->isBuiltinFunction(functionName)) {
-            return functionCodegen->generateBuiltinCall(call);
-        }
-        
-        // 处理普通函数调用
-        return generateRegularFunctionCall(call);
-    }
-};
+1. **函数调用处理**：
+   - ExpressionGenerator 中的函数调用处理逻辑
+   - 内置函数和普通函数调用的区分
+   - 与 FunctionCodegen 的协作机制
 
-// 生成内置函数调用
-auto printCall = createFunctionCall("printlnInt", {createLiteral("42")});
-std::string printResult = expressionGenerator->generateExpression(printCall);
-// 输出：call void @printlnInt(i32 42)
-```
+2. **内置函数调用**：
+   - 内置函数调用的识别和处理
+   - 参数传递和返回值处理
+   - 生成正确的 LLVM IR 代码
 
 ## 总结
 

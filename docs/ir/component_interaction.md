@@ -30,782 +30,406 @@
 
 ### 1. IRGenerator 主控制器接口
 
-```cpp
-class IRGenerator {
-public:
-    // 构造函数
-    IRGenerator(const SymbolTable& symbolTable, const TypeChecker& typeChecker);
-    
-    // 主要接口
-    bool generateIR(const std::vector<std::unique_ptr<Item>>& items);
-    std::string getIROutput() const { return output.str(); }
-    
-    // 组件访问接口
-    TypeMapper& getTypeMapper() { return typeMapper; }
-    ExpressionCodegen& getExpressionCodegen() { return expressionCodegen; }
-    StatementCodegen& getStatementCodegen() { return statementCodegen; }
-    FunctionCodegen& getFunctionCodegen() { return functionCodegen; }
-    BuiltinDeclarator& getBuiltinDeclarator() { return builtinDeclarator; }
-    
-    // IRBuilder 访问接口
-    IRBuilder& getBuilder() { return builder; }
-    
-    // 错误处理
-    void reportError(const std::string& message, const ASTNode* node = nullptr);
-    bool hasErrors() const { return !errors.empty(); }
-    const std::vector<std::string>& getErrors() const { return errors; }
-    
-    // 符号表访问
-    const SymbolInfo* getSymbol(const std::string& name) const;
-    const Type* getSymbolType(const std::string& name) const;
+IRGenerator作为主控制器，提供以下核心接口：
 
-private:
-    const SymbolTable& symbolTable;
-    const TypeChecker& typeChecker;
-    
-    std::ostringstream output;
-    IRBuilder builder;
-    
-    TypeMapper typeMapper;
-    ExpressionCodegen expressionCodegen;
-    StatementCodegen statementCodegen;
-    FunctionCodegen functionCodegen;
-    BuiltinDeclarator builtinDeclarator;
-    
-    std::vector<std::string> errors;
-    
-    // 内部辅助方法
-    void initializeModule();
-    void finalizeModule();
-};
-```
+- **构造函数**：接收符号表和类型检查器引用，初始化所有子组件
+- **主要生成接口**：`generateIR()` - 协调整个IR生成过程，处理顶层AST节点
+- **输出获取接口**：`getIROutput()` - 获取生成的IR文本输出
+- **组件访问接口**：提供对所有子组件的访问方法，包括TypeMapper、ExpressionCodegen等
+- **IRBuilder访问接口**：提供对IRBuilder的直接访问
+- **错误处理接口**：`reportError()` - 统一错误报告，`hasErrors()` - 错误状态检查
+- **符号表访问接口**：提供符号信息查询功能
+
+**内部实现策略**：
+- 初始化阶段设置目标平台和输出格式
+- 遍历AST顶层节点，分发任务给相应子组件
+- 管理子组件间的依赖关系和交互
+- 收集和报告生成过程中的错误信息
 
 ### 2. IRBuilder 自定义 IR 构建器接口
 
-```cpp
-class IRBuilder {
-public:
-    IRBuilder(std::ostream& output) : output(output), regCounter(0), bbCounter(0) {}
-    
-    // 寄存器管理
-    std::string newRegister() {
-        return "_" + std::to_string(++regCounter);
-    }
-    
-    std::string newNamedRegister(const std::string& prefix) {
-        return prefix + std::to_string(++regCounter);
-    }
-    
-    // 基本块管理
-    std::string newBasicBlock(const std::string& prefix) {
-        return prefix + std::to_string(++bbCounter);
-    }
-    
-    void setCurrentBasicBlock(const std::string& bb) { currentBB = bb; }
-    const std::string& getCurrentBasicBlock() const { return currentBB; }
-    
-    // 指令生成
-    void emitInstruction(const std::string& instruction) {
-        output << "  " << instruction << "\n";
-    }
-    
-    void emitLabel(const std::string& label) {
-        output << label << ":\n";
-        setCurrentBasicBlock(label);
-    }
-    
-    void emitComment(const std::string& comment) {
-        output << "  ; " << comment << "\n";
-    }
-    
-    // 类型指令
-    void emitTargetTriple(const std::string& triple) {
-        output << "target triple = \"" << triple << "\"\n\n";
-    }
-    
-    void emitAlloca(const std::string& reg, const std::string& type, int align = 4) {
-        emitInstruction("%" + reg + " = alloca " + type + ", align " + std::to_string(align));
-    }
-    
-    void emitAllocaArray(const std::string& reg, const std::string& elementType, int size, int align = 4) {
-        emitInstruction("%" + reg + " = alloca [" + std::to_string(size) + " x " + elementType + "], align " + std::to_string(align));
-    }
-    
-    void emitStore(const std::string& value, const std::string& ptr, const std::string& type, int align = 4) {
-        emitInstruction("store " + type + " %" + value + ", " + ptr + ", align " + std::to_string(align));
-    }
-    
-    void emitLoad(const std::string& reg, const std::string& ptr, const std::string& type, int align = 4) {
-        emitInstruction("%" + reg + " = load " + type + ", " + ptr + ", align " + std::to_string(align));
-    }
-    
-    // 算术指令
-    void emitAdd(const std::string& result, const std::string& left, const std::string& right, const std::string& type) {
-        emitInstruction("%" + result + " = add " + type + " %" + left + ", %" + right);
-    }
-    
-    void emitSub(const std::string& result, const std::string& left, const std::string& right, const std::string& type) {
-        emitInstruction("%" + result + " = sub " + type + " %" + left + ", %" + right);
-    }
-    
-    void emitMul(const std::string& result, const std::string& left, const std::string& right, const std::string& type) {
-        emitInstruction("%" + result + " = mul " + type + " %" + left + ", %" + right);
-    }
-    
-    void emitDiv(const std::string& result, const std::string& left, const std::string& right, const std::string& type) {
-        emitInstruction("%" + result + " = sdiv " + type + " %" + left + ", %" + right);
-    }
-    
-    void emitRem(const std::string& result, const std::string& left, const std::string& right, const std::string& type) {
-        emitInstruction("%" + result + " = srem " + type + " %" + left + ", %" + right);
-    }
-    
-    // 比较指令
-    void emitIcmp(const std::string& result, const std::string& cond, const std::string& left, const std::string& right, const std::string& type) {
-        emitInstruction("%" + result + " = icmp " + cond + " " + type + " %" + left + ", %" + right);
-    }
-    
-    // 位运算指令
-    void emitAnd(const std::string& result, const std::string& left, const std::string& right, const std::string& type) {
-        emitInstruction("%" + result + " = and " + type + " %" + left + ", %" + right);
-    }
-    
-    void emitOr(const std::string& result, const std::string& left, const std::string& right, const std::string& type) {
-        emitInstruction("%" + result + " = or " + type + " %" + left + ", %" + right);
-    }
-    
-    void emitXor(const std::string& result, const std::string& left, const std::string& right, const std::string& type) {
-        emitInstruction("%" + result + " = xor " + type + " %" + left + ", %" + right);
-    }
-    
-    void emitShl(const std::string& result, const std::string& left, const std::string& right, const std::string& type) {
-        emitInstruction("%" + result + " = shl " + type + " %" + left + ", %" + right);
-    }
-    
-    // 控制流指令
-    void emitBr(const std::string& condition, const std::string& thenLabel, const std::string& elseLabel) {
-        emitInstruction("br i1 %" + condition + ", label %" + thenLabel + ", label %" + elseLabel);
-    }
-    
-    void emitBr(const std::string& label) {
-        emitInstruction("br label %" + label);
-    }
-    
-    void emitRet(const std::string& value = "", const std::string& type = "void") {
-        if (type == "void") {
-            emitInstruction("ret void");
-        } else {
-            emitInstruction("ret " + type + " %" + value);
-        }
-    }
-    
-    // 函数相关
-    void emitFunctionDecl(const std::string& returnType, const std::string& name, 
-                        const std::vector<std::string>& paramTypes, bool dsoLocal = true) {
-        std::string decl = "declare";
-        if (dsoLocal) decl += " dso_local";
-        decl += " " + returnType + " @" + name + "(";
-        for (size_t i = 0; i < paramTypes.size(); ++i) {
-            if (i > 0) decl += ", ";
-            decl += paramTypes[i];
-        }
-        decl += ")";
-        output << decl << "\n";
-    }
-    
-    void emitFunctionDef(const std::string& returnType, const std::string& name,
-                       const std::vector<std::pair<std::string, std::string>>& params) {
-        output << "define " << returnType << " @" << name << "(";
-        for (size_t i = 0; i < params.size(); ++i) {
-            if (i > 0) output << ", ";
-            output << params[i].second << " %" << params[i].first;
-        }
-        output << ") {\n";
-    }
-    
-    void emitFunctionEnd() {
-        output << "}\n\n";
-    }
-    
-    // 函数调用
-    void emitCall(const std::string& result, const std::string& funcName, 
-                  const std::vector<std::string>& args, const std::string& returnType,
-                  const std::vector<std::string>& argAttrs = {}, const std::vector<std::string>& retAttrs = {}) {
-        std::string call = "call " + returnType;
-        if (!retAttrs.empty()) {
-            for (const auto& attr : retAttrs) {
-                call += " " + attr;
-            }
-        }
-        call += " @" + funcName + "(";
-        for (size_t i = 0; i < args.size(); ++i) {
-            if (i > 0) call += ", ";
-            if (i < argAttrs.size()) {
-                call += argAttrs[i] + " ";
-            }
-            call += args[i];
-        }
-        call += ")";
-        if (!result.empty()) {
-            emitInstruction("%" + result + " = " + call);
-        } else {
-            emitInstruction(call);
-        }
-    }
-    
-    // 内存操作
-    void emitGetElementPtr(const std::string& result, const std::string& ptr, 
-                          const std::vector<std::string>& indices, const std::string& type) {
-        std::string gep = "%" + result + " = getelementptr " + type + ", " + ptr;
-        for (const auto& index : indices) {
-            gep += ", " + index;
-        }
-        emitInstruction(gep);
-    }
-    
-    void emitBitcast(const std::string& result, const std::string& value, 
-                     const std::string& fromType, const std::string& toType) {
-        emitInstruction("%" + result + " = bitcast " + fromType + " %" + value + " to " + toType);
-    }
-    
-    // 结构体操作
-    void emitExtractValue(const std::string& result, const std::string& value, 
-                        const std::vector<int>& indices, const std::string& type) {
-        std::string extract = "%" + result + " = extractvalue " + type + " %" + value;
-        for (int index : indices) {
-            extract += ", " + std::to_string(index);
-        }
-        emitInstruction(extract);
-    }
-    
-    void emitInsertValue(const std::string& result, const std::string& value, const std::string& element,
-                       const std::vector<int>& indices, const std::string& type) {
-        std::string insert = "%" + result + " = insertvalue " + type + " %" + value + ", " + element;
-        for (int index : indices) {
-            insert += ", " + std::to_string(index);
-        }
-        emitInstruction(insert);
-    }
+IRBuilder提供完整的LLVM IR文本生成功能，核心接口包括：
 
-private:
-    std::ostream& output;
-    size_t regCounter;
-    size_t bbCounter;
-    std::string currentBB;
-};
-```
+- **寄存器管理接口**：
+  - `newRegister()` - 生成临时寄存器（_1, _2, _3...）
+  - `newNamedRegister()` - 生成带前缀的命名寄存器
+  - 实现策略：维护递增计数器，确保寄存器名称唯一性
+
+- **基本块管理接口**：
+  - `newBasicBlock()` - 生成基本块标签
+  - `setCurrentBasicBlock()` - 设置当前活动基本块
+  - `getCurrentBasicBlock()` - 获取当前基本块
+  - 实现策略：维护基本块栈和计数器，支持嵌套控制流
+
+- **指令生成接口**：
+  - `emitInstruction()` - 输出通用指令
+  - `emitLabel()` - 输出基本块标签
+  - `emitComment()` - 输出注释
+  - 实现策略：直接输出到流，确保LLVM语法正确性
+
+- **类型指令接口**：
+  - `emitAlloca()` - 生成栈分配指令
+  - `emitStore()` - 生成存储指令
+  - `emitLoad()` - 生成加载指令
+  - `emitTargetTriple()` - 输出目标三元组
+  - 实现策略：根据类型和对齐要求生成格式化指令
+
+- **算术指令接口**：
+  - `emitAdd()`, `emitSub()`, `emitMul()`, `emitDiv()`, `emitRem()` - 基本算术运算
+  - 实现策略：生成类型化的算术指令，确保操作数类型匹配
+
+- **比较指令接口**：
+  - `emitIcmp()` - 生成整数比较指令
+  - 实现策略：支持各种比较条件（eq, ne, slt, sgt等）
+
+- **位运算指令接口**：
+  - `emitAnd()`, `emitOr()`, `emitXor()`, `emitShl()` - 位运算操作
+  - 实现策略：生成类型化的位运算指令
+
+- **控制流指令接口**：
+  - `emitBr()` - 生成条件和无条件跳转
+  - `emitRet()` - 生成返回指令
+  - 实现策略：处理基本块间的控制流转移
+
+- **函数相关接口**：
+  - `emitFunctionDecl()` - 生成函数声明
+  - `emitFunctionDef()` - 生成函数定义开始
+  - `emitFunctionEnd()` - 生成函数定义结束
+  - `emitCall()` - 生成函数调用
+  - 实现策略：管理函数签名、参数列表和调用约定
+
+- **内存操作接口**：
+  - `emitGetElementPtr()` - 生成地址计算指令
+  - `emitBitcast()` - 生成类型转换指令
+  - `emitExtractValue()` - 生成值提取指令
+  - `emitInsertValue()` - 生成值插入指令
+  - 实现策略：处理复杂的内存布局和类型转换
 
 ### 3. TypeMapper 类型映射器接口
 
-```cpp
-class TypeMapper {
-public:
-    TypeMapper() = default;
-    
-    // 基本类型映射
-    std::string mapType(const Type* rxType);
-    std::string mapBasicType(BasicTypeKind kind);
-    std::string mapArrayType(const ArrayType* arrayType);
-    std::string mapStructType(const StructType* structType);
-    std::string mapReferenceType(const ReferenceType* refType);
-    std::string mapFunctionType(const FunctionType* funcType);
-    
-    // 类型大小和对齐
-    int getTypeSize(const std::string& llvmType);
-    int getTypeAlignment(const std::string& llvmType);
-    
-    // 类型转换
-    std::string generateTypeConversion(const std::string& value, 
-                                    const Type* fromType, 
-                                    const Type* toType,
-                                    IRBuilder& builder);
-    
-    // 类型检查
-    bool isCompatible(const Type* rxType1, const Type* rxType2);
-    bool canImplicitlyConvert(const Type* fromType, const Type* toType);
-    
-    // 类型属性
-    bool isIntegerType(const std::string& llvmType);
-    bool isPointerType(const std::string& llvmType);
-    bool isArrayType(const std::string& llvmType);
-    bool isStructType(const std::string& llvmType);
-    
-    // 类型解析
-    std::string getElementType(const std::string& llvmType);
-    std::string getPointedType(const std::string& llvmType);
+TypeMapper提供完整的类型系统映射功能，核心接口包括：
 
-private:
-    std::unordered_map<const Type*, std::string> typeCache;
-    
-    // 内部辅助方法
-    std::string createLLVMStructType(const StructType* structType);
-    std::string createLLVMArrayType(const ArrayType* arrayType);
-    std::string createLLVMFunctionType(const FunctionType* funcType);
-};
-```
+- **基本类型映射接口**：
+  - `mapType()` - 将Rx类型映射到LLVM类型
+  - `mapBasicType()` - 处理基础类型（i32, i64, bool等）
+  - `mapArrayType()` - 处理数组类型映射
+  - `mapStructType()` - 处理结构体类型映射
+  - `mapReferenceType()` - 处理引用类型映射
+  - `mapFunctionType()` - 处理函数类型映射
+  - 实现策略：维护类型缓存，避免重复映射计算
+
+- **类型大小和对齐接口**：
+  - `getTypeSize()` - 获取LLVM类型的字节大小
+  - `getTypeAlignment()` - 获取LLVM类型的对齐要求
+  - 实现策略：基于32位机器架构优化，提供标准类型大小表
+
+- **类型转换接口**：
+  - `generateTypeConversion()` - 生成类型转换的IR代码
+  - 实现策略：通过IRBuilder生成适当的转换指令
+
+- **类型检查接口**：
+  - `isCompatible()` - 检查两个类型是否兼容
+  - `canImplicitlyConvert()` - 检查是否可以隐式转换
+  - 实现策略：基于LLVM类型系统规则进行兼容性判断
+
+- **类型属性接口**：
+  - `isIntegerType()`, `isPointerType()`, `isArrayType()`, `isStructType()` - 类型分类判断
+  - 实现策略：基于字符串模式匹配进行类型识别
+
+- **类型解析接口**：
+  - `getElementType()` - 获取复合类型的元素类型
+  - `getPointedType()` - 获取指针指向的类型
+  - 实现策略：解析LLVM类型字符串，提取类型信息
+
+- **内部实现策略**：
+  - 维护类型映射缓存，提高性能
+  - 支持嵌套类型的递归映射
+  - 处理特殊SemanticType到LLVM类型的转换
 
 ### 4. ExpressionCodegen 表达式生成器接口
 
-```cpp
-class ExpressionCodegen {
-public:
-    ExpressionCodegen(IRGenerator& generator);
-    
-    // 主要接口
-    std::string generateExpression(const Expression* expr);
-    
-    // 具体表达式类型处理
-    std::string generateLiteral(const LiteralExpression* lit);
-    std::string generatePath(const PathExpression* path);
-    std::string generateBinary(const BinaryExpression* binary);
-    std::string generateUnary(const UnaryExpression* unary);
-    std::string generateCall(const CallExpression* call);
-    std::string generateIndex(const IndexExpression* index);
-    std::string generateField(const FieldExpression* field);
-    std::string generateBlock(const BlockExpression* block);  // 新增：BlockExpression 处理
-    std::string generateIf(const IfExpression* ifExpr);
-    std::string generateLoop(const LoopExpression* loopExpr);
-    std::string generateBreak(const BreakExpression* breakExpr);
-    std::string generateContinue(const ContinueExpression* continueExpr);
-    std::string generateReturn(const ReturnExpression* returnExpr);
-    
-    // 辅助方法
-    std::string generateArithmeticOperation(const std::string& left, const std::string& right, 
-                                         BinaryOperator op, const std::string& type);
-    std::string generateComparisonOperation(const std::string& left, const std::string& right, 
-                                          BinaryOperator op, const std::string& type);
-    std::string generateLogicalOperation(const std::string& left, const std::string& right, 
-                                      BinaryOperator op, const std::string& type);
-    
-    // 值管理
-    void storeExpressionResult(const std::string& value, const std::string& type);
-    std::string loadExpressionValue(const std::string& ptr, const std::string& type);
+ExpressionCodegen负责处理所有表达式类型的IR生成，核心接口包括：
 
-private:
-    IRGenerator& generator;
-    std::unordered_map<const Expression*, std::string> expressionCache;
-    
-    // 内部辅助方法
-    std::string loadVariable(const std::string& name);
-    std::string generateArrayAccess(const std::string& array, const std::string& index);
-    std::string generateStructFieldAccess(const std::string& structPtr, unsigned fieldIndex);
-    std::string generateStringLiteral(const std::string& str);
-};
-```
+- **主要生成接口**：
+  - `generateExpression()` - 表达式生成的统一入口点
+  - 实现策略：根据表达式类型分发到具体的生成方法
+
+- **具体表达式类型处理接口**：
+  - `generateLiteral()` - 处理字面量表达式（整数、字符串、布尔值等）
+  - `generatePath()` - 处理路径表达式（变量访问、常量访问）
+  - `generateBinary()` - 处理二元运算表达式（算术、比较、逻辑）
+  - `generateUnary()` - 处理一元运算表达式（取负、逻辑非、解引用等）
+  - `generateCall()` - 处理函数调用表达式
+  - `generateIndex()` - 处理数组索引表达式
+  - `generateField()` - 处理字段访问表达式
+  - `generateBlock()` - 处理块表达式（包含语句和尾表达式）
+  - `generateIf()` - 处理if表达式（条件分支）
+  - `generateLoop()` - 处理循环表达式
+  - `generateBreak()`, `generateContinue()`, `generateReturn()` - 处理控制流表达式
+  - 实现策略：每种表达式类型有专门的生成逻辑，处理复杂的语义
+
+- **辅助方法接口**：
+  - `generateArithmeticOperation()` - 生成算术运算IR
+  - `generateComparisonOperation()` - 生成比较运算IR
+  - `generateLogicalOperation()` - 生成逻辑运算IR
+  - 实现策略：通过IRBuilder生成相应的LLVM指令
+
+- **值管理接口**：
+  - `storeExpressionResult()` - 存储表达式结果
+  - `loadExpressionValue()` - 加载表达式值
+  - 实现策略：管理表达式的临时存储和加载
+
+- **内部实现策略**：
+  - 维护表达式缓存，避免重复计算
+  - 处理复杂的嵌套表达式
+  - 与StatementGenerator协作处理BlockExpression中的语句
+  - 通过IRBuilder管理寄存器和基本块
 
 ### 5. StatementCodegen 语句生成器接口
 
-```cpp
-class StatementCodegen {
-public:
-    StatementCodegen(IRGenerator& generator);
-    
-    // 主要接口
-    void generateStatement(const Statement* stmt);
-    
-    // 具体语句类型处理
-    void generateLet(const LetStatement* letStmt);
-    void generateExpression(const ExpressionStatement* exprStmt);
-    void generateIf(const IfStatement* ifStmt);
-    void generateWhile(const WhileStatement* whileStmt);
-    void generateLoop(const LoopStatement* loopStmt);
-    void generateBreak(const BreakStatement* breakStmt);
-    void generateContinue(const ContinueStatement* continueStmt);
-    void generateReturn(const ReturnStatement* returnStmt);
-    
-    // 基本块管理
-    std::string createBasicBlock(const std::string& name);
-    void setCurrentBasicBlock(const std::string& block);
-    const std::string& getCurrentBasicBlock() const;
-    
-    // 控制流上下文
-    void enterLoop(const std::string& continueTarget, const std::string& breakTarget);
-    void exitLoop();
-    void enterFunction(const std::string& functionName);
-    void exitFunction();
-    
-    // 变量管理
-    void allocateVariable(const std::string& name, const std::string& type, const std::string& value = "");
-    void storeVariable(const std::string& name, const std::string& value);
-    std::string loadVariable(const std::string& name);
+StatementCodegen负责处理语句类型的IR生成，核心接口包括：
 
-private:
-    IRGenerator& generator;
-    
-    // 控制流上下文栈
-    struct LoopContext {
-        std::string continueTarget;
-        std::string breakTarget;
-    };
-    std::vector<LoopContext> loopStack;
-    
-    struct FunctionContext {
-        std::string functionName;
-        std::string returnBlock;
-        std::string returnValue;
-        bool hasReturn;
-    };
-    std::vector<FunctionContext> functionStack;
-    
-    // 变量符号表
-    std::unordered_map<std::string, std::string> variableMap; // name -> register
-    std::unordered_map<std::string, std::string> variableTypes; // name -> type
-};
-```
+- **主要生成接口**：
+  - `generateStatement()` - 语句生成的统一入口点
+  - 实现策略：根据语句类型分发到具体的生成方法
+
+- **具体语句类型处理接口**：
+  - `generateLet()` - 处理变量声明语句（类型推断、初始化）
+  - `generateExpression()` - 处理表达式语句（函数调用、赋值等）
+  - `generateIf()`, `generateWhile()`, `generateLoop()` - 处理控制流语句
+  - `generateBreak()`, `generateContinue()`, `generateReturn()` - 处理跳转语句
+  - 实现策略：每种语句类型有专门的生成逻辑，处理作用域和控制流
+
+- **基本块管理接口**：
+  - `createBasicBlock()` - 创建新的基本块
+  - `setCurrentBasicBlock()` - 设置当前活动基本块
+  - `getCurrentBasicBlock()` - 获取当前基本块
+  - 实现策略：通过IRBuilder管理基本块生命周期
+
+- **控制流上下文接口**：
+  - `enterLoop()`, `exitLoop()` - 管理循环上下文
+  - `enterFunction()`, `exitFunction()` - 管理函数上下文
+  - 实现策略：维护上下文栈，处理嵌套控制流
+
+- **变量管理接口**：
+  - `allocateVariable()` - 分配变量存储空间
+  - `storeVariable()` - 存储变量值
+  - `loadVariable()` - 加载变量值
+  - 实现策略：与IRBuilder协作管理变量寄存器
+
+- **内部实现策略**：
+  - 维护控制流上下文栈，支持嵌套结构
+  - 管理变量符号表，处理作用域
+  - 与ExpressionGenerator协作处理表达式语句
+  - 注意：BlockExpression由ExpressionGenerator完全处理
 
 ### 6. FunctionCodegen 函数生成器接口
 
-```cpp
-class FunctionCodegen {
-public:
-    FunctionCodegen(IRGenerator& generator);
-    
-    // 主要接口
-    void generateFunction(const Function* function);
-    void generateFunctionDecl(const Function* function);
-    void generateFunctionBody(const Function* function);
-    
-    // 参数处理
-    void generateParameters(const Function* function);
-    std::string generateArgumentLoad(const Parameter* param, const std::string& arg);
-    
-    // 返回值处理
-    void generateReturnStatement(const ReturnExpression* returnExpr);
-    std::string generateReturnValue(const Expression* returnExpr);
-    
-    // 函数调用
-    std::string generateFunctionCall(const CallExpression* call);
-    std::string generateBuiltinCall(const CallExpression* call);
-    
-    // 内联函数处理
-    bool canInline(const Function* function);
-    std::string generateInlineCall(const CallExpression* call);
-    
-    // 函数签名生成
-    std::string generateFunctionSignature(const Function* function);
-    std::vector<std::pair<std::string, std::string>> generateParameterList(const Function* function);
+FunctionCodegen负责处理函数定义、声明和调用的IR生成，核心接口包括：
 
-private:
-    IRGenerator& generator;
-    std::unordered_map<const Function*, std::string> functionCache;
-    
-    // 内部辅助方法
-    std::string createFunctionType(const Function* function);
-    void generateParameterAlloca(const Parameter* param, const std::string& arg);
-    void generatePrologue(const Function* function);
-    void generateEpilogue(const Function* function);
-};
-```
+- **主要生成接口**：
+  - `generateFunction()` - 生成完整函数定义
+  - `generateFunctionDecl()` - 生成函数声明
+  - `generateFunctionBody()` - 生成函数体
+  - 实现策略：通过IRBuilder生成函数定义和函数体的完整结构
+
+- **参数处理接口**：
+  - `generateParameters()` - 生成函数参数列表
+  - `generateArgumentLoad()` - 生成参数加载指令
+  - 实现策略：为每个参数分配寄存器并生成加载指令
+
+- **返回值处理接口**：
+  - `generateReturnStatement()` - 生成返回语句
+  - `generateReturnValue()` - 生成返回值表达式
+  - 实现策略：根据函数返回类型生成适当的返回指令
+
+- **函数调用接口**：
+  - `generateFunctionCall()` - 生成普通函数调用
+  - `generateBuiltinCall()` - 生成内置函数调用
+  - 实现策略：生成调用指令并处理参数传递
+
+- **内联函数处理接口**：
+  - `canInline()` - 判断函数是否可以内联
+  - `generateInlineCall()` - 生成内联函数调用
+  - 实现策略：分析函数大小和复杂度决定是否内联
+
+- **函数签名生成接口**：
+  - `generateFunctionSignature()` - 生成函数签名
+  - `generateParameterList()` - 生成参数类型列表
+  - 实现策略：通过TypeMapper获取类型信息并格式化
+
+- **内部实现策略**：
+  - 维护函数缓存，避免重复生成
+  - 生成函数序言和结语代码
+  - 处理参数寄存器分配和加载
+  - 与TypeMapper协作处理函数类型
 
 ### 7. BuiltinDeclarator 内置函数声明器接口
 
-```cpp
-class BuiltinDeclarator {
-public:
-    BuiltinDeclarator(IRBuilder& builder);
-    
-    // 初始化内置函数声明
-    void declareBuiltinFunctions();
-    
-    // 具体内置函数声明
-    void declarePrint();
-    void declarePrintln();
-    void declarePrintInt();
-    void declarePrintlnInt();
-    void declareGetString();
-    void declareGetInt();
-    void declareMalloc();
-    void declareMemcpy();
-    void declareMemset();
-    void declareExit();
-    
-    // 内置函数查找
-    bool isBuiltinFunction(const std::string& name);
-    std::string getBuiltinFunctionType(const std::string& name);
-    std::vector<std::string> getBuiltinParameterTypes(const std::string& name);
-    
-    // 特殊函数声明
-    void declareStructFunctions(const StructType* structType);
+BuiltinDeclarator负责管理内置函数的声明，核心接口包括：
 
-private:
-    IRBuilder& builder;
-    std::unordered_map<std::string, std::string> builtinFunctions;
-    
-    // 内部辅助方法
-    void declareFunction(const std::string& name, const std::string& returnType, 
-                       const std::vector<std::string>& paramTypes, 
-                       const std::vector<std::string>& paramAttrs = {});
-};
-```
+- **初始化接口**：
+  - `declareBuiltinFunctions()` - 声明所有内置函数
+  - 实现策略：在模块初始化时调用，生成所有必要的函数声明
+
+- **具体内置函数声明接口**：
+  - `declarePrint()`, `declarePrintln()` - 声明字符串输出函数
+  - `declarePrintInt()`, `declarePrintlnInt()` - 声明整数输出函数
+  - `declareGetString()`, `declareGetInt()` - 声明输入函数
+  - `declareMalloc()`, `declareMemcpy()`, `declareMemset()` - 声明内存管理函数
+  - `declareExit()` - 声明系统退出函数
+  - 实现策略：通过IRBuilder生成符合LLVM语法的函数声明
+
+- **内置函数查找接口**：
+  - `isBuiltinFunction()` - 检查函数是否为内置函数
+  - `getBuiltinFunctionType()` - 获取内置函数的完整类型
+  - `getBuiltinParameterTypes()` - 获取内置函数的参数类型列表
+  - 实现策略：维护内置函数信息表，提供快速查询
+
+- **特殊函数声明接口**：
+  - `declareStructFunctions()` - 声明结构体相关函数
+  - 实现策略：根据结构体定义动态生成构造函数、析构函数等
+
+- **内部实现策略**：
+  - 维护内置函数信息映射表
+  - 支持动态添加新的内置函数
+  - 处理函数属性和调用约定
+  - 通过IRBuilder生成标准格式的函数声明
 
 ## 组件间交互协议
 
 ### 1. 数据传递协议
 
 #### 类型信息传递
-```cpp
-// TypeMapper → ExpressionCodegen
-std::string exprType = typeMapper.mapType(rxExpr->getType());
-
-// TypeMapper → FunctionCodegen  
-std::string funcType = typeMapper.createFunctionType(rxFunc->getType());
-```
+TypeMapper向其他组件提供类型映射服务：
+- ExpressionCodegen调用TypeMapper获取表达式类型的LLVM表示
+- FunctionCodegen调用TypeMapper获取函数类型的LLVM表示
+- 传递方式：通过方法调用返回类型字符串，确保类型信息在组件间正确流转
 
 #### 值传递协议
-```cpp
-// ExpressionCodegen → StatementCodegen
-std::string condition = expressionCodegen.generateExpression(ifStmt->getCondition());
-
-// FunctionCodegen → ExpressionCodegen
-std::string returnValue = expressionCodegen.generateExpression(returnExpr->getValue());
-```
+组件间的值传递遵循以下模式：
+- ExpressionCodegen生成表达式结果并返回寄存器标识符给StatementCodegen
+- FunctionCodegen调用ExpressionCodegen生成返回值表达式
+- 传递方式：通过字符串形式的寄存器标识符进行值传递
 
 #### 寄存器管理协议
-```cpp
-// IRBuilder → 所有组件
-std::string newReg = builder.newRegister();
-builder.emitAlloca(newReg, "i32", 4);
-
-// 组件使用寄存器
-builder.emitStore(valueReg, "%" + varName, "i32", 4);
-```
+IRBuilder为所有组件提供统一的寄存器管理：
+- 各组件通过IRBuilder接口请求新寄存器
+- IRBuilder负责寄存器命名和生命周期管理
+- 使用方式：组件请求寄存器后，通过IRBuilder生成相应的存储和加载指令
 
 ### 2. 控制流协议
 
 #### 基本块管理
-```cpp
-// StatementCodegen 控制基本块切换
-void StatementCodegen::generateIf(const IfStatement* ifStmt) {
-    std::string thenBB = generator.getBuilder().newBasicBlock("if.then");
-    std::string elseBB = generator.getBuilder().newBasicBlock("if.else");
-    std::string endBB = generator.getBuilder().newBasicBlock("if.end");
-    
-    // 生成条件
-    std::string condition = generator.getExpressionCodegen().generateExpression(ifStmt->getCondition());
-    
-    // 创建条件分支
-    generator.getBuilder().emitBr(condition, thenBB, elseBB);
-    
-    // 生成 then 分支
-    generator.getBuilder().emitLabel(thenBB);
-    generateStatement(ifStmt->getThenBranch());
-    generator.getBuilder().emitBr(endBB);
-    
-    // 生成 else 分支
-    if (ifStmt->getElseBranch()) {
-        generator.getBuilder().emitLabel(elseBB);
-        generateStatement(ifStmt->getElseBranch());
-        generator.getBuilder().emitBr(endBB);
-    }
-    
-    // 设置合并点
-    generator.getBuilder().emitLabel(endBB);
-}
-```
+StatementCodegen负责控制流的基本块管理：
+- 为if语句创建then、else和end基本块
+- 通过IRBuilder生成条件分支和跳转指令
+- 管理基本块的标签和跳转目标
+- 实现策略：维护基本块栈，确保控制流正确性
 
 #### 循环控制流
-```cpp
-// StatementCodegen 循环上下文管理
-void StatementCodegen::enterLoop(const std::string& continueTarget, const std::string& breakTarget) {
-    loopStack.push_back({continueTarget, breakTarget});
-}
-
-void StatementCodegen::generateBreak(const BreakStatement* breakStmt) {
-    if (loopStack.empty()) {
-        generator.reportError("break statement outside loop", breakStmt);
-        return;
-    }
-    generator.getBuilder().emitBr(loopStack.back().breakTarget);
-}
-```
+StatementCodegen提供循环上下文管理：
+- 维护循环栈，存储continue和break目标
+- 处理嵌套循环的上下文管理
+- 为break和continue语句生成正确的跳转指令
+- 错误处理：检测循环外的跳转语句并报告错误
 
 #### BlockExpression 处理的职责划分
-```cpp
-// ExpressionCodegen 处理 BlockExpression
-std::string ExpressionCodegen::generateBlock(const BlockExpression* block) {
-    // 创建新作用域
-    generator.getBuilder().enterScope();
-    
-    // 处理块内语句（通过 StatementCodegen）
-    for (const auto& stmt : block->statements) {
-        generator.getStatementCodegen().generateStatement(stmt);
-    }
-    
-    // 处理尾表达式
-    std::string result;
-    if (block->expressionwithoutblock) {
-        result = generateExpression(block->expressionwithoutblock);
-    } else {
-        result = generateUnitValue();
-    }
-    
-    // 退出作用域
-    generator.getBuilder().exitScope();
-    
-    return result;
-}
-```
+BlockExpression由ExpressionCodegen完全处理：
+- ExpressionCodegen负责创建和管理块作用域
+- 通过StatementCodegen处理块内语句
+- 处理尾表达式并返回结果
+- 作用域管理：确保变量生命周期的正确性
 
 ### 3. 错误处理协议
 
 #### 错误传播
-```cpp
-// 所有组件通过 IRGenerator 报告错误
-void Component::reportError(const std::string& message, const ASTNode* node) {
-    generator.reportError(message, node);
-}
-
-// IRGenerator 统一错误管理
-void IRGenerator::reportError(const std::string& message, const ASTNode* node) {
-    std::string fullMessage = "IR Generation Error: " + message;
-    if (node) {
-        fullMessage += " at line " + std::to_string(node->getLine());
-    }
-    errors.push_back(fullMessage);
-}
-```
+组件间的错误传播遵循统一协议：
+- 所有子组件通过IRGenerator接口报告错误
+- IRGenerator负责收集和格式化错误信息
+- 错误信息包含源码位置和详细描述
+- 传播方式：通过方法调用向上传播错误信息
 
 #### 错误恢复
-```cpp
-// 表达式生成中的错误处理
-std::string ExpressionCodegen::generateExpression(const Expression* expr) {
-    try {
-        // 生成表达式 IR
-        return dispatchExpression(expr);
-    } catch (const GenerationError& e) {
-        generator.reportError(e.what(), expr);
-        return generator.getBuilder().newRegister(); // 返回空寄存器
-    }
-}
-```
+各组件实现适当的错误恢复策略：
+- ExpressionCodegen在表达式生成失败时返回空寄存器
+- StatementCodegen在语句生成失败时跳过当前语句
+- FunctionCodegen在函数生成失败时生成空函数体
+- 恢复原则：确保IR生成过程能够继续进行，收集所有错误
 
 ## 初始化和清理协议
 
 ### 1. 组件初始化顺序
-```cpp
-// IRGenerator 构造函数中的初始化顺序
-IRGenerator::IRGenerator(const SymbolTable& symbolTable, const TypeChecker& typeChecker)
-    : symbolTable(symbolTable), typeChecker(typeChecker),
-      output(), builder(output),
-      
-      // 按依赖顺序初始化组件
-      typeMapper(),
-      expressionCodegen(*this),
-      statementCodegen(*this),
-      functionCodegen(*this),
-      builtinDeclarator(builder) {
-    
-    // 初始化模块
-    initializeModule();
-    
-    // 声明内置函数
-    builtinDeclarator.declareBuiltinFunctions();
-}
-```
+IRGenerator构造函数按依赖顺序初始化各组件：
+- 首先初始化输出流和IRBuilder
+- 然后按依赖顺序初始化TypeMapper、ExpressionCodegen、StatementCodegen、FunctionCodegen
+- 最后初始化BuiltinDeclarator
+- 初始化策略：确保被依赖组件先于依赖组件初始化
 
 ### 2. 模块初始化
-```cpp
-void IRGenerator::initializeModule() {
-    // 输出目标三元组
-    builder.emitTargetTriple("riscv32-unknown-unknown-elf");
-    
-    // 输出空行分隔
-    output << "\n";
-}
-```
+模块初始化过程包括：
+- 通过IRBuilder输出目标三元组（riscv32-unknown-unknown-elf）
+- 设置模块级别的输出格式
+- 准备接收后续的函数和全局变量定义
+- 初始化时机：在所有组件初始化完成后立即执行
 
 ### 3. 模块完成
-```cpp
-void IRGenerator::finalizeModule() {
-    // 检查是否有未完成的函数
-    if (!functionStack.empty()) {
-        reportError("Unclosed function at end of module");
-    }
-    
-    // 输出结束标记（如果需要）
-    // LLVM IR 不需要特殊的结束标记
-}
-```
+模块完成阶段执行以下操作：
+- 检查函数栈是否为空，确保所有函数正确关闭
+- 验证模块结构的完整性
+- 输出必要的模块结束信息
+- 清理策略：LLVM IR不需要特殊的结束标记
 
 ## 输出管理协议
 
 ### 1. 文本输出格式
-```cpp
-// IRBuilder 确保正确的 LLVM IR 格式
-void IRBuilder::emitInstruction(const std::string& instruction) {
-    output << "  " << instruction << "\n";  // 两个空格缩进
-}
-
-void IRBuilder::emitLabel(const std::string& label) {
-    output << label << ":\n";  // 标签后跟冒号
-}
-```
+IRBuilder确保输出符合LLVM IR格式要求：
+- 指令输出使用两个空格缩进
+- 标签输出后跟冒号
+- 每行输出以换行符结束
+- 格式策略：严格遵循LLVM IR语法规范
 
 ### 2. 寄存器命名约定
-```cpp
-// IRBuilder 的寄存器命名
-std::string IRBuilder::newRegister() {
-    return "_" + std::to_string(++regCounter);  // _1, _2, _3...
-}
-
-std::string IRBuilder::newNamedRegister(const std::string& prefix) {
-    return prefix + std::to_string(++regCounter);  // var1, var2...
-}
-```
+IRBuilder采用统一的寄存器命名策略：
+- 临时寄存器使用下划线加数字（_1, _2, _3...）
+- 命名寄存器使用前缀加数字（var1, var2...）
+- 命名原则：确保寄存器名称的唯一性和可读性
+- 计数器管理：维护全局递增计数器
 
 ### 3. 基本块命名约定
-```cpp
-// IRBuilder 的基本块命名
-std::string IRBuilder::newBasicBlock(const std::string& prefix) {
-    return prefix + std::to_string(++bbCounter);  // bb1, bb2, if.then1...
-}
-```
+IRBuilder提供一致的基本块命名规则：
+- 基本块使用前缀加数字（bb1, bb2, if.then1...）
+- 支持控制流相关的命名模式（if.then, if.else, loop.body等）
+- 命名策略：反映基本块在控制流中的作用
+- 计数器管理：维护独立的基本块计数器
 
 ## 性能优化接口
 
 ### 1. 缓存管理
-```cpp
-// TypeMapper 类型缓存
-class TypeMapper {
-private:
-    std::unordered_map<const Type*, std::string> typeCache;
-    
-public:
-    void clearTypeCache() { typeCache.clear(); }
-    
-    std::string mapType(const Type* rxType) {
-        auto it = typeCache.find(rxType);
-        if (it != typeCache.end()) {
-            return it->second;
-        }
-        
-        std::string llvmType = createLLVMType(rxType);
-        typeCache[rxType] = llvmType;
-        return llvmType;
-    }
-};
-```
+TypeMapper实现类型映射缓存机制：
+- 使用哈希表存储Rx类型到LLVM类型的映射
+- 缓存策略：避免重复计算相同类型的映射
+- 缓存管理：提供清理缓存的方法
+- 性能优化：显著提高类型转换的效率
 
 ### 2. 表达式缓存
-```cpp
-// ExpressionCodegen 表达式结果缓存
-class ExpressionCodegen {
-private:
-    std::unordered_map<const Expression*, std::string> expressionCache;
-    
-public:
-    std::string generateExpression(const Expression* expr) {
-        auto it = expressionCache.find(expr);
-        if (it != expressionCache.end()) {
-            return it->second;
-        }
-        
-        std::string result = dispatchExpression(expr);
-        expressionCache[expr] = result;
-        return result;
-    }
-};
-```
+ExpressionCodegen实现表达式结果缓存：
+- 使用哈希表存储表达式到寄存器的映射
+- 缓存策略：避免重复生成相同表达式的IR
+- 缓存管理：自动管理缓存生命周期
+- 性能优化：减少重复计算，提高IR生成速度
+
+### 3. 函数缓存
+FunctionCodegen实现函数定义缓存：
+- 缓存函数签名和类型信息
+- 避免重复生成相同的函数声明
+- 支持函数内联优化决策
+
+### 4. 字符串优化
+所有组件实现字符串操作优化：
+- 使用字符串引用减少拷贝
+- 预分配字符串缓冲区
+- 批量输出减少I/O操作
 
 ## 总结
 

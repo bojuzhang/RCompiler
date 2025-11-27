@@ -79,648 +79,389 @@ IRGenerator 作为主控制器，承担以下核心职责：
 
 ### 主接口
 
-```cpp
-class IRGenerator {
-public:
-    // 构造函数
-    IRGenerator(const SymbolTable& symbolTable, 
-               const TypeChecker& typeChecker,
-               std::ostream& outputStream = std::cout);
-    
-    // 主要生成接口
-    bool generateIR(const std::vector<std::unique_ptr<Item>>& items);
-    
-    // 输出获取
-    std::string getIROutput() const;
-    void flushOutput();
-    
-    // 错误处理
-    bool hasErrors() const;
-    const std::vector<std::string>& getErrors() const;
-    void clearErrors();
-    
-    // 组件访问接口
-    IRBuilder& getBuilder() { return *builder; }
-    TypeMapper& getTypeMapper() { return *typeMapper; }
-    ExpressionGenerator& getExpressionGenerator() { return *expressionGenerator; }
-    StatementGenerator& getStatementGenerator() { return *statementGenerator; }
-    FunctionCodegen& getFunctionCodegen() { return *functionCodegen; }
-    BuiltinDeclarator& getBuiltinDeclarator() { return *builtinDeclarator; }
-    
-    // 符号表访问
-    const SymbolInfo* getSymbol(const std::string& name) const;
-    const Type* getSymbolType(const std::string& name) const;
-    const NodeTypeMap& getNodeTypeMap() const;
+1. **构造函数**：
+   - 接收符号表和类型检查器作为输入数据
+   - 支持自定义输出流，默认为 stdout
+   - 初始化错误状态和内部数据结构
 
-private:
-    // 输入数据
-    const SymbolTable& symbolTable;
-    const TypeChecker& typeChecker;
-    
-    // 输出管理
-    std::ostringstream outputBuffer;
-    std::ostream& outputStream;
-    
-    // 核心组件
-    std::unique_ptr<IRBuilder> builder;
-    std::unique_ptr<TypeMapper> typeMapper;
-    std::unique_ptr<ExpressionGenerator> expressionGenerator;
-    std::unique_ptr<StatementGenerator> statementGenerator;
-    std::unique_ptr<FunctionCodegen> functionCodegen;
-    std::unique_ptr<BuiltinDeclarator> builtinDeclarator;
-    
-    // 错误管理
-    std::vector<std::string> errors;
-    bool hasGenerationErrors;
-    
-    // 初始化方法
-    void initializeComponents();
-    void setupComponentDependencies();
-    void initializeModule();
-    void declareBuiltinFunctions();
-    
-    // 生成方法
-    void generateTopLevelItems(const std::vector<std::unique_ptr<Item>>& items);
-    void generateFunction(const Function* function);
-    void generateStruct(const StructStruct* structDef);
-    void generateConstant(const ConstantItem* constant);
-    void generateImpl(const InherentImpl* impl);
-    
-    // 工具方法
-    void reportError(const std::string& message, const ASTNode* node = nullptr);
-    void reportWarning(const std::string& message, const ASTNode* node = nullptr);
-    bool validateGeneration() const;
-    void finalizeModule();
-};
-```
+2. **主要生成接口**：
+   - `generateIR()`: 主要的 IR 生成入口点
+   - 接收 AST 顶层项列表作为输入
+   - 返回生成是否成功的布尔值
+
+3. **输出管理接口**：
+   - `getIROutput()`: 获取生成的 IR 文本
+   - `flushOutput()`: 强制刷新输出缓冲区
+   - 支持输出流的动态管理
+
+4. **错误处理接口**：
+   - `hasErrors()`: 检查是否有生成错误
+   - `getErrors()`: 获取所有错误信息列表
+   - `clearErrors()`: 清理错误状态
+
+5. **组件访问接口**：
+   - 提供对所有子组件的访问方法
+   - 支持外部直接操作各个组件
+   - 便于高级用户进行自定义操作
+
+6. **符号表访问接口**：
+   - `getSymbol()`: 根据名称获取符号信息
+   - `getSymbolType()`: 获取符号的类型信息
+   - `getNodeTypeMap()`: 获取节点类型映射
+
+7. **内部初始化方法**：
+   - `initializeComponents()`: 初始化所有子组件
+   - `setupComponentDependencies()`: 设置组件间依赖关系
+   - `initializeModule()`: 初始化 LLVM 模块
+   - `declareBuiltinFunctions()`: 声明内置函数
+
+8. **生成方法**：
+   - `generateTopLevelItems()`: 生成顶层项
+   - `generateFunction()`: 生成函数定义
+   - `generateStruct()`: 生成结构体定义
+   - `generateConstant()`: 生成常量定义
+   - `generateImpl()`: 生成 impl 块
+
+9. **工具方法**：
+   - `reportError()`/`reportWarning()`: 错误和警告报告
+   - `validateGeneration()`: 验证生成结果
+   - `finalizeModule()`: 完成模块生成
 
 ## 实现策略
 
 ### 初始化流程
 
-```cpp
-IRGenerator::IRGenerator(const SymbolTable& symbolTable, 
-                         const TypeChecker& typeChecker,
-                         std::ostream& outputStream)
-    : symbolTable(symbolTable), typeChecker(typeChecker), 
-      outputStream(outputStream), hasGenerationErrors(false) {
-    
-    // 1. 初始化核心组件
-    initializeComponents();
-    
-    // 2. 设置组件间依赖关系
-    setupComponentDependencies();
-    
-    // 3. 初始化 LLVM 模块
-    initializeModule();
-    
-    // 4. 声明内置函数
-    declareBuiltinFunctions();
-}
+1. **构造函数初始化**：
+   - 接收符号表、类型检查器和输出流作为参数
+   - 初始化错误状态和基本数据结构
+   - 按顺序执行初始化步骤
 
-void IRGenerator::initializeComponents() {
-    // 获取作用域树
-    auto scopeTree = symbolTable.getScopeTree();
-    
-    // 创建 IRBuilder（核心组件，其他组件依赖它）
-    builder = std::make_unique<IRBuilder>(scopeTree);
-    
-    // 创建 TypeMapper（依赖 IRBuilder）
-    typeMapper = std::make_unique<TypeMapper>(scopeTree);
-    
-    // 获取节点类型映射
-    const auto& nodeTypeMap = typeChecker.getNodeTypeMap();
-    
-    // 创建表达式和语句生成器（存在循环依赖）
-    expressionGenerator = std::make_unique<ExpressionGenerator>(
-        builder.get(), typeMapper.get(), scopeTree, nodeTypeMap);
-    statementGenerator = std::make_unique<StatementGenerator>(
-        builder.get(), typeMapper.get(), scopeTree, nodeTypeMap);
-    
-    // 创建函数和内置函数生成器
-    functionCodegen = std::make_unique<FunctionCodegen>(
-        builder.get(), typeMapper.get(), scopeTree);
-    builtinDeclarator = std::make_unique<BuiltinDeclarator>(builder.get());
-}
+2. **组件初始化策略**：
+   - 获取作用域树作为组件共享资源
+   - 优先创建核心组件（IRBuilder）
+   - 依次创建依赖组件（TypeMapper、生成器等）
+   - 确保组件创建顺序的正确性
 
-void IRGenerator::setupComponentDependencies() {
-    // 解决 ExpressionGenerator 和 StatementGenerator 的循环依赖
-    expressionGenerator->setStatementGenerator(statementGenerator.get());
-    statementGenerator->setExpressionGenerator(expressionGenerator.get());
-    
-    // 设置其他组件的依赖关系
-    functionCodegen->setExpressionGenerator(expressionGenerator.get());
-    functionCodegen->setStatementGenerator(statementGenerator.get());
-}
+3. **依赖关系设置**：
+   - 解决 ExpressionGenerator 和 StatementGenerator 的循环依赖
+   - 建立组件间的双向引用关系
+   - 设置 FunctionCodegen 的依赖组件
 
-void IRGenerator::initializeModule() {
-    // 输出目标三元组
-    builder->emitTargetTriple("riscv32-unknown-unknown-elf");
-    
-    // 输出空行分隔
-    outputBuffer << "\n";
-    
-    // 同步 IRBuilder 到全局作用域
-    builder->syncWithScopeTree();
-}
+4. **模块初始化**：
+   - 输出目标三元组信息
+   - 设置输出格式和分隔符
+   - 同步 IRBuilder 到全局作用域
 
-void IRGenerator::declareBuiltinFunctions() {
-    builtinDeclarator->declareBuiltinFunctions();
-}
-```
+5. **内置函数声明**：
+   - 调用 BuiltinDeclarator 声明所有内置函数
+   - 确保内置函数在用户代码之前声明
+   - 建立内置函数的类型信息
 
 ### 主要生成流程
 
-```cpp
-bool IRGenerator::generateIR(const std::vector<std::unique_ptr<Item>>& items) {
-    try {
-        // 清理之前的错误
-        clearErrors();
-        
-        // 生成顶层项
-        generateTopLevelItems(items);
-        
-        // 完成模块生成
-        finalizeModule();
-        
-        // 验证生成结果
-        if (!validateGeneration()) {
-            return false;
-        }
-        
-        // 输出到目标流
-        outputStream << outputBuffer.str();
-        outputStream.flush();
-        
-        return !hasGenerationErrors;
-        
-    } catch (const std::exception& e) {
-        reportError("IR generation failed: " + std::string(e.what()));
-        return false;
-    }
-}
+1. **生成前准备**：
+   - 清理之前的错误状态
+   - 准备输出缓冲区
+   - 设置异常处理机制
 
-void IRGenerator::generateTopLevelItems(const std::vector<std::unique_ptr<Item>>& items) {
-    for (const auto& item : items) {
-        if (!item) continue;
-        
-        try {
-            if (auto function = dynamic_cast<const Function*>(item->item.get())) {
-                generateFunction(function);
-            } else if (auto structDef = dynamic_cast<const StructStruct*>(item->item.get())) {
-                generateStruct(structDef);
-            } else if (auto constant = dynamic_cast<const ConstantItem*>(item->item.get())) {
-                generateConstant(constant);
-            } else if (auto impl = dynamic_cast<const InherentImpl*>(item->item.get())) {
-                generateImpl(impl);
-            } else {
-                reportWarning("Unsupported top-level item type");
-            }
-        } catch (const std::exception& e) {
-            reportError("Failed to generate top-level item: " + std::string(e.what()), item->item.get());
-        }
-    }
-}
-```
+2. **顶层项生成**：
+   - 遍历所有顶层 AST 项
+   - 根据项类型分发到相应的生成方法
+   - 处理函数、结构体、常量和 impl 块
+
+3. **错误处理策略**：
+   - 对每个项的生成进行异常捕获
+   - 记录错误信息但继续处理其他项
+   - 提供详细的错误位置信息
+
+4. **生成后处理**：
+   - 完成模块生成和清理
+   - 验证生成结果的正确性
+   - 输出到目标流并刷新
+
+5. **结果返回**：
+   - 基于错误状态返回成功或失败
+   - 提供详细的错误信息供调用方处理
 
 ### 函数生成
 
-```cpp
-void IRGenerator::generateFunction(const Function* function) {
-    if (!function) {
-        reportError("Null function pointer");
-        return;
-    }
-    
-    // 获取函数信息
-    std::string functionName = function->getFunctionName();
-    auto functionSymbol = symbolTable.LookupSymbol(functionName);
-    
-    if (!functionSymbol) {
-        reportError("Function symbol not found: " + functionName);
-        return;
-    }
-    
-    // 使用 FunctionCodegen 生成函数
-    try {
-        functionCodegen->generateFunction(function);
-        
-        // 同步作用域（函数生成可能改变作用域）
-        builder->syncWithScopeTree();
-        
-    } catch (const std::exception& e) {
-        reportError("Failed to generate function " + functionName + ": " + std::string(e.what()), function);
-    }
-}
-```
+1. **函数验证**：
+   - 检查函数指针的有效性
+   - 验证函数符号的存在性
+   - 确保函数信息的完整性
+
+2. **函数生成策略**：
+   - 委托给 FunctionCodegen 进行实际生成
+   - 处理生成过程中的异常
+   - 同步作用域状态
+
+3. **错误处理**：
+   - 记录详细的错误信息
+   - 包含函数名和错误原因
+   - 提供错误位置信息
 
 ### 结构体生成
 
-```cpp
-void IRGenerator::generateStruct(const StructStruct* structDef) {
-    if (!structDef) {
-        reportError("Null struct definition pointer");
-        return;
-    }
-    
-    std::string structName = structDef->getName();
-    
-    // 生成结构体类型定义
-    try {
-        // 通过 TypeMapper 生成结构体类型
-        std::string llvmType = typeMapper->mapStructType(structName);
-        
-        // 输出结构体类型定义（如果需要）
-        if (shouldEmitStructDefinition(structDef)) {
-            emitStructDefinition(structDef, llvmType);
-        }
-        
-    } catch (const std::exception& e) {
-        reportError("Failed to generate struct " + structName + ": " + std::string(e.what()), structDef);
-    }
-}
+1. **结构体验证**：
+   - 检查结构体定义的有效性
+   - 获取结构体名称和字段信息
+   - 验证字段类型的正确性
 
-void IRGenerator::emitStructDefinition(const StructStruct* structDef, const std::string& llvmType) {
-    // 输出结构体类型定义
-    outputBuffer << llvmType << " = type { ";
-    
-    const auto& fields = structDef->getFields();
-    for (size_t i = 0; i < fields.size(); ++i) {
-        if (i > 0) outputBuffer << ", ";
-        
-        auto fieldType = typeMapper->mapSemanticTypeToLLVM(fields[i]->type);
-        outputBuffer << fieldType;
-    }
-    
-    outputBuffer << " }\n";
-}
-```
+2. **类型映射策略**：
+   - 通过 TypeMapper 生成 LLVM 类型
+   - 处理结构体类型的特殊情况
+   - 确保类型映射的正确性
+
+3. **定义输出策略**：
+   - 判断是否需要输出结构体定义
+   - 生成符合 LLVM 语法的类型定义
+   - 处理字段类型的格式化输出
 
 ### 常量生成
 
-```cpp
-void IRGenerator::generateConstant(const ConstantItem* constant) {
-    if (!constant) {
-        reportError("Null constant pointer");
-        return;
-    }
-    
-    std::string constantName = constant->getName();
-    
-    try {
-        // 生成常量表达式
-        if (constant->getExpression()) {
-            std::string valueReg = expressionGenerator->generateExpression(constant->getExpression());
-            
-            // 输出全局常量定义
-            std::string constantType = typeMapper->mapSemanticTypeToLLVM(constant->getType());
-            outputBuffer << "@" << constantName << " = constant " << constantType << " " << valueReg << "\n";
-        }
-        
-    } catch (const std::exception& e) {
-        reportError("Failed to generate constant " + constantName + ": " + std::string(e.what()), constant);
-    }
-}
-```
+1. **常量验证**：
+   - 检查常量定义的有效性
+   - 获取常量名称和表达式
+   - 验证常量类型的正确性
+
+2. **表达式生成**：
+   - 使用 ExpressionGenerator 生成常量表达式
+   - 获取表达式结果的寄存器
+   - 处理表达式生成的异常
+
+3. **全局常量输出**：
+   - 生成符合 LLVM 语法的全局常量定义
+   - 包含常量类型和值信息
+   - 确保输出格式的正确性
 
 ### Impl 生成
 
-```cpp
-void IRGenerator::generateImpl(const InherentImpl* impl) {
-    if (!impl) {
-        reportError("Null impl pointer");
-        return;
-    }
-    
-    try {
-        // 生成 impl 块中的方法
-        for (const auto& item : impl->getItems()) {
-            if (auto function = dynamic_cast<const Function*>(item.get())) {
-                generateFunction(function);
-            }
-        }
-        
-    } catch (const std::exception& e) {
-        reportError("Failed to generate impl block: " + std::string(e.what()), impl);
-    }
-}
-```
+1. **Impl 验证**：
+   - 检查 impl 块的有效性
+   - 获取 impl 块中的所有项
+   - 验证 impl 结构的完整性
+
+2. **方法生成策略**：
+   - 遍历 impl 块中的所有项
+   - 识别并生成函数定义
+   - 委托给函数生成器处理
+
+3. **错误处理**：
+   - 捕获生成过程中的异常
+   - 记录详细的错误信息
+   - 确保错误不会中断整个生成过程
 
 ## 错误处理
 
 ### 错误收集和报告
 
-```cpp
-void IRGenerator::reportError(const std::string& message, const ASTNode* node) {
-    hasGenerationErrors = true;
-    
-    std::string fullMessage = "IR Generation Error: " + message;
-    
-    if (node) {
-        fullMessage += " at line " + std::to_string(node->getLine());
-        if (node->getColumn() > 0) {
-            fullMessage += ", column " + std::to_string(node->getColumn());
-        }
-    }
-    
-    errors.push_back(fullMessage);
-    std::cerr << fullMessage << std::endl;
-}
+1. **错误记录机制**：
+   - 设置错误状态标志
+   - 构建完整的错误信息字符串
+   - 包含错误类型和详细信息
 
-void IRGenerator::reportWarning(const std::string& message, const ASTNode* node) {
-    std::string fullMessage = "IR Generation Warning: " + message;
-    
-    if (node) {
-        fullMessage += " at line " + std::to_string(node->getLine());
-    }
-    
-    std::cerr << fullMessage << std::endl;
-}
-```
+2. **位置信息处理**：
+   - 从 AST 节点提取行号信息
+   - 提取列号信息（如果可用）
+   - 格式化位置信息为可读格式
+
+3. **错误存储和输出**：
+   - 将错误信息存储到内部列表
+   - 同时输出到标准错误流
+   - 保持错误信息的持久性
+
+4. **警告处理**：
+   - 类似错误的处理机制
+   - 不设置错误状态标志
+   - 仅输出警告信息
 
 ### 错误恢复策略
 
-```cpp
-bool IRGenerator::generateWithErrorRecovery(const std::vector<std::unique_ptr<Item>>& items) {
-    clearErrors();
-    
-    for (const auto& item : items) {
-        if (!item) continue;
-        
-        try {
-            // 尝试生成项
-            generateTopLevelItems({item});
-            
-        } catch (const std::exception& e) {
-            // 记录错误但继续处理其他项
-            reportError("Failed to generate item: " + std::string(e.what()), item->item.get());
-            
-            // 生成错误恢复代码
-            generateErrorRecoveryCode(item);
-        }
-    }
-    
-    return !hasGenerationErrors;
-}
+1. **错误恢复生成**：
+   - 清理之前的错误状态
+   - 逐项处理 AST 项
+   - 在错误时继续处理其他项
 
-void IRGenerator::generateErrorRecoveryCode(const std::unique_ptr<Item>& item) {
-    // 根据项类型生成恢复代码
-    if (auto function = dynamic_cast<const Function*>(item->item.get())) {
-        // 生成空函数
-        outputBuffer << "define void @" << function->getFunctionName() << "() {\n";
-        outputBuffer << "  ret void\n";
-        outputBuffer << "}\n\n";
-    }
-    // 其他类型的恢复策略...
-}
-```
+2. **异常捕获机制**：
+   - 对每个项的生成进行异常捕获
+   - 记录详细错误信息
+   - 生成错误恢复代码
+
+3. **恢复代码生成**：
+   - 根据项类型生成最小化的恢复代码
+   - 为函数生成空函数定义
+   - 确保生成的 IR 语法正确
+
+4. **继续处理策略**：
+   - 不因单个项的错误而停止整个生成过程
+   - 尽可能生成更多的有效代码
+   - 提供完整的错误报告
 
 ### 生成验证
 
-```cpp
-bool IRGenerator::validateGeneration() const {
-    // 检查是否有未完成的函数
-    if (builder->hasUnclosedFunctions()) {
-        reportError("Unclosed functions detected");
-        return false;
-    }
-    
-    // 检查是否有未完成的基本块
-    if (builder->hasUnclosedBasicBlocks()) {
-        reportError("Unclosed basic blocks detected");
-        return false;
-    }
-    
-    // 检查输出格式
-    std::string output = outputBuffer.str();
-    if (output.empty()) {
-        reportError("Empty IR output");
-        return false;
-    }
-    
-    // 可以添加更多验证规则...
-    
-    return true;
-}
-```
+1. **完整性检查**：
+   - 检查是否有未完成的函数
+   - 检查是否有未完成的基本块
+   - 验证生成结构的完整性
+
+2. **输出验证**：
+   - 检查输出是否为空
+   - 验证输出格式的基本正确性
+   - 确保生成结果的可用性
+
+3. **验证规则扩展**：
+   - 预留接口添加更多验证规则
+   - 支持自定义验证逻辑
+   - 提供详细的验证报告
 
 ## 输出管理
 
 ### 输出缓冲管理
 
-```cpp
-void IRGenerator::flushOutput() {
-    if (!outputBuffer.str().empty()) {
-        outputStream << outputBuffer.str();
-        outputStream.flush();
-        outputBuffer.str("");
-        outputBuffer.clear();
-    }
-}
+1. **缓冲区控制**：
+   - 检查输出缓冲区是否有内容
+   - 将缓冲区内容写入输出流
+   - 刷新输出流确保输出
 
-std::string IRGenerator::getIROutput() const {
-    return outputBuffer.str();
-}
+2. **缓冲区清理**：
+   - 清空字符串缓冲区内容
+   - 重置缓冲区状态
+   - 准备下次使用
 
-void IRGenerator::finalizeModule() {
-    // 完成所有未完成的基本块
-    builder->finalizeAllBasicBlocks();
-    
-    // 添加模块结束注释
-    outputBuffer << "\n; End of generated IR\n";
-}
-```
+3. **输出获取**：
+   - 提供获取当前输出的方法
+   - 支持输出的检查和调试
+   - 保持输出状态的完整性
+
+4. **模块完成处理**：
+   - 完成所有未完成的基本块
+   - 添加模块结束标记
+   - 确保模块的完整性
 
 ### 输出格式控制
 
-```cpp
-void IRGenerator::setOutputFormat(OutputFormat format) {
-    switch (format) {
-        case OutputFormat::LLVM_IR:
-            // 标准 LLVM IR 格式
-            builder->setCommentPrefix(";");
-            break;
-        case OutputFormat::DEBUG:
-            // 调试格式，包含更多注释
-            builder->setCommentPrefix(";");
-            builder->enableDebugComments(true);
-            break;
-        case OutputFormat::COMPACT:
-            // 紧凑格式，最小化注释
-            builder->setCommentPrefix("");
-            builder->enableDebugComments(false);
-            break;
-    }
-}
-```
+1. **格式类型支持**：
+   - 标准 LLVM IR 格式
+   - 调试格式（包含更多注释）
+   - 紧凑格式（最小化注释）
+
+2. **格式设置策略**：
+   - 根据格式类型设置注释前缀
+   - 控制调试注释的启用状态
+   - 调整输出格式的详细程度
+
+3. **格式切换机制**：
+   - 支持动态切换输出格式
+   - 立即应用格式更改
+   - 保持格式状态的一致性
 
 ## 性能优化
 
 ### 内存管理优化
 
-```cpp
-class IRGenerator {
-private:
-    // 内存池管理
-    std::vector<std::unique_ptr<uint8_t[]>> memoryPools;
-    size_t currentPoolSize;
-    static constexpr size_t POOL_SIZE = 1024 * 1024; // 1MB pools
-    
-public:
-    void* allocateInPool(size_t size) {
-        if (currentPoolSize + size > POOL_SIZE) {
-            // 分配新的内存池
-            memoryPools.push_back(std::make_unique<uint8_t[]>(POOL_SIZE));
-            currentPoolSize = 0;
-        }
-        
-        void* ptr = memoryPools.back().get() + currentPoolSize;
-        currentPoolSize += size;
-        return ptr;
-    }
-};
-```
+1. **内存池策略**：
+   - 使用固定大小的内存池
+   - 减少频繁的内存分配和释放
+   - 提高内存使用效率
+
+2. **池管理机制**：
+   - 跟踪当前池的使用情况
+   - 在池满时分配新池
+   - 管理多个内存池的生命周期
+
+3. **内存分配优化**：
+   - 在池中快速分配内存
+   - 更新池使用状态
+   - 提供高效的内存访问
 
 ### 输出优化
 
-```cpp
-void IRGenerator::optimizeOutput() {
-    // 批量输出优化
-    static constexpr size_t BUFFER_SIZE = 64 * 1024; // 64KB buffer
-    
-    if (outputBuffer.str().size() > BUFFER_SIZE) {
-        // 大量输出时直接刷新到流
-        flushOutput();
-    }
-    
-    // 字符串拼接优化
-    outputBuffer.rdbuf()->pubsetbuf(nullptr, 0); // 无缓冲模式
-}
-```
+1. **批量输出策略**：
+   - 设置输出缓冲区大小阈值
+   - 大量输出时直接刷新
+   - 减少系统调用次数
+
+2. **字符串操作优化**：
+   - 优化字符串拼接性能
+   - 使用无缓冲模式减少开销
+   - 提高输出效率
+
+3. **输出流优化**：
+   - 选择合适的缓冲策略
+   - 减少不必要的缓冲操作
+   - 提高输出速度
 
 ## 测试策略
 
 ### 单元测试
 
-```cpp
-// 基本生成测试
-TEST(IRGeneratorTest, BasicGeneration) {
-    MockSymbolTable symbolTable;
-    MockTypeChecker typeChecker;
-    std::ostringstream output;
-    
-    IRGenerator generator(symbolTable, typeChecker, output);
-    
-    // 创建简单的 AST
-    std::vector<std::unique_ptr<Item>> items;
-    items.push_back(createSimpleFunction());
-    
-    bool success = generator.generateIR(items);
-    
-    EXPECT_TRUE(success);
-    EXPECT_FALSE(generator.hasErrors());
-    std::string ir = output.str();
-    EXPECT_TRUE(ir.find("define i32 @main()") != std::string::npos);
-}
+1. **基本生成测试**：
+   - 测试简单的函数生成
+   - 验证生成结果的正确性
+   - 检查错误状态的处理
 
-// 错误处理测试
-TEST(IRGeneratorTest, ErrorHandling) {
-    MockSymbolTable symbolTable;
-    MockTypeChecker typeChecker;
-    std::ostringstream output;
-    
-    IRGenerator generator(symbolTable, typeChecker, output);
-    
-    // 创建有错误的 AST
-    std::vector<std::unique_ptr<Item>> items;
-    items.push_back(createErroneousFunction());
-    
-    bool success = generator.generateIR(items);
-    
-    EXPECT_FALSE(success);
-    EXPECT_TRUE(generator.hasErrors());
-    EXPECT_GT(generator.getErrors().size(), 0);
-}
-```
+2. **错误处理测试**：
+   - 测试错误情况的正确处理
+   - 验证错误信息的记录
+   - 检查错误恢复机制
+
+3. **组件交互测试**：
+   - 测试各组件间的正确交互
+   - 验证依赖关系的处理
+   - 检查组件状态的一致性
 
 ### 集成测试
 
-```cpp
-// 完整编译流程测试
-TEST(IRGeneratorIntegrationTest, FullCompilation) {
-    // 设置完整的语义分析结果
-    auto symbolTable = performSemanticAnalysis("fn main() -> i32 { return 42; }");
-    auto typeChecker = performTypeChecking(symbolTable);
-    
-    std::ostringstream output;
-    IRGenerator generator(*symbolTable, *typeChecker, output);
-    
-    auto ast = parseSource("fn main() -> i32 { return 42; }");
-    bool success = generator.generateIR(ast);
-    
-    EXPECT_TRUE(success);
-    
-    // 验证生成的 IR 可以被 LLVM 解析
-    std::string ir = output.str();
-    EXPECT_TRUE(verifyLLVMIR(ir));
-}
-```
+1. **完整编译流程测试**：
+   - 测试从源码到 IR 的完整流程
+   - 验证与前端组件的集成
+   - 检查生成 IR 的正确性
+
+2. **IR 验证测试**：
+   - 使用 LLVM 工具验证生成的 IR
+   - 确保 IR 可以被正确解析
+   - 验证 IR 的语义正确性
+
+3. **性能测试**：
+   - 测试大型项目的生成性能
+   - 验证内存使用的合理性
+   - 检查生成效率的优化
 
 ## 使用示例
 
 ### 基本使用
 
-```cpp
-int main(int argc, char* argv[]) {
-    // 执行词法分析、语法分析、语义分析...
-    auto symbolTable = performSemanticAnalysis(sourceCode);
-    auto typeChecker = performTypeChecking(*symbolTable);
-    auto ast = parseSource(sourceCode);
-    
-    // 创建 IR 生成器
-    IRGenerator irGenerator(*symbolTable, *typeChecker);
-    
-    // 生成 IR
-    bool success = irGenerator.generateIR(ast);
-    
-    if (success) {
-        // 输出到 stdout（默认）
-        std::cout << irGenerator.getIROutput();
-        return 0;
-    } else {
-        // 输出错误信息
-        for (const auto& error : irGenerator.getErrors()) {
-            std::cerr << error << std::endl;
-        }
-        return 1;
-    }
-}
-```
+1. **编译流程集成**：
+   - 在语义分析后创建 IRGenerator
+   - 传入符号表和类型检查结果
+   - 处理 AST 并生成 IR
+
+2. **错误处理**：
+   - 检查生成是否成功
+   - 处理成功情况下的输出
+   - 处理失败情况下的错误报告
+
+3. **结果处理**：
+   - 获取生成的 IR 输出
+   - 输出到标准输出或文件
+   - 返回适当的退出码
 
 ### 高级使用
 
-```cpp
-// 自定义输出流
-std::ofstream outputFile("output.ll");
-IRGenerator irGenerator(*symbolTable, *typeChecker, outputFile);
+1. **自定义输出**：
+   - 使用文件输出流
+   - 设置特定的输出格式
+   - 控制输出的详细程度
 
-// 设置调试格式
-irGenerator.setOutputFormat(OutputFormat::DEBUG);
+2. **组件访问**：
+   - 获取对内部组件的访问
+   - 进行额外的 IR 操作
+   - 自定义生成行为
 
-// 生成 IR
-bool success = irGenerator.generateIR(ast);
-
-// 获取组件访问
-if (success) {
-    auto& builder = irGenerator.getBuilder();
-    auto& exprGen = irGenerator.getExpressionGenerator();
-    
-    // 可以进行额外的 IR 操作...
-}
-
-// 手动刷新输出
-irGenerator.flushOutput();
-```
+3. **输出控制**：
+   - 手动刷新输出缓冲区
+   - 控制输出的时机
+   - 管理输出流的状态
 
 ## 总结
 

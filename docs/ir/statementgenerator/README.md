@@ -56,738 +56,448 @@ StatementGenerator 组件负责将 Rx 语言的语句转换为 LLVM IR 文本。
 
 ### 组件接口设计
 
-```cpp
-// 前向声明
-class ExpressionGenerator;
+1. **前向声明和延迟初始化**：
+   - 前向声明 ExpressionGenerator 类以解决循环依赖
+   - 使用延迟初始化模式设置 ExpressionGenerator 引用
+   - 通过 setExpressionGenerator 方法建立双向引用
 
-class StatementGenerator {
-public:
-    StatementGenerator(std::shared_ptr<IRBuilder> irBuilder,
-                    std::shared_ptr<TypeMapper> typeMapper,
-                    std::shared_ptr<ScopeTree> scopeTree,
-                    const NodeTypeMap& nodeTypeMap);
-    
-    // 设置 ExpressionGenerator 引用（延迟初始化）
-    void setExpressionGenerator(std::shared_ptr<ExpressionGenerator> exprGen);
-    
-    // 主要生成接口
-    void generateStatement(std::shared_ptr<Statement> stmt);
-    
-    // 各类语句的生成方法
-    void generateLetStatement(std::shared_ptr<LetStatement> stmt);
-    void generateExpressionStatement(std::shared_ptr<ExpressionStatement> stmt);
-    void generateItemStatement(std::shared_ptr<Item> item);
-    
-    // 工具方法
-    std::string getStatementType(std::shared_ptr<Statement> stmt);
-    bool isStatementTerminator(std::shared_ptr<Statement> stmt);
-    void handleUnreachableCode();
+2. **构造函数参数**：
+   - 接收 IRBuilder、TypeMapper、ScopeTree 作为核心依赖
+   - 接收节点类型映射用于类型信息查询
+   - 初始化组件的基本状态和控制流栈
 
-private:
-    std::shared_ptr<IRBuilder> irBuilder;
-    std::shared_ptr<ExpressionGenerator> exprGenerator;  // 延迟初始化
-    std::shared_ptr<TypeMapper> typeMapper;
-    std::shared_ptr<ScopeTree> scopeTree;
-    const NodeTypeMap& nodeTypeMap;
-    
-    // 控制流上下文管理
-    struct ControlFlowContext {
-        std::string loopEndLabel;
-        std::string loopBreakLabel;
-        std::vector<std::string> breakTargets;
-        std::vector<std::string> continueTargets;
-    };
-    
-    std::vector<ControlFlowContext> controlFlowStack;
-    
-    // 辅助方法
-    void enterControlFlowContext(const std::string& loopType);
-    void exitControlFlowContext();
-    void addBreakTarget(const std::string& label);
-    void addContinueTarget(const std::string& label);
-    std::string getCurrentBreakTarget();
-    std::string getCurrentContinueTarget();
-};
+3. **主要生成接口**：
+   - `generateStatement()`: 通用的语句生成入口点
+   - 根据语句类型分发到相应的生成方法
+   - 处理语句生成的异常和错误
 
-// 注意：BlockExpression 现在完全由 ExpressionGenerator 处理
-// StatementGenerator 只提供 generateStatement 方法供 ExpressionGenerator 调用
-```
+4. **专用生成方法**：
+   - `generateLetStatement()`: 处理变量声明语句
+   - `generateExpressionStatement()`: 处理表达式语句
+   - `generateItemStatement()`: 处理项语句（函数、结构体等）
+
+5. **工具方法**：
+   - `getStatementType()`: 获取语句的类型信息
+   - `isStatementTerminator()`: 检查语句是否为终止符
+   - `handleUnreachableCode()`: 处理不可达代码
+
+6. **控制流上下文管理**：
+   - ControlFlowContext 结构管理循环上下文信息
+   - 维护循环结束标签、break/continue 目标
+   - 使用栈结构管理嵌套控制流
+
+7. **控制流辅助方法**：
+   - `enterControlFlowContext()`/`exitControlFlowContext()`: 管理控制流上下文
+   - `addBreakTarget()`/`addContinueTarget()`: 添加跳转目标
+   - `getCurrentBreakTarget()`/`getCurrentContinueTarget()`: 获取当前跳转目标
+
+8. **职责边界说明**：
+   - BlockExpression 完全由 ExpressionGenerator 处理
+   - StatementGenerator 只提供 generateStatement 方法供调用
+   - 明确组件间的职责分工
 
 ## 实现策略
 
 ### Let 语句生成
 
-```cpp
-void StatementGenerator::generateLetStatement(std::shared_ptr<LetStatement> stmt) {
-    // 获取变量名和模式
-    std::string varName = getVariableName(stmt->patternnotopalt);
-    
-    // 确定变量类型
-    std::string varType;
-    if (stmt->type) {
-        // 显式类型
-        varType = typeMapper->mapRxTypeToLLVM(getTypeName(stmt->type));
-    } else {
-        // 类型推断
-        if (stmt->expression) {
-            varType = getExpressionType(stmt->expression);
-        } else {
-            varType = "i32"; // 默认类型
-        }
-    }
-    
-    // 分配变量空间
-    std::string varPtrReg = irBuilder->newRegister(varName, "ptr");
-    irBuilder->emitAlloca(varPtrReg, varType);
-    
-    // 生成初始化表达式
-    if (stmt->expression && exprGenerator) {
-        std::string initReg = exprGenerator->generateExpression(stmt->expression);
-        
-        // 类型转换（如果需要）
-        std::string initType = getExpressionType(stmt->expression);
-        if (initType != varType) {
-            initReg = generateImplicitConversion(initReg, initType, varType);
-        }
-        
-        // 存储初始值
-        irBuilder->emitStore(initReg, varPtrReg, varType);
-    }
-    
-    // 将变量注册到当前作用域
-    auto currentScope = scopeTree->GetCurrentScope();
-    auto symbol = std::make_shared<Symbol>(varName, SymbolKind::Variable,
-                                          createSemanticType(varType), false, stmt);
-    scopeTree->InsertSymbol(varName, symbol);
-    
-    // 通过 IRBuilder 注册变量寄存器
-    irBuilder->setVariableRegister(varName, varPtrReg);
-}
-```
+1. **变量信息提取**：
+   - 从模式中提取变量名
+   - 确定变量的类型信息
+   - 处理显式类型和类型推断
+
+2. **类型确定策略**：
+   - 优先使用显式指定的类型
+   - 从初始化表达式推断类型
+   - 使用默认类型作为后备
+
+3. **内存分配**：
+   - 为变量分配栈空间
+   - 生成指针寄存器用于变量访问
+   - 确保寄存器命名的唯一性
+
+4. **初始化处理**：
+   - 生成初始化表达式的代码
+   - 处理必要的类型转换
+   - 存储初始值到分配的内存
+
+5. **符号表注册**：
+   - 创建符号信息并注册到当前作用域
+   - 通过 IRBuilder 注册变量寄存器
+   - 维护符号表和寄存器的同步
 
 ### 表达式语句生成
 
-```cpp
-void StatementGenerator::generateExpressionStatement(std::shared_ptr<ExpressionStatement> stmt) {
-    // 表达式语句存储的是 Expression（可能是控制流表达式）
-    // 注意：BlockExpression 现在由 ExpressionGenerator 完全处理
-    if (!exprGenerator) {
-        reportError("ExpressionGenerator not set for ExpressionStatement");
-        return;
-    }
-    
-    // 检查是否为控制流表达式
-    if (auto ifExpr = std::dynamic_pointer_cast<IfExpression>(stmt->astnode)) {
-        exprGenerator->generateIfExpression(ifExpr);
-    } else if (auto loopExpr = std::dynamic_pointer_cast<InfiniteLoopExpression>(stmt->astnode)) {
-        exprGenerator->generateLoopExpression(loopExpr);
-    } else if (auto whileExpr = std::dynamic_pointer_cast<PredicateLoopExpression>(stmt->astnode)) {
-        exprGenerator->generateWhileExpression(whileExpr);
-    } else if (auto breakExpr = std::dynamic_pointer_cast<BreakExpression>(stmt->astnode)) {
-        exprGenerator->generateBreakExpression(breakExpr);
-    } else if (auto returnExpr = std::dynamic_pointer_cast<ReturnExpression>(stmt->astnode)) {
-        exprGenerator->generateReturnExpression(returnExpr);
-    } else if (auto blockExpr = std::dynamic_pointer_cast<BlockExpression>(stmt->astnode)) {
-        // BlockExpression 现在由 ExpressionGenerator 处理
-        exprGenerator->generateBlockExpression(blockExpr);
-    } else {
-        // 普通表达式，生成并丢弃结果
-        std::string exprReg = exprGenerator->generateExpression(stmt->astnode);
-        
-        // 对于有分号的表达式语句，丢弃结果
-        if (stmt->hassemi) {
-            irBuilder->emitComment("Expression result discarded");
-        }
-    }
-}
-```
+1. **依赖检查**：
+   - 验证 ExpressionGenerator 是否已设置
+   - 确保组件间的正确依赖关系
+   - 处理未设置依赖的错误情况
+
+2. **表达式类型识别**：
+   - 检查表达式是否为控制流表达式
+   - 识别各种控制流结构（if、loop、while、break、return）
+   - 区分普通表达式和控制流表达式
+
+3. **控制流表达式处理**：
+   - 将控制流表达式委托给 ExpressionGenerator
+   - 保持控制流生成的一致性
+   - 确保 BlockExpression 的正确处理
+
+4. **普通表达式处理**：
+   - 生成表达式代码并获取结果寄存器
+   - 对于有分号的表达式语句，丢弃结果
+   - 添加适当的注释说明
 
 ### 项语句生成
 
-```cpp
-void StatementGenerator::generateItemStatement(std::shared_ptr<Item> item) {
-    // 项语句存储的是 Item，需要根据实际类型处理
-    if (auto function = std::dynamic_pointer_cast<Function>(item->item)) {
-        generateFunctionDefinition(function);
-    } else if (auto structDef = std::dynamic_pointer_cast<StructStruct>(item->item)) {
-        generateStructDefinition(structDef);
-    } else if (auto constItem = std::dynamic_pointer_cast<ConstantItem>(item->item)) {
-        generateConstantDefinition(constItem);
-    } else if (auto implDef = std::dynamic_pointer_cast<InherentImpl>(item->item)) {
-        generateImplDefinition(implDef);
-    } else {
-        reportError("Unsupported item type in statement");
-    }
-}
-```
+1. **项类型识别**：
+   - 使用动态类型转换识别项的具体类型
+   - 支持函数、结构体、常量、impl 块等类型
+   - 处理不支持的项类型
+
+2. **项生成分发**：
+   - 将函数定义委托给函数生成器
+   - 将结构体定义委托给结构体生成器
+   - 将常量定义委托给常量生成器
+   - 将 impl 块委托给 impl 生成器
+
+3. **错误处理**：
+   - 对不支持的项类型报告错误
+   - 提供详细的错误信息
+   - 保持生成过程的稳定性
 
 ### 控制流语句生成
 
 #### if 语句
 
-```cpp
-void StatementGenerator::generateIfStatement(std::shared_ptr<IfExpression> stmt) {
-    // 生成条件表达式
-    std::string condReg = exprGenerator->generateExpression(stmt->conditions->expression);
-    
-    // 创建基本块
-    std::string thenBB = irBuilder->newBasicBlock("if.then");
-    std::string elseBB = irBuilder->newBasicBlock("if.else");
-    std::string endBB = irBuilder->newBasicBlock("if.end");
-    
-    // 生成条件跳转
-    irBuilder->emitCondBr(condReg, thenBB, elseBB);
-    
-    // 生成 then 分支
-    irBuilder->setCurrentBasicBlock(thenBB);
-    irBuilder->enterScope(); // then 块的作用域
-    // 注意：BlockExpression 现在由 ExpressionGenerator 处理
-    if (auto blockExpr = std::dynamic_pointer_cast<BlockExpression>(stmt->ifblockexpression)) {
-        exprGenerator->generateBlockExpression(blockExpr);
-    } else {
-        generateStatement(std::make_shared<Statement>(stmt->ifblockexpression));
-    }
-    irBuilder->exitScope();
-    
-    // 检查 then 分支是否以终止符结束
-    if (!isStatementTerminator(stmt->ifblockexpression)) {
-        irBuilder->emitBr(endBB);
-    }
-    
-    // 生成 else 分支
-    irBuilder->setCurrentBasicBlock(elseBB);
-    irBuilder->enterScope(); // else 块的作用域
-    
-    if (stmt->elseexpression) {
-        generateStatement(std::make_shared<Statement>(stmt->elseexpression));
-    }
-    
-    irBuilder->exitScope();
-    
-    // 检查 else 分支是否以终止符结束
-    if (!stmt->elseexpression || !isStatementTerminator(stmt->elseexpression)) {
-        irBuilder->emitBr(endBB);
-    }
-    
-    // 设置结束基本块
-    irBuilder->setCurrentBasicBlock(endBB);
-}
-```
+1. **条件处理**：
+   - 生成条件表达式的代码
+   - 获取条件结果的寄存器
+   - 确保条件类型的正确性
+
+2. **基本块创建**：
+   - 创建 then、else 和 end 基本块
+   - 确保基本块名称的唯一性
+   - 设置基本块的语义化命名
+
+3. **条件跳转生成**：
+   - 生成条件跳转指令
+   - 连接条件结果和目标基本块
+   - 确保跳转逻辑的正确性
+
+4. **分支生成**：
+   - 生成 then 分支的代码
+   - 管理 then 块的作用域
+   - 处理 BlockExpression 的委托生成
+
+5. **分支终止检查**：
+   - 检查分支是否以终止符结束
+   - 为非终止分支生成跳转到结束块
+   - 确保控制流的正确性
 
 #### loop 语句
 
-```cpp
-void StatementGenerator::generateLoopStatement(std::shared_ptr<InfiniteLoopExpression> stmt) {
-    // 创建基本块
-    std::string loopBB = irBuilder->newBasicBlock("loop.head");
-    std::string endBB = irBuilder->newBasicBlock("loop.end");
-    
-    // 进入循环上下文
-    enterControlFlowContext("loop");
-    addBreakTarget(endBB);
-    
-    // 跳转到循环开始
-    irBuilder->emitBr(loopBB);
-    
-    // 生成循环体
-    irBuilder->setCurrentBasicBlock(loopBB);
-    irBuilder->enterScope(); // 循环体作用域
-    
-    // 生成循环体语句
-    // 注意：BlockExpression 现在由 ExpressionGenerator 处理
-    if (auto blockExpr = std::dynamic_pointer_cast<BlockExpression>(stmt->blockexpression)) {
-        exprGenerator->generateBlockExpression(blockExpr);
-    } else {
-        generateStatement(std::make_shared<Statement>(stmt->blockexpression));
-    }
-    
-    irBuilder->exitScope();
-    
-    // 如果循环体没有 break，继续循环
-    irBuilder->emitBr(loopBB);
-    
-    // 设置循环结束基本块
-    irBuilder->setCurrentBasicBlock(endBB);
-    
-    // 退出循环上下文
-    exitControlFlowContext();
-}
-```
+1. **基本块结构**：
+   - 创建循环头和结束基本块
+   - 设置循环的语义化命名
+   - 建立循环的基本块框架
+
+2. **循环上下文管理**：
+   - 进入循环控制流上下文
+   - 设置 break 目标标签
+   - 维护循环的嵌套信息
+
+3. **循环体生成**：
+   - 生成循环体的代码
+   - 管理循环体的作用域
+   - 处理循环体中的语句
+
+4. **循环控制**：
+   - 生成循环体到循环头的跳转
+   - 设置循环结束基本块
+   - 退出循环控制流上下文
 
 #### while 语句
 
-```cpp
-void StatementGenerator::generateWhileStatement(std::shared_ptr<PredicateLoopExpression> stmt) {
-    // 创建基本块
-    std::string condBB = irBuilder->newBasicBlock("while.cond");
-    std::string bodyBB = irBuilder->newBasicBlock("while.body");
-    std::string endBB = irBuilder->newBasicBlock("while.end");
-    
-    // 进入循环上下文
-    enterControlFlowContext("while");
-    addBreakTarget(endBB);
-    
-    // 跳转到条件检查
-    irBuilder->emitBr(condBB);
-    
-    // 生成条件检查
-    irBuilder->setCurrentBasicBlock(condBB);
-    std::string condReg = exprGenerator->generateExpression(stmt->conditions->expression);
-    irBuilder->emitCondBr(condReg, bodyBB, endBB);
-    
-    // 生成循环体
-    irBuilder->setCurrentBasicBlock(bodyBB);
-    irBuilder->enterScope(); // 循环体作用域
-    
-    // 注意：BlockExpression 现在由 ExpressionGenerator 处理
-    if (auto blockExpr = std::dynamic_pointer_cast<BlockExpression>(stmt->blockexpression)) {
-        exprGenerator->generateBlockExpression(blockExpr);
-    } else {
-        generateStatement(std::make_shared<Statement>(stmt->blockexpression));
-    }
-    
-    irBuilder->exitScope();
-    
-    // 跳回条件检查
-    irBuilder->emitBr(condBB);
-    
-    // 设置循环结束基本块
-    irBuilder->setCurrentBasicBlock(endBB);
-    
-    // 退出循环上下文
-    exitControlFlowContext();
-}
-```
+1. **三块结构**：
+   - 创建条件、体和结束基本块
+   - 建立循环的标准三块结构
+   - 设置语义化的基本块命名
+
+2. **循环上下文**：
+   - 进入 while 循环的控制流上下文
+   - 设置 break 目标为循环结束
+   - 维护循环的嵌套状态
+
+3. **条件检查**：
+   - 生成条件表达式的代码
+   - 生成条件跳转指令
+   - 连接条件和循环体
+
+4. **循环体和跳转**：
+   - 生成循环体的代码
+   - 生成循环体到条件检查的跳转
+   - 完成循环的控制流
 
 ### 跳转语句生成
 
 #### break 语句
 
-```cpp
-void StatementGenerator::generateBreakStatement(std::shared_ptr<BreakExpression> stmt) {
-    // 获取当前 break 目标
-    std::string breakTarget = getCurrentBreakTarget();
-    if (breakTarget.empty()) {
-        reportError("break statement outside of loop");
-        return;
-    }
-    
-    // 如果有 break 值，生成表达式
-    if (stmt->expression) {
-        std::string valueReg = exprGenerator->generateExpression(stmt->expression);
-        
-        // 存储 break 值到特殊位置
-        std::string breakValuePtr = irBuilder->getVariableRegister("__break_value");
-        if (breakValuePtr.empty()) {
-            // 创建 break 值存储
-            breakValuePtr = irBuilder->newRegister("__break_value", "ptr");
-            irBuilder->emitAlloca(breakValuePtr, "i32");
-            irBuilder->setVariableRegister("__break_value", breakValuePtr);
-        }
-        
-        irBuilder->emitStore(valueReg, breakValuePtr, "i32");
-    }
-    
-    // 跳转到循环结束
-    irBuilder->emitBr(breakTarget);
-    
-    // 标记代码为不可达
-    handleUnreachableCode();
-}
-```
+1. **目标验证**：
+   - 检查是否在循环上下文中
+   - 获取当前 break 目标
+   - 处理 break 语句的位置错误
+
+2. **break 值处理**：
+   - 生成 break 值表达式的代码
+   - 创建或获取 break 值存储位置
+   - 存储 break 值到指定位置
+
+3. **跳转生成**：
+   - 生成到循环结束的跳转指令
+   - 标记后续代码为不可达
+   - 处理不可达代码的状态
 
 #### continue 语句
 
-```cpp
-void StatementGenerator::generateContinueStatement(std::shared_ptr<ContinueExpression> stmt) {
-    // 获取当前 continue 目标
-    std::string continueTarget = getCurrentContinueTarget();
-    if (continueTarget.empty()) {
-        reportError("continue statement outside of loop");
-        return;
-    }
-    
-    // 跳转到循环条件检查或循环开始
-    irBuilder->emitBr(continueTarget);
-    
-    // 标记代码为不可达
-    handleUnreachableCode();
-}
-```
+1. **目标验证**：
+   - 检查是否在循环上下文中
+   - 获取当前 continue 目标
+   - 处理 continue 语句的位置错误
+
+2. **跳转生成**：
+   - 生成到 continue 目标的跳转
+   - 标记后续代码为不可达
+   - 确保跳转目标的正确性
 
 #### return 语句
 
-```cpp
-void StatementGenerator::generateReturnStatement(std::shared_ptr<ReturnExpression> stmt) {
-    // 获取当前函数返回类型
-    std::string returnType = getCurrentFunctionReturnType();
-    
-    if (stmt->expression) {
-        // 有返回值的 return
-        std::string valueReg = exprGenerator->generateExpression(stmt->expression);
-        std::string valueType = getExpressionType(stmt->expression);
-        
-        // 类型转换（如果需要）
-        if (valueType != returnType) {
-            valueReg = generateImplicitConversion(valueReg, valueType, returnType);
-        }
-        
-        irBuilder->emitRet(valueReg, returnType);
-    } else {
-        // 无返回值的 return
-        if (returnType != "void") {
-            reportError("Empty return in non-void function");
-        }
-        irBuilder->emitRet("", "void");
-    }
-    
-    // 标记代码为不可达
-    handleUnreachableCode();
-}
-```
+1. **返回类型获取**：
+   - 获取当前函数的返回类型
+   - 验证返回语句的上下文
+   - 确保返回类型的正确性
+
+2. **返回值处理**：
+   - 生成返回值表达式的代码
+   - 处理返回值的类型转换
+   - 确保返回值与函数类型匹配
+
+3. **返回指令生成**：
+   - 生成适当的返回指令
+   - 处理有返回值和无返回值的情况
+   - 标记后续代码为不可达
 
 ## 控制流上下文管理
 
 ### 上下文栈管理
 
-```cpp
-void StatementGenerator::enterControlFlowContext(const std::string& loopType) {
-    ControlFlowContext context;
-    context.loopEndLabel = irBuilder->newBasicBlock(loopType + ".end");
-    context.loopBreakLabel = context.loopEndLabel;
-    
-    controlFlowStack.push_back(context);
-}
+1. **上下文创建**：
+   - 创建新的控制流上下文结构
+   - 生成循环结束标签
+   - 设置循环的基本信息
 
-void StatementGenerator::exitControlFlowContext() {
-    if (!controlFlowStack.empty()) {
-        controlFlowStack.pop_back();
-    }
-}
+2. **上下文栈操作**：
+   - 将新上下文压入栈
+   - 弹出当前上下文
+   - 维护上下文栈的正确性
 
-void StatementGenerator::addBreakTarget(const std::string& label) {
-    if (!controlFlowStack.empty()) {
-        controlFlowStack.back().breakTargets.push_back(label);
-        controlFlowStack.back().loopBreakLabel = label;
-    }
-}
+3. **跳转目标管理**：
+   - 添加 break 目标到当前上下文
+   - 添加 continue 目标到当前上下文
+   - 维护跳转目标的列表
 
-void StatementGenerator::addContinueTarget(const std::string& label) {
-    if (!controlFlowStack.empty()) {
-        controlFlowStack.back().continueTargets.push_back(label);
-    }
-}
-
-std::string StatementGenerator::getCurrentBreakTarget() {
-    if (controlFlowStack.empty()) {
-        return "";
-    }
-    return controlFlowStack.back().loopBreakLabel;
-}
-
-std::string StatementGenerator::getCurrentContinueTarget() {
-    if (controlFlowStack.empty()) {
-        return "";
-    }
-    
-    // 对于 while 循环，continue 跳转到条件检查
-    // 对于 loop 循环，continue 跳转到循环开始
-    if (controlFlowStack.back().continueTargets.empty()) {
-        return controlFlowStack.back().loopEndLabel;
-    }
-    return controlFlowStack.back().continueTargets.back();
-}
-```
+4. **目标获取策略**：
+   - 获取当前 break 目标
+   - 获取当前 continue 目标
+   - 处理不同循环类型的跳转差异
 
 ### 不可达代码处理
 
-```cpp
-void StatementGenerator::handleUnreachableCode() {
-    // 创建不可达基本块
-    std::string unreachableBB = irBuilder->newBasicBlock("unreachable");
-    irBuilder->setCurrentBasicBlock(unreachableBB);
-    
-    // 添加 unreachable 指令
-    irBuilder->emitInstruction("unreachable");
-    
-    // 设置标志，表示后续代码不可达
-    setUnreachableFlag(true);
-}
-```
+1. **不可达基本块创建**：
+   - 创建专门的不可达基本块
+   - 设置当前基本块为不可达块
+   - 生成 unreachable 指令
+
+2. **状态管理**：
+   - 设置不可达代码标志
+   - 跳过后续代码的生成
+   - 维护代码可达性状态
 
 ## 与其他组件的集成
 
 ### 与 ExpressionGenerator 的集成
 
-```cpp
-class StatementGenerator {
-private:
-    std::shared_ptr<ExpressionGenerator> exprGenerator;
-    
-public:
-    void generateLetStatement(std::shared_ptr<LetStatement> stmt) {
-        // 使用 ExpressionGenerator 生成初始化表达式
-        if (stmt->expression) {
-            std::string initReg = exprGenerator->generateExpression(stmt->expression);
-            // ... 处理初始化值
-        }
-    }
-};
-```
+1. **依赖关系**：
+   - StatementGenerator 依赖 ExpressionGenerator
+   - 通过延迟初始化解决循环依赖
+   - 建立双向引用关系
+
+2. **表达式处理**：
+   - 使用 ExpressionGenerator 生成表达式代码
+   - 处理初始化表达式中的复杂逻辑
+   - 确保表达式生成的正确性
+
+3. **控制流委托**：
+   - 将控制流表达式委托给 ExpressionGenerator
+   - 保持控制流生成的一致性
+   - 避免重复的实现逻辑
 
 ### 与 IRBuilder 的集成
 
-```cpp
-class StatementGenerator {
-private:
-    std::shared_ptr<IRBuilder> irBuilder;
-    
-public:
-    void generateStatement(std::shared_ptr<Statement> stmt) {
-        // 使用 IRBuilder 管理基本块和寄存器
-        std::string currentBB = irBuilder->getCurrentBasicBlock();
-        
-        // 生成语句代码
-        // ... 语句生成逻辑 ...
-        
-        // 同步作用域
-        irBuilder->syncWithScopeTree();
-    }
-};
-```
+1. **基本块管理**：
+   - 使用 IRBuilder 创建和管理基本块
+   - 设置当前活动的基本块
+   - 同步基本块状态
+
+2. **寄存器管理**：
+   - 通过 IRBuilder 分配寄存器
+   - 管理变量寄存器的映射
+   - 确保寄存器的正确使用
+
+3. **作用域同步**：
+   - 与 IRBuilder 同步作用域状态
+   - 处理作用域的进入和退出
+   - 维护作用域信息的一致性
 
 ### 与 ScopeTree 的集成
 
-```cpp
-// 注意：BlockExpression 现在完全由 ExpressionGenerator 处理
-// StatementGenerator 不再直接处理 BlockExpression
-// ExpressionGenerator 会调用 StatementGenerator::generateStatement 来处理 BlockExpression 中的语句
-```
+1. **职责分离**：
+   - BlockExpression 完全由 ExpressionGenerator 处理
+   - StatementGenerator 不再直接处理 BlockExpression
+   - 通过接口调用处理 BlockExpression 中的语句
+
+2. **作用域管理**：
+   - 通过 ScopeTree 管理变量作用域
+   - 处理变量的注册和查找
+   - 维护作用域的层次结构
 
 ## 错误处理
 
 ### 语句错误检测
 
-```cpp
-class StatementGenerator {
-private:
-    bool hasErrors;
-    std::vector<std::string> errorMessages;
-    
-public:
-    void reportError(const std::string& message) {
-        hasErrors = true;
-        errorMessages.push_back(message);
-        std::cerr << "Statement Error: " << message << std::endl;
-    }
-    
-    void reportControlFlowError(const std::string& stmtType, const std::string& context) {
-        reportError("Invalid " + stmtType + " statement in " + context);
-    }
-    
-    bool hasGenerationErrors() const {
-        return hasErrors;
-    }
-    
-    const std::vector<std::string>& getErrorMessages() const {
-        return errorMessages;
-    }
-};
-```
+1. **错误状态管理**：
+   - 维护错误发生标志
+   - 收集错误信息列表
+   - 提供错误查询接口
+
+2. **错误报告**：
+   - 格式化错误信息
+   - 输出错误到标准错误流
+   - 包含错误的详细描述
+
+3. **控制流错误**：
+   - 检测控制流语句的位置错误
+   - 报告无效的控制流使用
+   - 提供上下文信息
 
 ### 错误恢复策略
 
-```cpp
-void StatementGenerator::generateStatementWithErrorRecovery(std::shared_ptr<Statement> stmt) {
-    try {
-        generateStatement(stmt);
-    } catch (const GenerationError& error) {
-        reportError(error.what());
-        
-        // 生成错误恢复代码
-        generateErrorRecoveryCode(stmt);
-    }
-}
+1. **异常捕获**：
+   - 捕获语句生成过程中的异常
+   - 记录详细的错误信息
+   - 防止错误传播
 
-void StatementGenerator::generateErrorRecoveryCode(std::shared_ptr<Statement> stmt) {
-    // 根据语句类型生成恢复代码
-    if (auto letStmt = std::dynamic_pointer_cast<LetStatement>(stmt)) {
-        // 为 let 语句生成默认值
-        generateDefaultInitialization(letStmt);
-    } else if (auto exprStmt = std::dynamic_pointer_cast<ExpressionStatement>(stmt)) {
-        // 跳过表达式语句
-        irBuilder->emitComment("Error: skipping expression statement");
-    }
-    // ... 其他语句类型的恢复策略
-}
-```
+2. **恢复代码生成**：
+   - 根据语句类型生成恢复代码
+   - 为 let 语句生成默认初始化
+   - 跳过有问题的表达式语句
+
+3. **继续处理**：
+   - 在错误发生后继续处理其他语句
+   - 最大化生成有效代码
+   - 提供完整的错误报告
 
 ## 性能优化
 
 ### 死代码消除
 
-```cpp
-class StatementGenerator {
-private:
-    bool unreachableFlag = false;
-    
-public:
-    void generateStatement(std::shared_ptr<Statement> stmt) {
-        // 检查是否在不可达代码中
-        if (unreachableFlag) {
-            irBuilder->emitComment("Unreachable code skipped");
-            return;
-        }
-        
-        // 正常生成语句
-        // ... 语句生成逻辑 ...
-    }
-    
-    void setUnreachableFlag(bool flag) {
-        unreachableFlag = flag;
-    }
-};
-```
+1. **不可达代码检测**：
+   - 维护不可达代码标志
+   - 跳过不可达代码的生成
+   - 添加适当的注释说明
+
+2. **标志管理**：
+   - 在遇到跳转语句时设置标志
+   - 在生成后续语句时检查标志
+   - 重置标志以恢复正常生成
 
 ### 基本块合并
 
-```cpp
-void StatementGenerator::optimizeBasicBlocks() {
-    // 检查相邻的基本块是否可以合并
-    std::string currentBB = irBuilder->getCurrentBasicBlock();
-    
-    if (canMergeWithNext(currentBB)) {
-        irBuilder->mergeBasicBlocks(currentBB, getNextBasicBlock(currentBB));
-    }
-}
-```
+1. **合并条件检查**：
+   - 检查相邻基本块是否可以合并
+   - 分析基本块间的跳转关系
+   - 执行基本块合并操作
+
+2. **优化效果**：
+   - 减少基本块数量
+   - 简化控制流图
+   - 提高生成代码的效率
 
 ## 测试策略
 
 ### 单元测试
 
-```cpp
-// Let 语句测试
-TEST(StatementGeneratorTest, LetStatement) {
-    setupGenerator();
-    
-    auto letStmt = createLetStatement("x", "i32", createLiteral("42"));
-    generator->generateLetStatement(letStmt);
-    
-    // 验证生成的 IR 包含正确的 alloca 和 store
-    std::string ir = getGeneratedIR();
-    EXPECT_TRUE(ir.find("%x_ptr = alloca i32") != std::string::npos);
-    EXPECT_TRUE(ir.find("store i32 42, i32* %x_ptr") != std::string::npos);
-}
+1. **Let 语句测试**：
+   - 测试变量声明的正确生成
+   - 验证 alloca 和 store 指令
+   - 检查类型推断和转换
 
-// 控制流测试
-TEST(StatementGeneratorTest, IfStatement) {
-    setupGenerator();
-    
-    auto ifStmt = createIfStatement(
-        createLiteral("true"),
-        createBlock({createReturnStatement(createLiteral("1"))}),
-        createBlock({createReturnStatement(createLiteral("0"))})
-    );
-    
-    generator->generateIfStatement(ifStmt);
-    
-    // 验证基本块和跳转
-    std::string ir = getGeneratedIR();
-    EXPECT_TRUE(ir.find("if.then:") != std::string::npos);
-    EXPECT_TRUE(ir.find("if.else:") != std::string::npos);
-    EXPECT_TRUE(ir.find("if.end:") != std::string::npos);
-}
-```
+2. **控制流测试**：
+   - 测试 if 语句的基本块生成
+   - 验证条件跳转的正确性
+   - 检查分支和结束块
+
+3. **循环测试**：
+   - 测试 loop 和 while 语句
+   - 验证循环结构的正确性
+   - 检查 break 和 continue 处理
 
 ### 集成测试
 
-```cpp
-// 复杂控制流测试
-TEST(StatementGeneratorIntegrationTest, ComplexControlFlow) {
-    setupGenerator();
-    
-    // 测试嵌套的控制流结构
-    auto complexStmt = createNestedLoopWithIfAndBreak();
-    generator->generateStatement(complexStmt);
-    
-    // 验证控制流正确性
-    std::string ir = getGeneratedIR();
-    EXPECT_TRUE(verifyControlFlowCorrectness(ir));
-}
-```
+1. **复杂控制流测试**：
+   - 测试嵌套的控制流结构
+   - 验证复杂场景的正确性
+   - 检查控制流的完整性
+
+2. **错误处理测试**：
+   - 测试错误情况的正确处理
+   - 验证错误恢复机制
+   - 检查错误报告的完整性
 
 ## 使用示例
 
 ### 基本使用
 
-```cpp
-// 创建 StatementGenerator
-auto irBuilder = std::make_shared<IRBuilder>(scopeTree);
-auto exprGenerator = std::make_shared<ExpressionGenerator>(irBuilder, typeMapper, scopeTree, nodeTypeMap);
-auto scopeTree = semanticAnalyzer->getScopeTree();
-auto nodeTypeMap = typeChecker->getNodeTypeMap();
+1. **组件初始化**：
+   - 创建所有依赖组件
+   - 设置组件间的引用关系
+   - 初始化 StatementGenerator
 
-StatementGenerator stmtGen(irBuilder, exprGenerator, typeMapper, scopeTree, nodeTypeMap);
+2. **简单语句生成**：
+   - 生成 let 语句的 IR 代码
+   - 生成 if 语句的控制流
+   - 验证生成结果的正确性
 
-// 生成 let 语句
-auto letStmt = std::make_shared<LetStatement>(
-    createIdentifierPattern("x"),
-    createType("i32"),
-    createLiteral("42")
-);
-stmtGen.generateLetStatement(letStmt);
-// 输出：
-// %x_ptr = alloca i32
-// store i32 42, i32* %x_ptr
-
-// 生成 if 语句
-auto ifStmt = createIfStatement(
-    createBinaryExpression(createVariable("x"), ">", createLiteral("0")),
-    createBlock({createReturnStatement(createLiteral("1"))}),
-    createBlock({createReturnStatement(createLiteral("0"))})
-);
-stmtGen.generateIfStatement(ifStmt);
-// 输出：
-// %cond = icmp sgt i32 %x_val, 0
-// br i1 %cond, label %if.then, label %if.else
-// if.then:
-// ret i32 1
-// if.else:
-// ret i32 0
-// if.end:
-```
+3. **输出验证**：
+   - 检查生成的 IR 指令
+   - 验证寄存器和基本块
+   - 确保语法的正确性
 
 ### 高级使用
 
-```cpp
-// 生成复杂控制流
-auto loopStmt = createLoopStatement(
-    createBlock({
-        createIfStatement(
-            createBinaryExpression(createVariable("i"), ">", createLiteral("10")),
-            createBlock({createBreakStatement(createLiteral("i"))}),
-            nullptr
-        ),
-        createExpressionStatement(createUnaryExpression("++", createVariable("i")))
-    })
-);
+1. **复杂控制流**：
+   - 生成嵌套循环结构
+   - 处理循环中的条件分支
+   - 管理 break 和 continue 语句
 
-stmtGen.generateLoopStatement(loopStmt);
-// 输出：
-// br label %loop.head
-// loop.head:
-// %cond = icmp sgt i32 %i_val, 10
-// br i1 %cond, label %if.then, label %if.cont
-// if.then:
-// store i32 %i_val, i32* %__break_value_ptr
-// br label %loop.end
-// if.cont:
-// %i_inc = add i32 %i_val, 1
-// store i32 %i_inc, i32* %i_ptr
-// br label %loop.head
-// loop.end:
-```
+2. **错误处理**：
+   - 处理生成过程中的错误
+   - 生成错误恢复代码
+   - 提供详细的错误信息
+
+3. **性能优化**：
+   - 应用死代码消除
+   - 执行基本块合并
+   - 优化生成代码的效率
 
 ## 总结
 

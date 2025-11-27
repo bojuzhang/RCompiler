@@ -107,63 +107,40 @@ IR 生成模块与编译器其他模块的交互关系：
 IR 生成器支持以下内置函数的声明：
 
 ### 输出函数
-```llvm
-declare dso_local void @print(ptr)
-declare dso_local void @println(ptr)
-declare dso_local void @printInt(i32)
-declare dso_local void @printlnInt(i32)
-```
+- `print(ptr)` - 打印字符串
+- `println(ptr)` - 打印字符串并换行
+- `printInt(i32)` - 打印整数
+- `printlnInt(i32)` - 打印整数并换行
 
 ### 输入函数
-```llvm
-declare dso_local ptr @getString()
-declare dso_local i32 @getInt()
-```
+- `getString()` - 获取字符串输入
+- `getInt()` - 获取整数输入
 
 ### 内存管理函数
-```llvm
-declare dso_local ptr @builtin_memset(ptr nocapture writeonly, i8, i32)
-declare dso_local ptr @builtin_memcpy(ptr nocapture writeonly, ptr nocapture readonly, i32)
-```
+- `builtin_memset(ptr nocapture writeonly, i8, i32)` - 内存填充
+- `builtin_memcpy(ptr nocapture writeonly, ptr nocapture readonly, i32)` - 内存复制
 
 ### 特殊函数
-```llvm
-declare dso_local void @exit(i32)
-```
+- `exit(i32)` - 程序退出
 
 ## 输出格式示例
 
 ### 目标三元组
-```llvm
-target triple = "riscv32-unknown-unknown-elf"
-```
+输出RISC-V 32位架构的目标三元组声明。
 
 ### 函数定义
-```llvm
-define i32 @main() {
-start:
-  %_1 = alloca [4 x i8], align 4
-  %_2 = alloca [68 x i8], align 4
-  call void @new(ptr sret([68 x i8]) align 4 %_2)
-  store i32 0, ptr %_1, align 4
-  br label %bb2
-
-bb2:
-  ; ... 函数体
-}
-```
+生成符合LLVM语法的函数定义，包含：
+- 函数签名和返回类型
+- 入口基本块标签
+- 局部变量的栈分配指令
+- 函数体基本块和控制流
+- 对齐和内存布局信息
 
 ### 表达式生成
-```llvm
-; 加法表达式
-%_3 = add i32 %_1, %_2
-
-; 比较表达式
-%_4 = icmp slt i32 %_3, 10
-
-; 函数调用
-call void @printlnInt(i32 %_3)
-```
+为各类表达式生成相应的LLVM IR指令：
+- 算术表达式：生成add、sub、mul、div等算术指令
+- 比较表达式：生成icmp比较指令和条件跳转
+- 函数调用：生成call指令，处理参数传递和返回值
 
 ## 开发指南
 

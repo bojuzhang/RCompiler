@@ -49,138 +49,79 @@ IRBuilder 提供完整的 LLVM IR 指令生成接口：
 
 ### 寄存器管理接口
 
-```cpp
-class IRBuilder {
-public:
-    // 构造函数：接收 ScopeTree 引用
-    IRBuilder(std::shared_ptr<ScopeTree> scopeTree);
-    
-    // 生成新的临时寄存器（基于当前 Scope）
-    std::string newRegister();
-    
-    // 为指定变量生成寄存器（基于当前 Scope）
-    std::string newRegister(const std::string& variableName);
-    
-    // 为指定变量生成类型区分的寄存器
-    std::string newRegister(const std::string& variableName, const std::string& suffix);
-    
-    // 手动同步 Scope（通常由外部调用）
-    void syncWithScopeTree();
-    
-    // 获取当前 Scope 中的变量寄存器
-    std::string getVariableRegister(const std::string& variableName);
-    
-    // 获取指定 Scope 中的变量寄存器
-    std::string getVariableRegister(const std::string& variableName, std::shared_ptr<Scope> scope);
-    
-    // 通过符号获取寄存器
-    std::string getSymbolRegister(std::shared_ptr<Symbol> symbol);
-    
-    // 获取寄存器类型
-    std::string getRegisterType(const std::string& reg);
-    
-    // 设置寄存器类型
-    void setRegisterType(const std::string& reg, const std::string& type);
-    
-    // 获取寄存器所属的 Scope
-    std::shared_ptr<Scope> getRegisterScope(const std::string& reg);
-    
-    // 检查变量是否在当前 Scope 中
-    bool isVariableInCurrentScope(const std::string& variableName);
-    
-    // 获取当前 Scope
-    std::shared_ptr<Scope> getCurrentScope();
-    
-    // 清理 Scope 相关的寄存器（在 Scope 退出时调用）
-    void cleanupScopeRegisters(std::shared_ptr<Scope> scope);
-};
-```
+1. **构造函数**：
+   - 接收 ScopeTree 引用作为核心依赖
+   - 初始化寄存器计数器和作用域管理结构
+   - 设置组件的基本状态
+
+2. **寄存器生成方法**：
+   - `newRegister()`: 生成新的临时寄存器，基于当前作用域
+   - `newRegister(variableName)`: 为指定变量生成寄存器，考虑作用域层级
+   - `newRegister(variableName, suffix)`: 生成带类型区分的寄存器
+
+3. **作用域同步方法**：
+   - `syncWithScopeTree()`: 手动同步到当前作用域
+   - `getCurrentScope()`: 获取当前作用域引用
+   - `cleanupScopeRegisters()`: 清理作用域相关的寄存器
+
+4. **寄存器查询方法**：
+   - `getVariableRegister()`: 获取变量对应的寄存器
+   - `getSymbolRegister()`: 通过符号获取寄存器
+   - `getRegisterType()`/`setRegisterType()`: 获取和设置寄存器类型
+   - `getRegisterScope()`: 获取寄存器所属的作用域
+
+5. **作用域检查方法**：
+   - `isVariableInCurrentScope()`: 检查变量是否在当前作用域中
 
 ### 基本块管理接口
 
-```cpp
-class IRBuilder {
-public:
-    // 创建新的基本块（自动确保唯一性）
-    std::string newBasicBlock(const std::string& prefix);
-    
-    // 创建带计数器的基本块（用于循环等）
-    std::string newBasicBlock(const std::string& prefix, int counter);
-    
-    // 创建嵌套基本块（带父基本块信息）
-    std::string newNestedBasicBlock(const std::string& prefix, const std::string& parentPrefix);
-    
-    // 设置当前基本块
-    void setCurrentBasicBlock(const std::string& label);
-    
-    // 获取当前基本块
-    std::string getCurrentBasicBlock();
-    
-    // 完成当前基本块（添加跳转指令）
-    void finishCurrentBasicBlock();
-    
-    // 进入新的控制流上下文
-    void enterControlFlowContext(const std::string& contextType);
-    
-    // 退出当前控制流上下文
-    void exitControlFlowContext();
-    
-    // 获取当前控制流上下文
-    std::string getCurrentControlFlowContext();
-    
-    // 检查基本块名称是否已存在
-    bool isBasicBlockExists(const std::string& label);
-};
-```
+1. **基本块创建方法**：
+   - `newBasicBlock(prefix)`: 创建新的基本块，确保全局唯一性
+   - `newBasicBlock(prefix, counter)`: 创建带计数器的基本块
+   - `newNestedBasicBlock()`: 创建嵌套基本块，带父基本块信息
+
+2. **基本块控制方法**：
+   - `setCurrentBasicBlock()`: 设置当前活动的基本块
+   - `getCurrentBasicBlock()`: 获取当前基本块
+   - `finishCurrentBasicBlock()`: 完成当前基本块的生成
+
+3. **控制流上下文管理**：
+   - `enterControlFlowContext()`: 进入新的控制流上下文
+   - `exitControlFlowContext()`: 退出当前控制流上下文
+   - `getCurrentControlFlowContext()`: 获取当前控制流上下文
+
+4. **基本块验证方法**：
+   - `isBasicBlockExists()`: 检查基本块名称是否已存在
 
 ### 指令生成接口
 
-```cpp
-class IRBuilder {
-public:
-    // 基础指令生成
-    void emitInstruction(const std::string& instruction);
-    void emitComment(const std::string& comment);
-    
-    // 类型相关指令
-    void emitAlloca(const std::string& reg, const std::string& type, int align = 4);
-    void emitStore(const std::string& value, const std::string& ptr, const std::string& type);
-    void emitLoad(const std::string& result, const std::string& ptr, const std::string& type);
-    void emitGetElementPtr(const std::string& result, const std::string& ptr, 
-                           const std::vector<std::pair<std::string, std::string>>& indices);
-    
-    // 算术运算指令
-    void emitAdd(const std::string& result, const std::string& left, const std::string& right, const std::string& type);
-    void emitSub(const std::string& result, const std::string& left, const std::string& right, const std::string& type);
-    void emitMul(const std::string& result, const std::string& left, const std::string& right, const std::string& type);
-    void emitDiv(const std::string& result, const std::string& left, const std::string& right, const std::string& type);
-    void emitRem(const std::string& result, const std::string& left, const std::string& right, const std::string& type);
-    
-    // 比较运算指令
-    void emitIcmp(const std::string& result, const std::string& cond,
-                 const std::string& left, const std::string& right, const std::string& type);
-    
-    // 逻辑运算指令
-    void emitAnd(const std::string& result, const std::string& left, const std::string& right, const std::string& type);
-    void emitOr(const std::string& result, const std::string& left, const std::string& right, const std::string& type);
-    void emitXor(const std::string& result, const std::string& left, const std::string& right, const std::string& type);
-    
-    // 位运算指令
-    void emitShl(const std::string& result, const std::string& left, const std::string& right, const std::string& type);
-    void emitShr(const std::string& result, const std::string& left, const std::string& right, const std::string& type);
-    
-    // 控制流指令
-    void emitBr(const std::string& target);
-    void emitCondBr(const std::string& condition, const std::string& thenTarget, const std::string& elseTarget);
-    void emitRet(const std::string& value = "");
-    void emitCall(const std::string& result, const std::string& funcName, 
-                 const std::vector<std::string>& args, const std::string& returnType = "");
-    
-    // 内存操作指令
-    void emitMemcpy(const std::string& dest, const std::string& src, const std::string& size);
-    void emitMemset(const std::string& dest, const std::string& value, const std::string& size);
-};
-```
+1. **基础指令生成**：
+   - `emitInstruction()`: 生成原始指令文本
+   - `emitComment()`: 生成注释信息
+
+2. **类型相关指令**：
+   - `emitAlloca()`: 生成栈分配指令
+   - `emitStore()`: 生成存储指令
+   - `emitLoad()`: 生成加载指令
+   - `emitGetElementPtr()`: 生成指针计算指令
+
+3. **算术运算指令**：
+   - `emitAdd()`/`emitSub()`/`emitMul()`/`emitDiv()`/`emitRem()`: 生成基本算术运算
+
+4. **比较和逻辑运算指令**：
+   - `emitIcmp()`: 生成整数比较指令
+   - `emitAnd()`/`emitOr()`/`emitXor()`: 生成逻辑运算指令
+
+5. **位运算指令**：
+   - `emitShl()`/`emitShr()`: 生成位移运算指令
+
+6. **控制流指令**：
+   - `emitBr()`/`emitCondBr()`: 生成跳转指令
+   - `emitRet()`: 生成返回指令
+   - `emitCall()`: 生成函数调用指令
+
+7. **内存操作指令**：
+   - `emitMemcpy()`/`emitMemset()`: 生成内存操作指令
 
 ## 实现策略
 
@@ -197,56 +138,102 @@ IRBuilder 直接输出到 stdout，使用以下策略：
 
 IRBuilder 维护 Rx 类型到 LLVM 类型的映射：
 
-```cpp
-class TypeMapper {
-public:
-    static std::string mapRxTypeToLLVM(const std::string& rxType);
-    static std::string getPointerElementType(const std::string& ptrType);
-    static std::string getArrayElementType(const std::string& arrayType);
-    static bool isPointerType(const std::string& type);
-    static bool isIntegerType(const std::string& type);
-    static int getTypeSize(const std::string& type);
-};
-```
+1. **类型映射方法**：
+   - `mapRxTypeToLLVM()`: 将 Rx 类型映射为 LLVM 类型
+   - `getPointerElementType()`: 获取指针元素类型
+   - `getArrayElementType()`: 获取数组元素类型
+
+2. **类型检查方法**：
+   - `isPointerType()`: 检查是否为指针类型
+   - `isIntegerType()`: 检查是否为整数类型
+   - `getTypeSize()`: 获取类型大小
 
 ### 寄存器生命周期管理
 
 IRBuilder 实现复杂的作用域感知的寄存器生命周期管理：
 
 #### 作用域层次结构
-```cpp
-struct ScopeInfo {
-    int scopeLevel;                    // 作用域层级
-    std::map<std::string, std::string> variableToRegister;  // 变量名到寄存器的映射
-    std::set<std::string> registers;   // 当前作用域的寄存器集合
-};
 
-class IRBuilder {
-private:
-    std::vector<ScopeInfo> scopeStack;  // 作用域栈
-    std::map<std::string, int> variableCounters;  // 变量名计数器（处理遮蔽）
-    int currentScopeLevel;              // 当前作用域层级
-};
-```
+1. **ScopeInfo 结构**：
+   - 记录作用域层级信息
+   - 维护变量名到寄存器的映射关系
+   - 管理当前作用域的寄存器集合
+
+2. **作用域栈管理**：
+   - 使用向量结构维护作用域栈
+   - 跟踪变量名计数器以处理遮蔽
+   - 记录当前作用域层级
 
 #### 变量遮蔽处理
-1. **变量计数器**：每个变量名维护一个计数器，处理同名变量
-2. **作用域栈**：嵌套作用域的变量管理
-3. **命名策略**：`变量名_作用域层级_计数器`，如 `x_1_1`, `x_2_1`
-4. **查找策略**：优先查找当前作用域，然后向外查找
+
+1. **变量计数器机制**：
+   - 每个变量名维护独立计数器
+   - 处理同名变量的遮蔽情况
+   - 确保变量名的唯一性
+
+2. **作用域栈策略**：
+   - 嵌套作用域的层次化管理
+   - 变量查找的优先级策略
+   - 作用域退出时的清理机制
+
+3. **命名策略**：
+   - 采用"变量名_作用域层级_计数器"格式
+   - 确保命名的唯一性和可读性
+   - 支持作用域的快速识别
+
+4. **查找策略**：
+   - 优先查找当前作用域
+   - 逐层向外查找变量
+   - 支持跨作用域的变量访问
 
 #### 类型区分处理
-1. **指针寄存器**：`变量名_ptr`（存储指针）
-2. **值寄存器**：`变量名_val`（存储值）
-3. **地址寄存器**：`变量名_addr`（存储地址）
-4. **临时寄存器**：`变量名_tmp`（临时计算）
+
+1. **指针寄存器**：
+   - 使用 `_ptr` 后缀标识指针寄存器
+   - 专门用于存储指针值
+   - 便于指针操作的识别
+
+2. **值寄存器**：
+   - 使用 `_val` 后缀标识值寄存器
+   - 专门用于存储实际值
+   - 区分指针和值的操作
+
+3. **地址寄存器**：
+   - 使用 `_addr` 后缀标识地址寄存器
+   - 专门用于存储地址信息
+   - 支持地址计算操作
+
+4. **临时寄存器**：
+   - 使用 `_tmp` 后缀标识临时寄存器
+   - 用于中间计算结果
+   - 便于优化和复用
 
 #### 寄存器分配策略
-1. **自动分配**：自动分配唯一名称
-2. **类型跟踪**：记录每个寄存器的类型和作用域
-3. **作用域管理**：支持嵌套作用域的寄存器管理
-4. **寄存器复用**：在安全的情况下复用寄存器
-5. **生命周期跟踪**：跟踪寄存器的创建和销毁
+
+1. **自动分配机制**：
+   - 根据作用域和类型自动分配寄存器
+   - 确保寄存器名称的唯一性
+   - 支持不同类型的寄存器分配
+
+2. **类型跟踪系统**：
+   - 记录每个寄存器的类型信息
+   - 维护寄存器与作用域的关联
+   - 支持类型检查和转换
+
+3. **作用域管理**：
+   - 支持嵌套作用域的寄存器管理
+   - 作用域退出时的自动清理
+   - 跨作用域的寄存器访问控制
+
+4. **寄存器复用优化**：
+   - 在安全的情况下复用寄存器
+   - 减少寄存器使用数量
+   - 提高生成代码的效率
+
+5. **生命周期跟踪**：
+   - 跟踪寄存器的创建和销毁
+   - 支持寄存器的生命周期分析
+   - 便于内存管理和优化
 
 ## 错误处理
 
@@ -286,251 +273,158 @@ IRBuilder 提供详细的错误信息：
 
 ### 基本使用
 
-```cpp
-// 获取语义分析阶段的 ScopeTree
-auto scopeTree = semanticAnalyzer->getScopeTree();
-IRBuilder builder(scopeTree);
+1. **组件初始化**：
+   - 从语义分析阶段获取 ScopeTree
+   - 创建 IRBuilder 实例并传入 ScopeTree
+   - 设置基本块和作用域上下文
 
-// 创建基本块
-std::string entry = builder.newBasicBlock("entry");
-builder.setCurrentBasicBlock(entry);
+2. **变量分配和操作**：
+   - 创建入口基本块并设置为当前基本块
+   - 同步到当前作用域
+   - 为变量分配指针寄存器并进行存储操作
+   - 加载变量值到值寄存器
+   - 生成返回指令
 
-// 同步到当前 Scope（通常由外部调用）
-builder.syncWithScopeTree();
-
-// 分配变量（基于当前 Scope 和符号信息）
-auto currentScope = builder.getCurrentScope();
-auto xSymbol = scopeTree->LookupSymbol("x");
-if (xSymbol) {
-    std::string xPtr = builder.newRegister("x", "ptr");  // x_ptr_2_1 (depth=2)
-    builder.emitAlloca(xPtr, "i32", 4);
-    
-    // 存储值
-    builder.emitStore("42", xPtr, "i32");
-    
-    // 加载值
-    std::string xVal = builder.newRegister("x", "val");  // x_val_2_1
-    builder.emitLoad(xVal, xPtr, "i32");
-    
-    // 返回
-    builder.emitRet(xVal);
-}
-```
+3. **寄存器命名策略**：
+   - 基于作用域层级生成寄存器名
+   - 使用类型后缀区分不同用途的寄存器
+   - 确保寄存器名称的唯一性和可读性
 
 ### 与 ScopeTree 同步的变量遮蔽处理
 
-```cpp
-// 假设在语义分析阶段已经建立了如下作用域结构：
-// Global (depth=0): 变量 x
-//   Function (depth=1): 参数 x (遮蔽全局 x)
-//     Block (depth=2): 变量 x (遮蔽函数参数 x)
+1. **作用域结构处理**：
+   - 处理多层嵌套的作用域结构
+   - 正确识别变量遮蔽情况
+   - 维护不同作用域中同名变量的独立性
 
-auto scopeTree = semanticAnalyzer->getScopeTree();
-IRBuilder builder(scopeTree);
+2. **变量查找策略**：
+   - 优先查找当前作用域的变量
+   - 支持手动指定作用域查找变量
+   - 提供跨作用域的变量访问机制
 
-// 在 Block 作用域中（depth=2）
-scopeTree->GoToNode(blockNode);
-builder.syncWithScopeTree();
-
-// 获取当前作用域的 x（Block 中的 x）
-std::string blockX = builder.getVariableRegister("x");  // 返回 x_val_2_1
-
-// 手动获取外层作用域的 x
-auto functionScope = scopeTree->GetCurrentScope()->GetParent();
-std::string funcX = builder.getVariableRegister("x", functionScope);  // 返回 x_val_1_1
-
-auto globalScope = scopeTree->GetRootScope();
-std::string globalX = builder.getVariableRegister("x", globalScope);  // 返回 x_val_0_1
-```
+3. **寄存器命名管理**：
+   - 为不同作用域的变量生成不同的寄存器名
+   - 通过作用域层级和计数器确保唯一性
+   - 支持变量的精确识别和访问
 
 ### 基于符号的寄存器管理
 
-```cpp
-auto scopeTree = semanticAnalyzer->getScopeTree();
-IRBuilder builder(scopeTree);
+1. **符号查找机制**：
+   - 通过符号表查找变量信息
+   - 基于符号获取对应的寄存器
+   - 支持符号信息的完整访问
 
-// 通过符号查找获取寄存器
-auto symbol = scopeTree->LookupSymbol("myVar");
-if (symbol) {
-    std::string varReg = builder.getSymbolRegister(symbol);
-    // 使用寄存器...
-}
+2. **新符号处理**：
+   - 为新创建的符号分配寄存器
+   - 将符号信息注册到符号表
+   - 建立符号与寄存器的关联关系
 
-// 为新符号创建寄存器
-auto newSymbol = std::make_shared<Symbol>("newVar", SymbolKind::Variable, type, false, node);
-scopeTree->InsertSymbol("newVar", newSymbol);
-
-std::string newReg = builder.newRegister("newVar");  // 基于新符号创建寄存器
-```
+3. **符号生命周期管理**：
+   - 跟踪符号的创建和销毁
+   - 管理符号对应寄存器的生命周期
+   - 支持符号作用域的自动清理
 
 ### 类型区分处理（基于 Scope）
 
-```cpp
-auto scopeTree = semanticAnalyzer->getScopeTree();
-IRBuilder builder(scopeTree);
+1. **类型区分寄存器分配**：
+   - 为同一变量分配不同类型的寄存器
+   - 使用后缀区分指针、值、地址和临时寄存器
+   - 确保不同用途寄存器的独立性
 
-builder.syncWithScopeTree();
-auto currentScope = builder.getCurrentScope();
+2. **寄存器操作策略**：
+   - 指针寄存器用于内存分配和地址操作
+   - 值寄存器用于存储和加载实际值
+   - 地址寄存器用于指针计算和元素访问
+   - 临时寄存器用于中间计算结果
 
-// 分配指针寄存器
-std::string ptrReg = builder.newRegister("data", "ptr");  // data_ptr_2_1
-builder.emitAlloca(ptrReg, "i32", 4);
-
-// 分配值寄存器
-std::string valReg = builder.newRegister("data", "val");  // data_val_2_1
-builder.emitStore("42", ptrReg, "i32");
-
-// 分配地址寄存器（用于 getelementptr）
-std::string addrReg = builder.newRegister("data", "addr");  // data_addr_2_1
-std::vector<std::pair<std::string, std::string>> indices = {{"0", "i32"}};
-builder.emitGetElementPtr(addrReg, ptrReg, indices);
-
-// 临时计算寄存器
-std::string tmpReg = builder.newRegister("data", "tmp");  // data_tmp_2_1
-builder.emitAdd(tmpReg, valReg, "10", "i32");
-
-// 当作用域退出时自动清理
-scopeTree->ExitScope();  // 这会触发 builder.cleanupScopeRegisters()
-```
+3. **作用域清理机制**：
+   - 作用域退出时自动清理相关寄存器
+   - 防止寄存器名称冲突和内存泄漏
+   - 维护寄存器管理的正确性
 
 ### 函数调用
 
-```cpp
-IRBuilder builder;
+1. **内置函数调用**：
+   - 生成内置函数的调用指令
+   - 处理内置函数的特殊参数和返回值
+   - 确保内置函数调用的正确性
 
-// 调用内置函数
-std::string result = builder.newRegister();
-std::vector<std::string> args = {"%str_ptr"};
-builder.emitCall(result, "print", args, "void");
-
-// 调用用户函数
-std::string addResult = builder.newRegister();
-std::vector<std::string> addArgs = {"%a", "%b"};
-builder.emitCall(addResult, "add", addArgs, "i32");
-```
+2. **用户函数调用**：
+   - 生成用户定义函数的调用指令
+   - 处理函数参数的传递和返回值的接收
+   - 维护函数调用的类型安全
 
 ### 控制流
 
-```cpp
-IRBuilder builder;
+1. **条件分支处理**：
+   - 创建条件控制流上下文
+   - 生成条件比较和跳转指令
+   - 管理分支基本块的创建和连接
 
-// 进入 if 控制流上下文
-builder.enterControlFlowContext("if");
+2. **基本块管理**：
+   - 创建嵌套基本块并处理命名冲突
+   - 管理基本块的作用域和生命周期
+   - 确保控制流的正确连接
 
-// 条件跳转
-std::string condition = builder.newRegister();
-builder.emitIcmp(condition, "ne", "%x", "%y", "i32");
-
-// 创建嵌套基本块（自动处理命名冲突）
-std::string thenBlock = builder.newNestedBasicBlock("then", "if");
-std::string elseBlock = builder.newNestedBasicBlock("else", "if");
-std::string endBlock = builder.newNestedBasicBlock("end", "if");
-
-builder.emitCondBr(condition, thenBlock, elseBlock);
-
-// then 基本块
-builder.setCurrentBasicBlock(thenBlock);
-builder.enterScope();  // then 块的作用域
-// ... then 逻辑 ...
-builder.exitScope();
-builder.emitBr(endBlock);
-
-// else 基本块
-builder.setCurrentBasicBlock(elseBlock);
-builder.enterScope();  // else 块的作用域
-// ... else 逻辑 ...
-builder.exitScope();
-builder.emitBr(endBlock);
-
-// end 基本块
-builder.setCurrentBasicBlock(endBlock);
-// ... 合并逻辑 ...
-
-// 退出 if 控制流上下文
-builder.exitControlFlowContext();
-```
+3. **作用域同步**：
+   - 在基本块切换时同步作用域
+   - 处理基本块作用域的进入和退出
+   - 维护变量和寄存器的正确关联
 
 ### 循环处理
 
-```cpp
-IRBuilder builder;
+1. **循环结构生成**：
+   - 创建循环控制流上下文
+   - 生成循环头、体和结束基本块
+   - 处理循环条件和跳转逻辑
 
-// 进入 loop 控制流上下文
-builder.enterControlFlowContext("loop");
+2. **循环体管理**：
+   - 为循环体创建独立作用域
+   - 处理循环体内的变量和寄存器
+   - 确保循环体的正确执行
 
-// 创建循环相关基本块
-std::string headBlock = builder.newNestedBasicBlock("head", "loop");
-std::string bodyBlock = builder.newNestedBasicBlock("body", "loop");
-std::string endBlock = builder.newNestedBasicBlock("end", "loop");
-
-// 循环头
-builder.setCurrentBasicBlock(headBlock);
-// 循环条件检查...
-builder.emitCondBr(condition, bodyBlock, endBlock);
-
-// 循环体
-builder.setCurrentBasicBlock(bodyBlock);
-builder.enterScope();  // 循环体作用域
-// ... 循环体逻辑 ...
-builder.exitScope();
-builder.emitBr(headBlock);  // 跳回循环头
-
-// 循环结束
-builder.setCurrentBasicBlock(endBlock);
-
-// 退出 loop 控制流上下文
-builder.exitControlFlowContext();
-```
+3. **循环控制流**：
+   - 生成循环头到循环体的跳转
+   - 处理循环体到循环头的回跳
+   - 管理循环退出条件
 
 ## 与其他组件的集成
 
 ### 与 TypeMapper 的集成
 
-IRBuilder 依赖 TypeMapper 进行类型转换：
+1. **类型转换支持**：
+   - 依赖 TypeMapper 进行 Rx 类型到 LLVM 类型的转换
+   - 确保类型映射的正确性和一致性
+   - 支持复杂类型的处理和转换
 
-```cpp
-std::string rxType = "i32";
-std::string llvmType = TypeMapper::mapRxTypeToLLVM(rxType);
-builder.emitAlloca(reg, llvmType);
-```
+2. **类型检查机制**：
+   - 在指令生成前进行类型检查
+   - 确保操作数类型的匹配
+   - 提供类型错误的详细信息
 
 ### 与 FunctionGenerator 的集成
 
-FunctionGenerator 使用 IRBuilder 生成函数体：
+1. **函数体生成**：
+   - 为 FunctionGenerator 提供指令生成接口
+   - 支持函数体的完整生成
+   - 处理函数内的控制流和变量管理
 
-```cpp
-class FunctionGenerator {
-private:
-    IRBuilder& builder;
-    
-public:
-    void generateFunctionBody(const Function* func) {
-        // 使用 builder 生成函数体
-        std::string entry = builder.newBasicBlock("entry");
-        builder.setCurrentBasicBlock(entry);
-        // ... 生成函数逻辑 ...
-    }
-};
-```
+2. **函数上下文管理**：
+   - 维护函数生成的基本块和作用域
+   - 支持函数参数和返回值的处理
+   - 确保函数结构的正确性
 
 ### 与 ExpressionGenerator 的集成
 
-ExpressionGenerator 使用 IRBuilder 生成表达式：
+1. **表达式代码生成**：
+   - 为 ExpressionGenerator 提供表达式生成支持
+   - 处理复杂表达式的指令序列
+   - 管理表达式计算中的临时寄存器
 
-```cpp
-class ExpressionGenerator {
-private:
-    IRBuilder& builder;
-    
-public:
-    std::string generateExpression(const Expression* expr) {
-        // 使用 builder 生成表达式代码
-        std::string result = builder.newRegister();
-        // ... 生成表达式逻辑 ...
-        return result;
-    }
-};
-```
+2. **表达式类型处理**：
+   - 确保表达式结果的类型正确性
+   - 处理表达式中的类型转换
+   - 支持表达式值的存储和使用
 
 ## 测试策略
 

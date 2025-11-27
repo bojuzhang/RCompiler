@@ -89,305 +89,385 @@
 ## 类型系统映射
 
 ### 基本类型映射
-```
-Rx 类型    → LLVM 类型
-i32        → i32
-i64        → i64
-u32        → i32
-u64        → i64
-bool       → i1
-char       → i8
-str        → i8*
-unit       → void
-! (never)  → 无返回类型函数
-```
+TypeMapper提供Rx类型到LLVM类型的完整映射：
+
+- **整数类型**：
+  - i32 → i32（32位有符号整数）
+  - i64 → i64（64位有符号整数）
+  - u32 → i32（32位无符号整数映射为有符号）
+  - u64 → i64（64位无符号整数映射为有符号）
+
+- **布尔和字符类型**：
+  - bool → i1（1位整数表示布尔值）
+  - char → i8（8位整数表示字符）
+
+- **特殊类型**：
+  - str → i8*（字符串作为字符指针）
+  - unit → void（单元类型映射为无返回值）
+  - ! (never) → 无返回类型函数（永不返回的函数）
 
 ### 复合类型映射
-```
-[T; N]     → [N x T]
-&T          → T*
-&mut T      → T*
-Struct {..} → %Struct 名称
-fn(A)->B    → 函数类型
-```
+复合类型的映射策略：
+
+- **数组类型**：[T; N] → [N x T]（固定大小数组）
+- **引用类型**：&T 和 &mut T → T*（统一为指针类型）
+- **结构体类型**：Struct {..} → %Struct 名称（命名结构体）
+- **函数类型**：fn(A)->B → 函数类型（参数和返回值类型组合）
 
 ### 类型转换规则
-- 隐式转换：i32 → i64, u32 → u64
-- 显式转换：需要类型转换指令
-- 引用转换：自动解引用和重新引用
+类型系统的转换策略：
+
+- **隐式转换**：
+  - i32 → i64（整数扩展）
+  - u32 → u64（无符号整数扩展）
+  - 自动进行安全的类型提升
+
+- **显式转换**：
+  - 需要生成类型转换指令
+  - 处理可能的精度损失
+  - 支持数值类型间的相互转换
+
+- **引用转换**：
+  - 自动解引用操作
+  - 重新引用生成
+  - 处理可变性和不可变性
 
 ## 自定义 IRBuilder 设计
 
 ### 核心功能
-```cpp
-class IRBuilder {
-public:
-    // 寄存器管理
-    std::string newRegister();        // _1, _2, _3...
-    std::string newNamedRegister(const std::string& prefix);
-    
-    // 基本块管理
-    std::string newBasicBlock(const std::string& prefix);
-    void setCurrentBasicBlock(const std::string& bb);
-    
-    // 指令生成
-    void emitInstruction(const std::string& instruction);
-    void emitLabel(const std::string& label);
-    void emitComment(const std::string& comment);
-    
-    // 类型指令
-    void emitAlloca(const std::string& reg, const std::string& type, int align = 4);
-    void emitStore(const std::string& value, const std::string& ptr, const std::string& type, int align = 4);
-    void emitLoad(const std::string& reg, const std::string& ptr, const std::string& type, int align = 4);
-    
-    // 算术指令
-    void emitAdd(const std::string& result, const std::string& left, const std::string& right, const std::string& type);
-    void emitSub(const std::string& result, const std::string& left, const std::string& right, const std::string& type);
-    void emitMul(const std::string& result, const std::string& left, const std::string& right, const std::string& type);
-    
-    // 比较指令
-    void emitIcmp(const std::string& result, const std::string& cond, const std::string& left, const std::string& right, const std::string& type);
-    
-    // 控制流指令
-    void emitBr(const std::string& condition, const std::string& thenLabel, const std::string& elseLabel);
-    void emitBr(const std::string& label);
-    void emitRet(const std::string& value = "", const std::string& type = "void");
-    
-    // 函数调用
-    void emitCall(const std::string& result, const std::string& funcName, const std::vector<std::string>& args, const std::string& returnType);
-    
-    // 内存操作
-    void emitGetElementPtr(const std::string& result, const std::string& ptr, const std::vector<std::string>& indices, const std::string& type);
-};
-```
+IRBuilder提供完整的LLVM IR文本生成功能，核心接口包括：
+
+- **寄存器管理接口**：
+  - newRegister() - 生成临时寄存器（_1, _2, _3...）
+  - newNamedRegister() - 生成带前缀的命名寄存器
+  - 实现策略：维护递增计数器，确保寄存器名称唯一性
+
+- **基本块管理接口**：
+  - newBasicBlock() - 生成基本块标签
+  - setCurrentBasicBlock() - 设置当前活动基本块
+  - 实现策略：维护基本块栈和计数器，支持嵌套控制流
+
+- **指令生成接口**：
+  - emitInstruction() - 输出通用指令
+  - emitLabel() - 输出基本块标签
+  - emitComment() - 输出注释
+  - 实现策略：直接输出到流，确保LLVM语法正确性
+
+- **类型指令接口**：
+  - emitAlloca() - 生成栈分配指令
+  - emitStore() - 生成存储指令
+  - emitLoad() - 生成加载指令
+  - 实现策略：根据类型和对齐要求生成格式化指令
+
+- **算术指令接口**：
+  - emitAdd(), emitSub(), emitMul() - 基本算术运算
+  - 实现策略：生成类型化的算术指令，确保操作数类型匹配
+
+- **比较指令接口**：
+  - emitIcmp() - 生成整数比较指令
+  - 实现策略：支持各种比较条件（eq, ne, slt, sgt等）
+
+- **控制流指令接口**：
+  - emitBr() - 生成条件和无条件跳转
+  - emitRet() - 生成返回指令
+  - 实现策略：处理基本块间的控制流转移
+
+- **函数调用接口**：
+  - emitCall() - 生成函数调用指令
+  - 实现策略：管理函数签名、参数列表和调用约定
+
+- **内存操作接口**：
+  - emitGetElementPtr() - 生成地址计算指令
+  - 实现策略：处理复杂的内存布局和类型转换
 
 ## 表达式生成策略
 
 ### 1. 字面量表达式
-```cpp
-// 整数字面量
-let x: i32 = 42;
-// LLVM IR: %_1 = alloca i32, align 4
-//          store i32 42, i32* %_1, align 4
-```
+ExpressionCodegen处理字面量表达式的生成策略：
+
+- **整数字面量**：
+  - 为变量分配栈空间（alloca指令）
+  - 生成常量值并存储到变量
+  - 输出格式：%_1 = alloca i32, align 4; store i32 42, i32* %_1, align 4
+
+- **其他字面量**：
+  - 布尔值：转换为i1类型
+  - 字符：转换为i8类型
+  - 字符串：生成字符指针和常量数据
 
 ### 2. 二元表达式
-```cpp
-// 算术运算
-let result: i32 = a + b;
-// LLVM IR: %_2 = load i32, i32* %a_ptr, align 4
-//          %_3 = load i32, i32* %b_ptr, align 4
-//          %_4 = add i32 %_2, %_3
+二元表达式的生成策略：
 
-// 比较运算
-if (a < b) { ... }
-// LLVM IR: %_5 = icmp slt i32 %_2, %_3
-//          br i1 %_5, label %bb_then, label %bb_else
-```
+- **算术运算**：
+  - 加载左右操作数的值
+  - 生成对应的算术指令（add, sub, mul, div, rem）
+  - 输出格式：%_2 = load i32, i32* %a_ptr; %_3 = load i32, i32* %b_ptr; %_4 = add i32 %_2, %_3
+
+- **比较运算**：
+  - 生成比较指令（icmp）
+  - 支持各种比较条件（eq, ne, slt, sgt等）
+  - 输出格式：%_5 = icmp slt i32 %_2, %_3; br i1 %_5, label %bb_then, label %bb_else
+
+- **逻辑运算**：
+  - 处理与、或、非运算
+  - 生成短路求值代码
+  - 确保布尔值正确性
 
 ### 3. 函数调用表达式
-```cpp
-// 内置函数调用
-printlnInt(42);
-// LLVM IR: call void @printlnInt(i32 42)
+函数调用表达式的生成策略：
 
-// 用户函数调用
-let result: i32 = add(a, b);
-// LLVM IR: %_6 = call i32 @add(i32 %_2, i32 %_3)
-```
+- **内置函数调用**：
+  - 识别内置函数名称
+  - 直接生成调用指令
+  - 输出格式：call void @printlnInt(i32 42)
+
+- **用户函数调用**：
+  - 生成参数表达式
+  - 生成函数调用指令
+  - 处理返回值寄存器
+  - 输出格式：%_6 = call i32 @add(i32 %_2, i32 %_3)
 
 ### 4. 数组和结构体访问
-```cpp
-// 数组访问
-let value: i32 = arr[index];
-// LLVM IR: %_7 = load i32*, i32** %arr_ptr, align 4
-//          %_8 = load i32, i32* %index_ptr, align 4
-//          %_9 = getelementptr [10 x i32], [10 x i32]* %_7, i64 0, i32 %_8
-//          %_10 = load i32, i32* %_9, align 4
+复合类型访问的生成策略：
 
-// 结构体字段访问
-let field: i32 = obj.field;
-// LLVM IR: %_11 = getelementptr %Struct, %Struct* %obj_ptr, i32 0, i32 field_index
-//          %_12 = load i32, i32* %_11, align 4
-```
+- **数组访问**：
+  - 加载数组基址和索引
+  - 生成getelementptr指令计算元素地址
+  - 加载元素值
+  - 输出格式：%_9 = getelementptr [10 x i32], [10 x i32]* %_7, i64 0, i32 %_8
+
+- **结构体字段访问**：
+  - 计算字段偏移量
+  - 生成getelementptr指令获取字段地址
+  - 加载字段值
+  - 输出格式：%_11 = getelementptr %Struct, %Struct* %obj_ptr, i32 0, i32 field_index
 
 ## 语句生成策略
 
 ### 1. 变量声明语句
-```cpp
-// 变量声明
-let x: i32 = 42;
-// LLVM IR: %_13 = alloca i32, align 4
-//          store i32 42, i32* %_13, align 4
-```
+StatementCodegen处理变量声明的策略：
+
+- **变量分配**：
+  - 为变量分配栈空间
+  - 设置适当的对齐要求
+  - 输出格式：%_13 = alloca i32, align 4
+
+- **初始化处理**：
+  - 生成初始化表达式
+  - 存储初始值到变量
+  - 输出格式：store i32 42, i32* %_13, align 4
+
+- **作用域管理**：
+  - 将变量注册到符号表
+  - 管理变量生命周期
 
 ### 2. 条件语句
-```cpp
-// if 语句
-if (condition) {
-    then_block
-} else {
-    else_block
-}
-// LLVM IR: %_14 = icmp ...
-//          br i1 %_14, label %bb_then, label %bb_else
-// bb_then:                                       ; preds = %bb_entry
-//          ; then_block
-//          br label %bb_end
-// bb_else:                                       ; preds = %bb_entry
-//          ; else_block  
-//          br label %bb_end
-// bb_end:                                        ; preds = %bb_then, %bb_else
-//          ; 合并点
-```
+条件语句的生成策略：
+
+- **基本结构**：
+  - 生成条件表达式
+  - 创建then、else和end基本块
+  - 生成条件分支指令
+  - 输出格式：%_14 = icmp ...; br i1 %_14, label %bb_then, label %bb_else
+
+- **分支处理**：
+  - 生成then分支代码
+  - 生成else分支代码（如果存在）
+  - 在分支末尾生成跳转到合并点
+  - 处理分支间的值合并
+
+- **合并点管理**：
+  - 创建合并基本块
+  - 处理phi节点（如果需要）
+  - 确保控制流正确性
 
 ### 3. 循环语句
-```cpp
-// while 循环
-while (condition) {
-    body
-}
-// LLVM IR: br label %bb_cond
-// bb_cond:                                       ; preds = %bb_body, %bb_entry
-//          %_15 = icmp ...
-//          br i1 %_15, label %bb_body, label %bb_end
-// bb_body:                                       ; preds = %bb_cond
-//          ; body
-//          br label %bb_cond
-// bb_end:                                        ; preds = %bb_cond
-//          ; 循环结束
-```
+循环语句的生成策略：
+
+- **while循环**：
+  - 创建条件检查基本块
+  - 创建循环体和结束基本块
+  - 生成循环控制结构
+  - 输出格式：br label %bb_cond; bb_cond: %_15 = icmp ...; br i1 %_15, label %bb_body, label %bb_end
+
+- **for循环**：
+  - 处理初始化表达式
+  - 生成条件检查和更新表达式
+  - 管理循环变量
+
+- **循环控制**：
+  - 处理break和continue语句
+  - 维护循环上下文栈
+  - 生成正确的跳转指令
 
 ## 内置函数声明策略
 
 ### 1. 函数声明格式
-```cpp
-// 输出函数声明
-void declareBuiltinFunctions() {
-    // 输出函数
-    emitInstruction("declare dso_local void @print(ptr)");
-    emitInstruction("declare dso_local void @println(ptr)");
-    emitInstruction("declare dso_local void @printInt(i32)");
-    emitInstruction("declare dso_local void @printlnInt(i32)");
-    
-    // 输入函数
-    emitInstruction("declare dso_local ptr @getString()");
-    emitInstruction("declare dso_local i32 @getInt()");
-    
-    // 内存管理函数
-    emitInstruction("declare dso_local ptr @builtin_memset(ptr nocapture writeonly, i8, i32)");
-    emitInstruction("declare dso_local ptr @builtin_memcpy(ptr nocapture writeonly, ptr nocapture readonly, i32)");
-    
-    // 特殊函数
-    emitInstruction("declare dso_local void @exit(i32)");
-}
-```
+BuiltinDeclarator提供内置函数声明策略：
+
+- **输出函数声明**：
+  - print(ptr) - 字符串输出函数
+  - println(ptr) - 字符串输出并换行函数
+  - printInt(i32) - 整数输出函数
+  - printlnInt(i32) - 整数输出并换行函数
+
+- **输入函数声明**：
+  - getString() - 字符串输入函数
+  - getInt() - 整数输入函数
+
+- **内存管理函数声明**：
+  - builtin_memset() - 内存填充函数
+  - builtin_memcpy() - 内存复制函数
+
+- **特殊函数声明**：
+  - exit(i32) - 程序退出函数
+
+- **声明策略**：
+  - 在模块初始化时统一声明
+  - 设置适当的函数属性
+  - 确保与builtin.c实现一致
 
 ### 2. 函数调用生成
-```cpp
-// 生成函数调用
-std::string generateBuiltinCall(const CallExpression* call) {
-    std::string funcName = call->getFunctionName();
-    
-    if (funcName == "printlnInt") {
-        std::string argReg = generateExpression(call->getArgument(0));
-        builder.emitCall("", "printlnInt", {argReg}, "void");
-        return ""; // void 返回
-    }
-    
-    // 其他内置函数...
-}
-```
+内置函数调用的生成策略：
+
+- **函数识别**：
+  - 通过函数名称识别内置函数
+  - 验证参数数量和类型
+  - 处理特殊调用约定
+
+- **参数处理**：
+  - 生成参数表达式的IR代码
+  - 处理类型转换
+  - 确保参数传递正确
+
+- **调用生成**：
+  - 生成函数调用指令
+  - 处理返回值寄存器
+  - 特殊处理void返回函数
 
 ## 内存管理策略
 
 ### 1. 栈分配
-```cpp
-// 局部变量分配
-void allocateVariable(const std::string& name, const std::string& type) {
-    std::string reg = builder.newRegister();
-    builder.emitAlloca(reg, type, 4);
-    variableMap[name] = reg;
-}
-// LLVM IR: %_16 = alloca i32, align 4
-```
+局部变量的栈分配策略：
+
+- **变量分配**：
+  - 为每个局部变量分配栈空间
+  - 设置适当的对齐要求
+  - 生成alloca指令
+  - 输出格式：%_16 = alloca i32, align 4
+
+- **作用域管理**：
+  - 跟踪变量的作用域
+  - 在作用域结束时清理变量
+  - 处理嵌套作用域
+
+- **对齐处理**：
+  - 根据类型设置对齐要求
+  - 优化内存访问性能
+  - 确保平台兼容性
 
 ### 2. 堆分配
-```cpp
-// 调用 malloc
-std::string allocateHeapMemory(const std::string& size) {
-    std::string resultReg = builder.newRegister();
-    builder.emitCall(resultReg, "malloc", {size}, "ptr");
-    return resultReg;
-}
-// LLVM IR: %_17 = call ptr @malloc(i32 %_18)
-```
+堆内存分配策略：
+
+- **内存分配**：
+  - 调用malloc等分配函数
+  - 处理分配失败情况
+  - 生成适当的错误检查
+  - 输出格式：%_17 = call ptr @malloc(i32 %_18)
+
+- **内存释放**：
+  - 调用free等释放函数
+  - 确保内存不泄漏
+  - 处理释放失败情况
+
+- **内存跟踪**：
+  - 维护分配记录
+  - 检测内存泄漏
+  - 提供调试信息
 
 ### 3. 内存操作
-```cpp
-// 调用 memset
-void generateMemset(const std::string& dest, int value, const std::string& size) {
-    std::string resultReg = builder.newRegister();
-    builder.emitCall(resultReg, "builtin_memset", {dest, std::to_string(value), size}, "ptr");
-}
-// LLVM IR: %_19 = call ptr @builtin_memset(ptr %_20, i8 0, i32 64)
-```
+内存操作函数的生成策略：
+
+- **内存填充**：
+  - 调用builtin_memset函数
+  - 处理填充值和大小
+  - 生成高效的填充代码
+  - 输出格式：%_19 = call ptr @builtin_memset(ptr %_20, i8 0, i32 64)
+
+- **内存复制**：
+  - 调用builtin_memcpy函数
+  - 处理源地址、目标地址和大小
+  - 确保复制安全性
+
+- **边界检查**：
+  - 验证内存操作的有效性
+  - 防止缓冲区溢出
+  - 生成适当的错误处理
 
 ## 输出格式
 
 ### 1. 目标三元组
-```llvm
-target triple = "riscv32-unknown-unknown-elf"
-```
+IRBuilder生成的目标平台信息：
+
+- **目标三元组格式**：
+  - 输出：target triple = "riscv32-unknown-unknown-elf"
+  - 指定目标架构为RISC-V 32位
+  - 确保与builtin.c兼容
+
+- **数据布局**：
+  - 根据目标平台设置数据布局
+  - 处理端序和对齐要求
+  - 优化内存访问
 
 ### 2. 内置函数声明
-```llvm
-declare dso_local void @print(ptr)
-declare dso_local void @println(ptr)
-declare dso_local void @printInt(i32)
-declare dso_local void @printlnInt(i32)
-declare dso_local ptr @getString()
-declare dso_local i32 @getInt()
-declare dso_local ptr @builtin_memset(ptr nocapture writeonly, i8, i32)
-declare dso_local ptr @builtin_memcpy(ptr nocapture writeonly, ptr nocapture readonly, i32)
-```
+内置函数的声明格式：
+
+- **输出函数**：
+  - declare dso_local void @print(ptr)
+  - declare dso_local void @println(ptr)
+  - declare dso_local void @printInt(i32)
+  - declare dso_local void @printlnInt(i32)
+
+- **输入函数**：
+  - declare dso_local ptr @getString()
+  - declare dso_local i32 @getInt()
+
+- **内存管理函数**：
+  - declare dso_local ptr @builtin_memset(ptr nocapture writeonly, i8, i32)
+  - declare dso_local ptr @builtin_memcpy(ptr nocapture writeonly, ptr nocapture readonly, i32)
+
+- **声明策略**：
+  - 使用dso_local属性
+  - 设置适当的参数属性
+  - 确保与实现匹配
 
 ### 3. 函数定义格式
-```llvm
-define i32 @main() {
-start:
-  %_1 = alloca [4 x i8], align 4
-  %_2 = alloca [68 x i8], align 4
-  call void @new(ptr sret([68 x i8]) align 4 %_2)
-  store i32 0, ptr %_1, align 4
-  br label %bb2
+函数定义的标准格式：
 
-bb2:                                              ; preds = %start
-  %_3 = load i32, ptr %_1, align 4
-  %_4 = icmp slt i32 %_3, 10
-  br i1 %_4, label %bb3, label %bb6
+- **函数签名**：
+  - define i32 @main() { - 函数定义开始
+  - 包含返回类型和参数列表
+  - 设置链接类型和可见性
 
-bb3:                                              ; preds = %bb2
-  %_5 = call i32 @getInt() align 4
-  call void @push(ptr align 4 %_2, i32 signext %_5)
-  %_6 = load i32, ptr %_1, align 4
-  %_7 = add i32 %_6, 1
-  store i32 %_7, ptr %_1, align 4
-  br label %bb2
+- **基本块结构**：
+  - start: - 入口基本块标签
+  - bb2, bb3, bb6, bb8, bb9 - 其他基本块
+  - 包含前驱信息注释
 
-bb6:                                              ; preds = %bb2, %bb9
-  %_8 = call zeroext i1 @empty(ptr align 4 %_2)
-  br i1 %_8, label %bb8, label %bb9
+- **指令格式**：
+  - %_1 = alloca [4 x i8], align 4 - 栈分配
+  - %_3 = load i32, ptr %_1, align 4 - 加载指令
+  - %_4 = icmp slt i32 %_3, 10 - 比较指令
+  - br i1 %_4, label %bb3, label %bb6 - 条件跳转
 
-bb9:                                              ; preds = %bb6
-  %_9 = call i32 @pop(ptr align 4 %_2)
-  call void @printlnInt(i32 signext %_9)
-  br label %bb6
+- **调用指令**：
+  - call void @push(ptr align 4 %_2, i32 signext %_5) - 函数调用
+  - 包含参数类型和属性
+  - 处理调用约定
 
-bb8:                                              ; preds = %bb6
-  ret i32 0
-}
-```
+- **返回指令**：
+  - ret i32 0 - 函数返回
+  - 包含返回值和类型
 
 ## 错误处理机制
 
@@ -448,35 +528,50 @@ bb8:                                              ; preds = %bb6
 ## 与现有代码的集成
 
 ### 1. 主程序集成
-```cpp
-int main(int argc, char* argv[]) {
-    // ... 词法分析、语法分析、语义分析
-    
-    // IR 生成
-    IRGenerator irGenerator(symbolTable, typeChecker);
-    bool success = irGenerator.generateIR(ast);
-    
-    if (success) {
-        std::cout << irGenerator.getIROutput();
-        return 0;
-    } else {
-        std::cerr << "IR generation failed" << std::endl;
-        return 1;
-    }
-}
-```
+IRGenerator与主程序的集成策略：
+
+- **初始化阶段**：
+  - 创建IRGenerator实例，传入符号表和类型检查器
+  - 设置输出流和错误处理
+  - 准备生成环境
+
+- **生成阶段**：
+  - 调用generateIR()方法处理AST
+  - 处理生成过程中的错误
+  - 收集生成的IR代码
+
+- **输出阶段**：
+  - 成功时输出IR到stdout
+  - 失败时输出错误信息到stderr
+  - 返回适当的退出码
+
+- **错误处理**：
+  - 检查生成过程中的错误
+  - 提供详细的错误信息
+  - 确保程序优雅退出
 
 ### 2. 编译流程
-```bash
-# 编译 Rx 源代码到 LLVM IR
-rxcompiler source.rx > output.ll
+完整的编译流程设计：
 
-# 与 builtin.c 联合编译
-clang builtin.c output.ll -o program
+- **源代码编译**：
+  - rxcompiler source.rx > output.ll
+  - 将Rx源代码编译为LLVM IR
+  - 输出到标准输出便于管道操作
 
-# 运行程序
-./program
-```
+- **联合编译**：
+  - clang builtin.c output.ll -o program
+  - 将生成的IR与builtin.c联合编译
+  - 生成可执行程序
+
+- **程序执行**：
+  - ./program
+  - 运行编译后的程序
+  - 验证执行结果
+
+- **管道支持**：
+  - 支持与其他工具的管道操作
+  - 便于集成到构建系统
+  - 提供灵活的编译选项
 
 ## 实现优先级
 

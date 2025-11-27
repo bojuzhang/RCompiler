@@ -89,104 +89,69 @@ ExpressionGenerator 将表达式分为以下几类进行处理：
 
 ### 组件接口设计
 
-```cpp
-// 前向声明
-class StatementGenerator;
-class FunctionCodegen;
+ExpressionGenerator 组件提供以下核心接口：
 
-class ExpressionGenerator {
-public:
-    ExpressionGenerator(std::shared_ptr<IRBuilder> irBuilder,
-                      std::shared_ptr<TypeMapper> typeMapper,
-                      std::shared_ptr<ScopeTree> scopeTree,
-                      const NodeTypeMap& nodeTypeMap);
-    
-    // 设置依赖组件
-    void setStatementGenerator(std::shared_ptr<StatementGenerator> stmtGen);
-    void setFunctionCodegen(std::shared_ptr<FunctionCodegen> funcGen);
-    
-    // 主要生成接口
-    std::string generateExpression(std::shared_ptr<Expression> expr);
-    
-    // 各类表达式的生成方法
-    std::string generateLiteralExpression(std::shared_ptr<LiteralExpression> expr);
-    std::string generatePathExpression(std::shared_ptr<PathExpression> expr);
-    std::string generateArrayExpression(std::shared_ptr<ArrayExpression> expr);
-    std::string generateIndexExpression(std::shared_ptr<IndexExpression> expr);
-    std::string generateTupleExpression(std::shared_ptr<TupleExpression> expr);
-    std::string generateStructExpression(std::shared_ptr<StructExpression> expr);
-    std::string generateCallExpression(std::shared_ptr<CallExpression> expr);
-    std::string generateMethodCallExpression(std::shared_ptr<MethodCallExpression> expr);
-    std::string generateFieldExpression(std::shared_ptr<FieldExpression> expr);
-    std::string generateUnaryExpression(std::shared_ptr<UnaryExpression> expr);
-    std::string generateBinaryExpression(std::shared_ptr<BinaryExpression> expr);
-    std::string generateAssignmentExpression(std::shared_ptr<AssignmentExpression> expr);
-    std::string generateCompoundAssignmentExpression(std::shared_ptr<CompoundAssignmentExpression> expr);
-    std::string generateTypeCastExpression(std::shared_ptr<TypeCastExpression> expr);
-    
-    // 块表达式
-    std::string generateBlockExpression(std::shared_ptr<BlockExpression> expr);
-    
-    // 控制流表达式
-    std::string generateIfExpression(std::shared_ptr<IfExpression> expr);
-    std::string generateLoopExpression(std::shared_ptr<InfiniteLoopExpression> expr);
-    std::string generateWhileExpression(std::shared_ptr<PredicateLoopExpression> expr);
-    std::string generateBreakExpression(std::shared_ptr<BreakExpression> expr);
-    std::string generateContinueExpression(std::shared_ptr<ContinueExpression> expr);
-    std::string generateReturnExpression(std::shared_ptr<ReturnExpression> expr);
-    
-    // 辅助方法：生成 BlockExpression 中的语句
-    void generateBlockStatements(std::shared_ptr<BlockExpression> block);
-    
-    // 辅助方法：生成单元类型值
-    std::string generateUnitValue();
-    
-    // 工具方法
-    std::string getExpressionType(std::shared_ptr<Expression> expr);
-    bool isLValue(std::shared_ptr<Expression> expr);
-    std::string getLValuePointer(std::shared_ptr<Expression> expr);
-    
-    // BlockExpression 辅助方法
-    void generateBlockStatements(std::shared_ptr<BlockExpression> block);
-    std::string generateUnitValue();
+**构造函数**
+- 接收 IRBuilder、TypeMapper、ScopeTree 和 NodeTypeMap 作为依赖
+- NodeTypeMap 来自语义分析阶段，包含表达式的类型信息
 
-private:
-    std::shared_ptr<IRBuilder> irBuilder;
-    std::shared_ptr<TypeMapper> typeMapper;
-    std::shared_ptr<ScopeTree> scopeTree;
-    const NodeTypeMap& nodeTypeMap;
-    std::shared_ptr<StatementGenerator> statementGenerator;  // 解决循环依赖
-    std::shared_ptr<FunctionCodegen> functionCodegen;       // 用于处理函数调用
-    
-    // 辅助方法
-    std::string generateIntegerLiteral(const std::string& value, const std::string& type);
-    std::string generateStringLiteral(const std::string& value);
-    std::string generateBooleanLiteral(bool value);
-    std::string generateCharacterLiteral(const std::string& value);
-    
-    // 运算符映射
-    std::string mapBinaryOperator(Token op);
-    std::string mapUnaryOperator(Token op);
-    std::string mapComparisonOperator(Token op);
-    
-    // 类型转换
-    std::string generateImplicitConversion(const std::string& value,
-                                         const std::string& fromType,
-                                         const std::string& toType);
-    std::string generateExplicitConversion(const std::string& value,
-                                         const std::string& fromType,
-                                         const std::string& toType);
-    
-    // 函数调用辅助方法
-    std::string generateRegularFunctionCall(std::shared_ptr<CallExpression> expr);
-};
-```
+**依赖组件设置**
+- `setStatementGenerator()`: 设置语句生成器引用，解决循环依赖
+- `setFunctionCodegen()`: 设置函数代码生成器引用，用于处理函数调用
+
+**主要生成接口**
+- `generateExpression()`: 统一的表达式生成入口，根据表达式类型分发到具体方法
+
+**各类表达式生成方法**
+- **字面量表达式**：`generateLiteralExpression()` 处理整数、字符串、布尔值、字符等字面量
+- **路径表达式**：`generatePathExpression()` 处理变量访问、常量访问、函数名引用
+- **数组表达式**：`generateArrayExpression()` 处理数组初始化，支持多维数组
+- **索引表达式**：`generateIndexExpression()` 处理数组索引和指针索引
+- **元组表达式**：`generateTupleExpression()` 处理元组创建
+- **结构体表达式**：`generateStructExpression()` 处理结构体创建和更新
+- **函数调用表达式**：`generateCallExpression()` 处理普通函数调用
+- **方法调用表达式**：`generateMethodCallExpression()` 处理实例方法和静态方法调用
+- **字段访问表达式**：`generateFieldExpression()` 处理结构体字段访问和元组索引访问
+- **一元表达式**：`generateUnaryExpression()` 处理取负、逻辑非、解引用、取引用等
+- **二元表达式**：`generateBinaryExpression()` 处理算术、位运算、比较、逻辑运算
+- **赋值表达式**：`generateAssignmentExpression()` 处理简单赋值和嵌套赋值
+- **复合赋值表达式**：`generateCompoundAssignmentExpression()` 处理 +=、-= 等复合赋值
+- **类型转换表达式**：`generateTypeCastExpression()` 处理显式类型转换
+
+**块表达式处理**
+- `generateBlockExpression()`: 处理包含语句和尾表达式的块表达式
+- `generateBlockStatements()`: 生成块中的所有语句，委托给 StatementGenerator
+- `generateUnitValue()`: 生成单元类型的默认值
+
+**控制流表达式处理**
+- `generateIfExpression()`: 处理 if 表达式，包括 then/else 分支和 phi 节点
+- `generateLoopExpression()`: 处理无限循环表达式，支持 break 值传递
+- `generateWhileExpression()`: 处理条件循环表达式，返回值恒定为 unit
+- `generateBreakExpression()`: 处理 break 表达式，支持带值和不带值
+- `generateContinueExpression()`: 处理 continue 表达式，跳转到循环开始或条件检查
+- `generateReturnExpression()`: 处理返回表达式，与 FunctionCodegen 协作
+
+**工具方法**
+- `getExpressionType()`: 从 NodeTypeMap 获取表达式的类型信息
+- `isLValue()`: 判断表达式是否为左值（可赋值）
+- `getLValuePointer()`: 获取左值表达式的指针
+
+**内部辅助方法**
+- **字面量生成**：针对不同类型字面量的专门生成方法
+- **运算符映射**：将 Token 类型的运算符映射为 LLVM IR 指令
+- **类型转换**：隐式和显式类型转换的生成
+- **函数调用辅助**：普通函数调用的生成逻辑
+
+**循环上下文管理**
+- 维护循环上下文栈，处理嵌套循环中的 break/continue
+- 跟踪循环的起始和结束基本块
+- 管理 break 表达式的值传递
 
 ## 实现策略
 
 ### 赋值表达式生成
 
-赋值表达式是Rx语言中的核心操作，负责将值存储到可变的位置。ExpressionGenerator必须智能地处理从简单标量赋值到复杂聚合类型赋值的各种场景，特别是要解决大型聚合类型的性能优化问题。
+赋值表达式是 Rx 语言中的核心操作，负责将值存储到可变的位置。ExpressionGenerator 必须智能地处理从简单标量赋值到复杂聚合类型赋值的各种场景，特别是要解决大型聚合类型的性能优化问题。
 
 #### 赋值表达式分类与处理策略
 
@@ -201,14 +166,7 @@ private:
 
 #### 核心设计：智能赋值策略选择
 
-为了解决大型聚合类型的性能问题，ExpressionGenerator实现了智能的赋值策略选择机制：
-
-```cpp
-enum class AssignmentStrategy {
-    DIRECT_LOAD_STORE,    // 直接的 load/store 序列
-    MEMORY_COPY,          // 使用 memcpy
-};
-```
+为了解决大型聚合类型的性能问题，ExpressionGenerator 实现了智能的赋值策略选择机制：
 
 **策略选择的核心原则**：
 - **小型聚合类型**（≤ 16字节）：使用直接的 load/store 序列
@@ -216,1116 +174,676 @@ enum class AssignmentStrategy {
 
 #### 类型内省与大小分析系统
 
-为了实现智能策略选择，ExpressionGenerator需要精确的类型内省能力：
+为了实现智能策略选择，ExpressionGenerator 需要精确的类型内省能力：
 
-```cpp
-class TypeInfoAnalyzer {
-public:
-    // 获取类型的精确字节大小
-    static uint64_t getTypeByteSize(std::shared_ptr<SemanticType> type);
-    
-    // 检查类型是否为聚合类型
-    static bool isAggregateType(std::shared_ptr<SemanticType> type);
-    
-    // 检查类型是否为平凡可复制类型
-    static bool isTriviallyCopyable(std::shared_ptr<SemanticType> type);
-    
-    // 获取类型的对齐要求
-    static uint64_t getTypeAlignment(std::shared_ptr<SemanticType> type);
-    
-    // 分析类型的内存布局
-    static TypeLayoutInfo analyzeTypeLayout(std::shared_ptr<SemanticType> type);
-};
+**类型内省的核心功能**：
+- 获取类型的精确字节大小
+- 检查类型是否为聚合类型
+- 检查类型是否为平凡可复制类型
+- 获取类型的对齐要求
+- 分析类型的内存布局
 
-struct TypeLayoutInfo {
-    uint64_t byteSize;           // 类型的字节大小
-    uint64_t alignment;          // 对齐要求
-    bool isAggregate;            // 是否为聚合类型
-    bool isTriviallyCopyable;    // 是否为平凡可复制
-    bool hasPadding;             // 是否包含填充字节
-    std::vector<FieldInfo> fields; // 字段信息（仅结构体）
-};
-```
+**类型布局信息结构**：
+- byteSize：类型的字节大小
+- alignment：对齐要求
+- isAggregate：是否为聚合类型
+- isTriviallyCopyable：是否为平凡可复制
+- hasPadding：是否包含填充字节
+- fields：字段信息（仅结构体）
 
-**类型内省的实现细节**：
+**类型大小计算策略**：
+- **基础类型**：直接查询预定义的大小表
+- **数组类型**：元素大小 × 元素数量
+- **结构体类型**：递归计算所有字段大小，考虑对齐和填充
+- **引用类型**：指针大小（32位系统为4字节）
 
-```cpp
-uint64_t TypeInfoAnalyzer::getTypeByteSize(std::shared_ptr<SemanticType> type) {
-    if (!type) return 0;
-    
-    // 基础类型的大小查询
-    if (auto simpleType = dynamic_cast<SimpleType*>(type.get())) {
-        return getBasicTypeSize(simpleType->typeName);
-    }
-    
-    // 数组类型：元素大小 × 元素数量
-    if (auto arrayType = dynamic_cast<ArrayTypeWrapper*>(type.get())) {
-        uint64_t elementSize = getTypeByteSize(arrayType->GetElementType());
-        uint64_t elementCount = getArrayElementCount(arrayType);
-        return elementSize * elementCount;
-    }
-    
-    // 结构体类型：递归计算所有字段大小
-    if (auto structType = dynamic_cast<StructType*>(type.get())) {
-        return calculateStructSize(structType);
-    }
-    
-    // 引用类型：指针大小（32位系统为4字节）
-    if (auto refType = dynamic_cast<ReferenceTypeWrapper*>(type.get())) {
-        return 4; // 指针大小
-    }
-    
-    return 0;
-}
+#### 赋值表达式生成流程
 
-bool TypeInfoAnalyzer::isAggregateType(std::shared_ptr<SemanticType> type) {
-    if (!type) return false;
-    
-    // 数组和结构体都是聚合类型
-    return (dynamic_cast<ArrayTypeWrapper*>(type.get()) != nullptr) ||
-           (dynamic_cast<StructType*>(type.get()) != nullptr);
-}
-```
+ExpressionGenerator 采用以下流程生成赋值表达式：
 
-#### GenerateAssignment函数的完整实现
+1. **类型信息获取**：
+   - 获取左右表达式的类型信息
+   - 分析左值的地址计算策略
 
-```cpp
-std::string ExpressionGenerator::generateAssignmentExpression(
-    std::shared_ptr<AssignmentExpression> expr) {
-    
-    // 1. 获取左右表达式的类型信息
-    auto leftType = getExpressionType(expr->leftexpression);
-    auto rightType = getExpressionType(expr->rightexpression);
-    
-    // 2. 分析左值的地址计算策略
-    LValueInfo lvalueInfo = analyzeLValue(expr->leftexpression);
-    
-    // 3. 选择赋值策略
-    AssignmentStrategy strategy = selectAssignmentStrategy(leftType, lvalueInfo);
-    
-    // 4. 根据策略生成相应的IR代码
-    switch (strategy) {
-        case AssignmentStrategy::DIRECT_LOAD_STORE:
-            return generateDirectStoreAssignment(expr, lvalueInfo);
-        case AssignmentStrategy::MEMORY_COPY:
-            return generateMemcpyAssignment(expr, lvalueInfo);
-    }
-    
-    return generateDefaultValue(leftType);
-}
-```
+2. **策略选择**：
+   - 根据类型大小选择合适的赋值策略
+   - 小型聚合类型使用直接存储
+   - 大型聚合类型使用 memcpy 优化
+
+3. **代码生成**：
+   - 根据选择的策略生成相应的 IR 代码
+   - 处理类型转换和兼容性检查
 
 #### 左值分析与地址计算
 
 左值分析是赋值表达式的关键步骤，需要确定如何计算目标地址：
 
-```cpp
-struct LValueInfo {
-    enum class LValueKind {
-        VARIABLE,          // 简单变量
-        FIELD_ACCESS,      // 字段访问
-        ARRAY_INDEX,       // 数组索引
-        NESTED_ACCESS      // 嵌套访问
-    } kind;
-    
-    std::string basePointer;      // 基础指针寄存器
-    std::vector<std::string> indices; // 索引序列
-    std::string finalAddress;     // 最终地址寄存器
-    std::shared_ptr<SemanticType> targetType; // 目标类型
-};
+**左值信息结构**：
+- kind：左值类型（变量、字段访问、数组索引、嵌套访问）
+- basePointer：基础指针寄存器
+- indices：索引序列
+- finalAddress：最终地址寄存器
+- targetType：目标类型
 
-LValueInfo ExpressionGenerator::analyzeLValue(std::shared_ptr<Expression> lvalue) {
-    LValueInfo info;
-    
-    if (auto pathExpr = dynamic_cast<PathExpression*>(lvalue.get())) {
-        // 简单变量访问
-        info.kind = LValueInfo::LValueKind::VARIABLE;
-        info.basePointer = getVariablePointer(pathExpr->simplepath);
-        info.finalAddress = info.basePointer;
-        info.targetType = getExpressionType(lvalue);
-        
-    } else if (auto fieldExpr = dynamic_cast<FieldExpression*>(lvalue.get())) {
-        // 字段访问：obj.field
-        info.kind = LValueInfo::LValueKind::FIELD_ACCESS;
-        info = analyzeFieldAccess(fieldExpr);
-        
-    } else if (auto indexExpr = dynamic_cast<IndexExpression*>(lvalue.get())) {
-        // 数组索引：arr[i]
-        info.kind = LValueInfo::LValueKind::ARRAY_INDEX;
-        info = analyzeArrayIndex(indexExpr);
-        
-    } else {
-        reportError("Invalid lvalue in assignment");
-    }
-    
-    return info;
-}
-```
+**左值分析策略**：
+- **简单变量**：直接从符号表获取变量指针
+- **字段访问**：使用 getelementptr 计算字段偏移
+- **数组索引**：使用 getelementptr 计算元素地址
+- **嵌套访问**：递归分析复杂的访问路径
 
 #### 字段访问的地址计算
 
-```cpp
-LValueInfo ExpressionGenerator::analyzeFieldAccess(
-    std::shared_ptr<FieldExpression> fieldExpr) {
-    
-    LValueInfo info;
-    info.kind = LValueInfo::LValueKind::FIELD_ACCESS;
-    
-    // 递归分析接收者表达式
-    auto receiverInfo = analyzeLValue(fieldExpr->expression);
-    info.basePointer = receiverInfo.finalAddress;
-    
-    // 获取字段信息
-    std::string fieldName = fieldExpr->identifier;
-    auto fieldType = getFieldType(receiverInfo.targetType, fieldName);
-    
-    // 生成 getelementptr 指令计算字段地址
-    std::string fieldPtrReg = irBuilder->newRegister();
-    uint32_t fieldIndex = getFieldIndex(receiverInfo.targetType, fieldName);
-    
-    std::vector<std::pair<std::string, std::string>> indices = {
-        {"0", "i32"},  // 结构体第一个元素
-        {std::to_string(fieldIndex), "i32"}  // 字段索引
-    };
-    
-    irBuilder->emitGetElementPtr(fieldPtrReg, receiverInfo.finalAddress, indices);
-    
-    info.finalAddress = fieldPtrReg;
-    info.targetType = fieldType;
-    info.indices = receiverInfo.indices;
-    info.indices.push_back(std::to_string(fieldIndex));
-    
-    return info;
-}
-```
+字段访问的地址计算采用以下策略：
+
+1. **递归分析接收者**：
+   - 分析接收者表达式的类型和地址
+   - 获取字段在结构体中的索引
+
+2. **生成 getelementptr 指令**：
+   - 使用结构体基础指针和字段索引
+   - 生成指向字段的指针
+
+3. **索引序列管理**：
+   - 维护完整的访问路径
+   - 支持多层嵌套的字段访问
 
 #### 数组索引的地址计算
 
-```cpp
-LValueInfo ExpressionGenerator::analyzeArrayIndex(
-    std::shared_ptr<IndexExpression> indexExpr) {
-    
-    LValueInfo info;
-    info.kind = LValueInfo::LValueKind::ARRAY_INDEX;
-    
-    // 分析数组基础表达式
-    auto arrayInfo = analyzeLValue(indexExpr->expressionout);
-    info.basePointer = arrayInfo.finalAddress;
-    
-    // 生成索引表达式
-    std::string indexReg = generateExpression(indexExpr->expressionin);
-    
-    // 获取元素类型
-    auto elementType = getElementType(arrayInfo.targetType);
-    
-    // 生成 getelementptr 指令计算元素地址
-    std::string elemPtrReg = irBuilder->newRegister();
-    
-    if (isPointerType(arrayInfo.targetType)) {
-        // 指针索引：ptr[i]
-        irBuilder->emitGetElementPtr(elemPtrReg, arrayInfo.finalAddress,
-                                   indexReg, "", elementType + "*");
-    } else {
-        // 数组索引：arr[i]
-        irBuilder->emitGetElementPtr(elemPtrReg, arrayInfo.finalAddress,
-                                   "0", indexReg, elementType + "*");
-    }
-    
-    info.finalAddress = elemPtrReg;
-    info.targetType = elementType;
-    info.indices = arrayInfo.indices;
-    info.indices.push_back(indexReg);
-    
-    return info;
-}
-```
+数组索引的地址计算区分两种情况：
 
-#### 直接存储策略的实现
+1. **指针索引**：`ptr[i]`
+   - 直接使用指针和索引值
+   - 生成指向元素的指针
 
-```cpp
-std::string ExpressionGenerator::generateDirectStoreAssignment(
-    std::shared_ptr<AssignmentExpression> expr,
-    const LValueInfo& lvalueInfo) {
-    
-    // 生成右值表达式
-    std::string valueReg = generateExpression(expr->rightexpression);
-    std::string valueType = getExpressionType(expr->rightexpression);
-    
-    // 类型转换（如果需要）
-    std::string targetLLVMType = typeMapper->mapSemanticTypeToLLVM(lvalueInfo.targetType);
-    if (valueType != targetLLVMType) {
-        valueReg = generateImplicitConversion(valueReg, valueType, targetLLVMType);
-    }
-    
-    // 直接存储到目标地址
-    irBuilder->emitStore(valueReg, lvalueInfo.finalAddress, targetLLVMType);
-    
-    // 返回赋值表达式的值（右值）
-    return valueReg;
-}
-```
+2. **数组索引**：`arr[i]`
+   - 使用数组基地址和索引值
+   - 添加数组起始偏移（通常为0）
 
-#### memcpy优化策略的实现
+#### 直接存储策略实现
 
-```cpp
-std::string ExpressionGenerator::generateMemcpyAssignment(
-    std::shared_ptr<AssignmentExpression> expr,
-    const LValueInfo& lvalueInfo) {
-    
-    // 为右值创建临时存储空间
-    std::string tempReg = irBuilder->newRegister();
-    std::string llvmType = typeMapper->mapSemanticTypeToLLVM(lvalueInfo.targetType);
-    irBuilder->emitAlloca(tempReg, llvmType);
-    
-    // 生成右值表达式并存储到临时空间
-    std::string valueReg = generateExpression(expr->rightexpression);
-    irBuilder->emitStore(valueReg, tempReg, llvmType);
-    
-    // 计算类型大小
-    uint64_t typeSize = TypeInfoAnalyzer::getTypeByteSize(lvalueInfo.targetType);
-    std::string sizeReg = irBuilder->newRegister();
-    irBuilder->emitInstruction("%" + sizeReg + " = add i32 " +
-                             std::to_string(typeSize) + ", 0");
-    
-    // 生成 memcpy 调用
-    std::string memcpyResult = irBuilder->newRegister();
-    std::vector<std::string> memcpyArgs = {
-        lvalueInfo.finalAddress,  // 目标地址
-        tempReg,                  // 源地址
-        sizeReg                   // 大小
-    };
-    irBuilder->emitCall(memcpyResult, "llvm.memcpy.p0i8.p0i8.i32",
-                       memcpyArgs, "void");
-    
-    // 返回赋值表达式的值
-    return valueReg;
-}
-```
+直接存储策略适用于小型聚合类型：
 
+1. **生成右值表达式**：
+   - 递归生成右值表达式的代码
+   - 获取右值的类型信息
 
-#### 复合赋值表达式的处理
+2. **类型转换**：
+   - 检查左右值类型是否匹配
+   - 生成必要的类型转换代码
 
-```cpp
-std::string ExpressionGenerator::generateCompoundAssignmentExpression(
-    std::shared_ptr<CompoundAssignmentExpression> expr) {
-    
-    // 生成左值地址
-    LValueInfo lvalueInfo = analyzeLValue(expr->leftexpression);
-    
-    // 加载当前值
-    std::string currentValReg = irBuilder->newRegister();
-    std::string llvmType = typeMapper->mapSemanticTypeToLLVM(lvalueInfo.targetType);
-    irBuilder->emitLoad(currentValReg, lvalueInfo.finalAddress, llvmType);
-    
-    // 生成右值表达式
-    std::string rightValReg = generateExpression(expr->rightexpression);
-    
-    // 执行二元运算
-    std::string resultReg = irBuilder->newRegister();
-    std::string op = mapBinaryOperator(expr->type);
-    
-    switch (expr->type) {
-        case Token::kPlusEq:
-            irBuilder->emitAdd(resultReg, currentValReg, rightValReg, llvmType);
-            break;
-        case Token::kMinusEq:
-            irBuilder->emitSub(resultReg, currentValReg, rightValReg, llvmType);
-            break;
-        case Token::kMulEq:
-            irBuilder->emitMul(resultReg, currentValReg, rightValReg, llvmType);
-            break;
-        case Token::kDivEq:
-            irBuilder->emitDiv(resultReg, currentValReg, rightValReg, llvmType);
-            break;
-        // ... 其他复合运算符
-    }
-    
-    // 存储结果
-    irBuilder->emitStore(resultReg, lvalueInfo.finalAddress, llvmType);
-    
-    return resultReg;
-}
-```
+3. **直接存储**：
+   - 使用 IRBuilder 的 emitStore 方法
+   - 将值直接存储到目标地址
 
-#### 嵌套赋值表达式的优化
+#### memcpy 优化策略实现
 
-对于复杂的嵌套赋值表达式，如 `obj.arr[i].field = value`，ExpressionGenerator采用递归分析方法：
+memcpy 优化策略适用于大型聚合类型：
 
-```cpp
-LValueInfo ExpressionGenerator::analyzeNestedAccess(
-    std::shared_ptr<Expression> expr) {
-    
-    if (auto fieldExpr = dynamic_cast<FieldExpression*>(expr.get())) {
-        // 字段访问：递归分析接收者
-        auto receiverInfo = analyzeNestedAccess(fieldExpr->expression);
-        
-        // 计算字段地址
-        std::string fieldPtrReg = irBuilder->newRegister();
-        uint32_t fieldIndex = getFieldIndex(receiverInfo.targetType,
-                                         fieldExpr->identifier);
-        
-        std::vector<std::pair<std::string, std::string>> indices = {
-            {"0", "i32"},
-            {std::to_string(fieldIndex), "i32"}
-        };
-        
-        irBuilder->emitGetElementPtr(fieldPtrReg, receiverInfo.finalAddress, indices);
-        
-        LValueInfo info;
-        info.kind = LValueInfo::LValueKind::NESTED_ACCESS;
-        info.basePointer = receiverInfo.basePointer;
-        info.finalAddress = fieldPtrReg;
-        info.targetType = getFieldType(receiverInfo.targetType,
-                                    fieldExpr->identifier);
-        info.indices = receiverInfo.indices;
-        info.indices.push_back(std::to_string(fieldIndex));
-        
-        return info;
-        
-    } else if (auto indexExpr = dynamic_cast<IndexExpression*>(expr.get())) {
-        // 数组索引：递归分析数组基础
-        auto arrayInfo = analyzeNestedAccess(indexExpr->expressionout);
-        
-        // 计算索引地址
-        std::string indexReg = generateExpression(indexExpr->expressionin);
-        std::string elemPtrReg = irBuilder->newRegister();
-        auto elementType = getElementType(arrayInfo.targetType);
-        
-        irBuilder->emitGetElementPtr(elemPtrReg, arrayInfo.finalAddress,
-                                   "0", indexReg, elementType + "*");
-        
-        LValueInfo info;
-        info.kind = LValueInfo::LValueKind::NESTED_ACCESS;
-        info.basePointer = arrayInfo.basePointer;
-        info.finalAddress = elemPtrReg;
-        info.targetType = elementType;
-        info.indices = arrayInfo.indices;
-        info.indices.push_back(indexReg);
-        
-        return info;
-        
-    } else {
-        // 基础情况：简单变量
-        return analyzeLValue(expr);
-    }
-}
-```
+1. **临时空间分配**：
+   - 为右值创建临时存储空间
+   - 确保内存对齐和大小正确
 
+2. **右值生成和存储**：
+   - 生成右值表达式并存储到临时空间
+   - 避免重复计算复杂表达式
 
+3. **内存复制**：
+   - 计算类型的精确字节大小
+   - 调用 builtin_memcpy 进行高效复制
 
-通过这些实现，ExpressionGenerator的赋值表达式生成功能解决了大型聚合类型的处理问题，确保生成的IR代码正确高效。
+4. **性能优化**：
+   - 减少大量的 load/store 操作
+   - 利用 LLVM 的 memcpy 优化
+
+#### 复合赋值表达式处理
+
+复合赋值表达式（如 +=、-=）采用以下策略：
+
+1. **左值地址计算**：
+   - 分析左值表达式的地址
+   - 获取目标类型信息
+
+2. **当前值加载**：
+   - 从目标地址加载当前值
+   - 确保类型正确性
+
+3. **二元运算执行**：
+   - 生成右值表达式
+   - 执行相应的二元运算
+   - 支持所有复合运算符类型
+
+4. **结果存储**：
+   - 将运算结果存储回目标地址
+   - 返回运算结果作为表达式值
+
+#### 嵌套赋值表达式优化
+
+对于复杂的嵌套赋值表达式，采用递归分析方法：
+
+1. **递归分析**：
+   - 递归分析嵌套的访问路径
+   - 构建完整的地址计算序列
+
+2. **地址计算**：
+   - 逐步计算每层访问的地址
+   - 维护访问路径的完整性
+
+3. **优化策略**：
+   - 避免重复计算公共子表达式
+   - 优化内存访问模式
+
+通过这些实现，ExpressionGenerator 的赋值表达式生成功能解决了大型聚合类型的处理问题，确保生成的 IR 代码正确高效。
 
 ### 字面量表达式生成
 
 #### 整数字面量
 
-```cpp
-std::string ExpressionGenerator::generateLiteralExpression(std::shared_ptr<LiteralExpression> expr) {
-    std::string llvmType = getExpressionType(expr);
-    std::string value = expr->literal;
-    
-    switch (expr->tokentype) {
-        case Token::kINTEGER_LITERAL:
-            return generateIntegerLiteral(value, llvmType);
-        case Token::kSTRING_LITERAL:
-            return generateStringLiteral(value);
-        case Token::kTRUE:
-        case Token::kFALSE:
-            return generateBooleanLiteral(expr->tokentype == Token::kTRUE);
-        case Token::kCHAR_LITERAL:
-            return generateCharacterLiteral(value);
-        default:
-            return generateIntegerLiteral("0", "i32");
-    }
-}
+ExpressionGenerator 对整数字面量采用以下生成策略：
 
-std::string ExpressionGenerator::generateIntegerLiteral(const std::string& value, const std::string& type) {
-    // 直接生成 LLVM 整数字面量
-    if (type == "i32") {
-        return value;
-    } else if (type == "i1") {
-        return (value == "0" || value == "false") ? "false" : "true";
-    } else {
-        // 其他整数类型，可能需要类型转换
-        std::string reg = irBuilder->newRegister();
-        irBuilder->emitInstruction("%" + reg + " = add " + type + " " + value + ", 0");
-        return reg;
-    }
-}
-```
+1. **类型感知生成**：
+   - 根据表达式类型选择合适的生成方式
+   - i32 类型：直接返回字面值
+   - i1 类型：转换为 true/false
+   - 其他整数类型：通过 add 指令生成类型正确的值
+
+2. **字面值处理**：
+   - 支持十进制、十六进制、二进制格式
+   - 处理负数和零值
+   - 确保数值在类型范围内
+
+3. **类型转换**：
+   - 对需要类型转换的情况生成转换代码
+   - 使用 IRBuilder 的类型转换方法
+   - 保持语义正确性
 
 #### 字符串字面量
 
-```cpp
-std::string ExpressionGenerator::generateStringLiteral(const std::string& value) {
-    // 创建全局字符串常量
-    std::string globalName = ".str" + std::to_string(regCounter++);
-    std::string escapedValue = escapeString(value);
-    
-    // 声明全局字符串常量
-    irBuilder->emitGlobalVariable(globalName, "[" + std::to_string(value.length() + 1) + " x i8]", 
-                                 "c\"" + escapedValue + "\"", true);
-    
-    // 返回指向字符串的指针
-    std::string reg = irBuilder->newRegister();
-    irBuilder->emitInstruction("%" + reg + " = getelementptr [" + std::to_string(value.length() + 1) +
-                              " x i8], [" + std::to_string(value.length() + 1) + " x i8]* " +
-                              globalName + ", i32 0, i32 0");
-    
-    return reg;
-}
-```
+字符串字面量生成采用以下策略：
+
+1. **全局常量创建**：
+   - 为每个字符串字面量创建唯一的全局常量
+   - 使用递增计数器确保名称唯一性
+   - 包含空终止符的长度计算
+
+2. **字符串转义**：
+   - 处理 C 语言风格的转义字符
+   - 确保 LLVM 字符串格式的正确性
+   - 支持 Unicode 和特殊字符
+
+3. **指针生成**：
+   - 使用 getelementptr 指令生成字符串指针
+   - 计算字符串起始位置的偏移
+   - 返回 i8* 类型的指针值
+
+4. **内存布局**：
+   - 确保字符串在内存中的正确布局
+   - 处理对齐和填充要求
+   - 优化字符串常量的存储
 
 ### 路径表达式生成
 
-```cpp
-std::string ExpressionGenerator::generatePathExpression(std::shared_ptr<PathExpression> expr) {
-    std::string pathName = getPathName(expr->simplepath);
-    
-    // 查找符号
-    auto symbol = scopeTree->LookupSymbol(pathName);
-    if (!symbol) {
-        reportError("Undefined symbol: " + pathName);
-        return "null";
-    }
-    
-    switch (symbol->kind) {
-        case SymbolKind::Variable:
-        case SymbolKind::Parameter: {
-            // 加载变量值
-            std::string ptrReg = getVariablePointer(pathName);
-            std::string valueReg = irBuilder->newRegister();
-            std::string llvmType = typeMapper->mapSemanticTypeToLLVM(symbol->type);
-            irBuilder->emitLoad(valueReg, ptrReg, llvmType);
-            return valueReg;
-        }
-        
-        case SymbolKind::Constant: {
-            // 常量值
-            if (auto constValue = getConstantValue(symbol)) {
-                return generateConstantValue(constValue);
-            }
-            break;
-        }
-        
-        case SymbolKind::Function: {
-            // 函数指针
-            return "@" + pathName;
-        }
-        
-        default:
-            reportError("Invalid symbol kind for path expression: " + pathName);
-            return "null";
-    }
-    
-    return "null";
-}
-```
+路径表达式生成采用以下策略：
+
+1. **符号查找**：
+   - 从 ScopeTree 中查找符号信息
+   - 验证符号的存在性和有效性
+   - 处理符号未定义的错误情况
+
+2. **符号类型处理**：
+   - **变量和参数**：从内存加载值到寄存器
+   - **常量**：直接使用常量值，避免内存访问
+   - **函数**：返回函数指针用于函数调用
+
+3. **变量加载**：
+   - 通过 IRBuilder 获取变量指针寄存器
+   - 使用 emitLoad 加载变量值
+   - 处理不同类型的加载方式
+
+4. **类型映射**：
+   - 使用 TypeMapper 将语义类型转换为 LLVM 类型
+   - 确保加载操作的类型正确性
+   - 处理复杂类型的加载策略
+
+5. **错误处理**：
+   - 对未定义符号生成错误信息
+   - 对无效符号类型进行报告
+   - 提供安全的默认返回值
 
 ### 数组表达式生成
 
-```cpp
-std::string ExpressionGenerator::generateArrayExpression(std::shared_ptr<ArrayExpression> expr) {
-    auto elements = expr->arrayelements->expressions;
-    
-    // 检查是否为多维数组（元素本身也是数组）
-    if (isMultiDimensionalArray(expr)) {
-        // 处理多维数组：[[1, 2, 3], [4, 5, 6], [7, 8, 9]]
-        return generateMultiDimensionalArray(expr);
-    }
-    
-    // 处理复杂嵌套数组：[func_call(), obj.field, arr[i] + 1, x * 2]
-    std::string elementType = inferCommonElementType(elements);
-    std::string arrayType = "[" + std::to_string(elements.size()) + " x " + elementType + "]";
-    
-    // 分配数组空间
-    std::string arrayReg = irBuilder->newRegister();
-    irBuilder->emitAlloca(arrayReg, arrayType);
-    
-    // 初始化每个元素（元素可能是任意复杂表达式）
-    for (size_t i = 0; i < elements.size(); ++i) {
-        // 递归生成元素表达式（可能是函数调用、字段访问、索引访问等）
-        std::string elementReg = generateExpression(elements[i]);
-        
-        // 类型转换（如果需要）
-        std::string elementTypeLLVM = typeMapper->mapRxTypeToLLVM(elementType);
-        std::string actualElementType = getExpressionType(elements[i]);
-        if (actualElementType != elementTypeLLVM) {
-            elementReg = generateImplicitConversion(elementReg, actualElementType, elementTypeLLVM);
-        }
-        
-        // 获取元素指针
-        std::string elemPtrReg = irBuilder->newRegister();
-        irBuilder->emitGetElementPtr(elemPtrReg, arrayReg, "0", std::to_string(i), elementTypeLLVM + "*");
-        
-        // 存储元素值
-        irBuilder->emitStore(elementReg, elemPtrReg, elementTypeLLVM);
-    }
-    
-    // 如果是表达式值，需要加载整个数组
-    if (isExpressionValue(expr)) {
-        std::string loadedReg = irBuilder->newRegister();
-        irBuilder->emitLoad(loadedReg, arrayReg, arrayType);
-        return loadedReg;
-    }
-    
-    return arrayReg;
-}
+数组表达式生成采用以下策略：
 
-// 多维数组处理的辅助方法
-std::string ExpressionGenerator::generateMultiDimensionalArray(std::shared_ptr<ArrayExpression> expr) {
-    auto elements = expr->arrayelements->expressions;
-    
-    // 获取内层数组类型
-    auto innerArrayExpr = std::dynamic_pointer_cast<ArrayExpression>(elements[0]);
-    std::string innerElementType = getArrayElementType(innerArrayExpr);
-    std::string innerArrayType = "[" + std::to_string(innerArrayExpr->arrayelements->expressions.size()) +
-                                 " x " + innerElementType + "]";
-    
-    // 外层数组类型
-    std::string outerArrayType = "[" + std::to_string(elements.size()) + " x " + innerArrayType + "]";
-    
-    // 分配外层数组空间
-    std::string arrayReg = irBuilder->newRegister();
-    irBuilder->emitAlloca(arrayReg, outerArrayType);
-    
-    // 初始化每个内层数组
-    for (size_t i = 0; i < elements.size(); ++i) {
-        // 递归生成内层数组
-        std::string innerArrayReg = generateArrayExpression(elements[i]);
-        
-        // 获取外层数组元素指针
-        std::string elemPtrReg = irBuilder->newRegister();
-        irBuilder->emitGetElementPtr(elemPtrReg, arrayReg, "0", std::to_string(i), innerArrayType + "*");
-        
-        // 存储内层数组
-        irBuilder->emitStore(innerArrayReg, elemPtrReg, innerArrayType);
-    }
-    
-    return arrayReg;
-}
-```
+1. **多维数组检测**：
+   - 检查数组元素是否为数组类型
+   - 区分一维数组和多维数组的处理逻辑
+   - 递归处理多维数组结构
+
+2. **元素类型推断**：
+   - 分析所有元素的类型
+   - 推断公共的元素类型
+   - 处理类型不匹配的情况
+
+3. **数组空间分配**：
+   - 根据元素数量和类型分配数组空间
+   - 生成正确的 LLVM 数组类型
+   - 处理对齐和内存布局
+
+4. **元素初始化**：
+   - 递归生成每个元素的表达式
+   - 支持任意复杂的元素表达式（函数调用、字段访问等）
+   - 处理类型转换和兼容性
+
+5. **多维数组处理**：
+   - **类型分析**：分析内层数组和外层数组的类型
+   - **递归生成**：递归生成每个内层数组
+   - **嵌套存储**：将内层数组存储到外层数组的对应位置
+
+6. **复杂表达式支持**：
+   - 支持元素为任意复杂表达式的情况
+   - 正确处理表达式的副作用
+   - 优化重复计算
+
+7. **值加载策略**：
+   - 根据上下文决定是否加载整个数组
+   - 区分左值和右值的使用场景
+   - 优化内存访问模式
 
 ### 索引表达式生成
 
-```cpp
-std::string ExpressionGenerator::generateIndexExpression(std::shared_ptr<IndexExpression> expr) {
-    // 生成数组/指针表达式
-    std::string arrayReg = generateExpression(expr->expressionout);
-    
-    // 生成索引表达式
-    std::string indexReg = generateExpression(expr->expressionin);
-    
-    // 获取元素类型
-    std::string arrayType = getExpressionType(expr->expressionout);
-    std::string elementType = getElementType(arrayType);
-    
-    // 生成 GEP 指令
-    std::string elemPtrReg = irBuilder->newRegister();
-    if (isPointerType(arrayType)) {
-        // 指针索引：ptr[i]
-        irBuilder->emitGetElementPtr(elemPtrReg, arrayReg, indexReg, "", elementType + "*");
-    } else {
-        // 数组索引：arr[i]
-        irBuilder->emitGetElementPtr(elemPtrReg, arrayReg, "0", indexReg, elementType + "*");
-    }
-    
-    // 加载元素值
-    std::string valueReg = irBuilder->newRegister();
-    irBuilder->emitLoad(valueReg, elemPtrReg, elementType);
-    
-    return valueReg;
-}
-```
+索引表达式生成采用以下策略：
+
+1. **基础表达式生成**：
+   - 生成数组或指针基础表达式的代码
+   - 获取基础表达式的类型信息
+   - 处理复杂的基础表达式（函数调用、字段访问等）
+
+2. **索引表达式生成**：
+   - 生成索引表达式的代码
+   - 支持任意复杂的索引计算
+   - 处理索引边界检查（可选）
+
+3. **索引类型区分**：
+   - **指针索引**：`ptr[i]`，直接使用指针和索引
+   - **数组索引**：`arr[i]`，需要添加数组起始偏移
+
+4. **地址计算**：
+   - 使用 getelementptr 指令计算元素地址
+   - 根据索引类型选择不同的 GEP 参数
+   - 确保地址计算的正确性
+
+5. **元素加载**：
+   - 从计算出的地址加载元素值
+   - 处理不同类型的加载方式
+   - 考虑对齐和内存访问优化
+
+6. **类型安全**：
+   - 验证索引表达式的类型正确性
+   - 处理索引越界的警告
+   - 确保元素类型的匹配
+
+7. **性能优化**：
+   - 避免重复计算基础表达式
+   - 优化连续的索引访问
+   - 利用 LLVM 的 GEP 优化
 
 ### 二元表达式生成
 
-```cpp
-std::string ExpressionGenerator::generateBinaryExpression(std::shared_ptr<BinaryExpression> expr) {
-    // 生成左右操作数
-    std::string leftReg = generateExpression(expr->leftexpression);
-    std::string rightReg = generateExpression(expr->rightexpression);
-    
-    // 获取操作数类型
-    std::string leftType = getExpressionType(expr->leftexpression);
-    std::string rightType = getExpressionType(expr->rightexpression);
-    std::string resultType = getExpressionType(expr);
-    
-    // 类型转换（如果需要）
-    if (leftType != resultType) {
-        leftReg = generateImplicitConversion(leftReg, leftType, resultType);
-    }
-    if (rightType != resultType) {
-        rightReg = generateImplicitConversion(rightReg, rightType, resultType);
-    }
-    
-    // 通过 IRBuilder 分配结果寄存器
-    std::string resultReg = irBuilder->newRegister();
-    std::string op = mapBinaryOperator(expr->binarytype);
-    
-    if (isArithmeticOperator(expr->binarytype)) {
-        // 算术运算
-        irBuilder->emitArithmetic(resultReg, op, leftReg, rightReg, resultType);
-    } else if (isComparisonOperator(expr->binarytype)) {
-        // 比较运算
-        std::string cmpReg = irBuilder->newRegister();
-        std::string cmpOp = mapComparisonOperator(expr->binarytype);
-        irBuilder->emitIcmp(cmpReg, cmpOp, leftReg, rightReg, resultType);
-        
-        // 扩展到目标类型
-        resultReg = generateImplicitConversion(cmpReg, "i1", resultType);
-    } else if (isLogicalOperator(expr->binarytype)) {
-        // 逻辑运算
-        if (expr->binarytype == Token::kAndAnd) {
-            resultReg = generateLogicalAnd(leftReg, rightReg);
-        } else if (expr->binarytype == Token::kOrOr) {
-            resultReg = generateLogicalOr(leftReg, rightReg);
-        }
-    }
-    
-    return resultReg;
-}
-```
+二元表达式生成采用以下策略：
+
+1. **操作数生成**：
+   - 递归生成左右操作数的表达式代码
+   - 获取操作数的类型信息
+   - 处理复杂操作数表达式的副作用
+
+2. **类型统一**：
+   - 获取表达式的结果类型
+   - 对左右操作数进行必要的类型转换
+   - 使用隐式转换确保类型兼容性
+
+3. **运算符分类处理**：
+   - **算术运算**：+、-、*、/、%
+   - **比较运算**：==、!=、<、<=、>、>=
+   - **逻辑运算**：&&、||、&、|、^
+   - **位移运算**：<<、>>
+
+4. **算术运算生成**：
+   - 使用 IRBuilder 的算术指令
+   - 处理整数溢出和除零检查
+   - 优化常量折叠
+
+5. **比较运算生成**：
+   - 使用 icmp 指令生成比较结果
+   - 处理有符号和无符号比较
+   - 将布尔结果扩展到目标类型
+
+6. **逻辑运算生成**：
+   - **短路逻辑**：&& 和 || 使用条件跳转实现
+   - **位运算**：&、|、^ 使用对应的位运算指令
+   - **优化策略**：常量传播和死代码消除
+
+7. **运算符映射**：
+   - 将 Token 类型的运算符映射为 LLVM 指令
+   - 处理特殊情况（如除零、溢出）
+   - 支持自定义运算符重载
+
+8. **性能优化**：
+   - 常量表达式的编译时计算
+   - 公共子表达式消除
+   - 指令选择优化
 
 ### 函数调用表达式生成
 
-```cpp
-std::string ExpressionGenerator::generateCallExpression(std::shared_ptr<CallExpression> expr) {
-    // 获取函数名
-    std::string functionName = getFunctionName(expr->expression);
-    
-    // 检查是否为内置函数
-    if (functionCodegen && functionCodegen->isBuiltinFunction(functionName)) {
-        return functionCodegen->generateBuiltinCall(expr);
-    }
-    
-    // 处理普通函数调用
-    return generateRegularFunctionCall(expr);
-}
+函数调用表达式生成采用以下策略：
 
-std::string ExpressionGenerator::generateRegularFunctionCall(std::shared_ptr<CallExpression> expr) {
-    // 获取函数名
-    std::string functionName = getFunctionName(expr->expression);
-    
-    // 查找函数符号
-    auto functionSymbol = scopeTree->LookupSymbol(functionName);
-    if (!functionSymbol || functionSymbol->kind != SymbolKind::Function) {
-        return "null";
-    }
-    
-    // 生成参数表达式
-    std::vector<std::string> argRegs;
-    auto params = getFunctionParameters(functionSymbol);
-    auto callParams = expr->callparams->expressions;
-    
-    for (size_t i = 0; i < callParams.size(); ++i) {
-        // 调用 FunctionCodegen 处理参数
-        std::string argReg = functionCodegen->generateArgument(callParams[i], params[i]->type);
-        argRegs.push_back(argReg);
-    }
-    
-    // 通过 IRBuilder 分配结果寄存器并生成函数调用
-    std::string resultReg = irBuilder->newRegister();
-    std::string returnType = typeMapper->mapTypeToLLVM(getFunctionReturnType(functionSymbol));
-    
-    irBuilder->emitCall(resultReg, functionName, argRegs, returnType);
-    
-    return resultReg;
-}
-```
+1. **函数类型识别**：
+   - 从调用表达式中提取函数名
+   - 检查是否为内置函数
+   - 查找函数符号获取类型信息
+
+2. **内置函数处理**：
+   - 委托给 FunctionCodegen 处理内置函数调用
+   - 利用内置函数的优化特性
+   - 确保参数类型匹配
+
+3. **普通函数调用流程**：
+   - **符号查找**：从 ScopeTree 查找函数符号
+   - **参数生成**：递归生成所有参数表达式
+   - **类型检查**：验证参数类型与函数签名的匹配
+   - **调用生成**：使用 IRBuilder 生成 call 指令
+
+4. **参数处理策略**：
+   - 通过 FunctionCodegen 处理每个参数
+   - 处理复杂参数表达式（函数调用、结构体构造等）
+   - 支持参数的类型转换和优化
+
+5. **返回值处理**：
+   - 分配结果寄存器存储返回值
+   - 处理 void 类型的函数调用
+   - 支持多值返回（通过结构体）
+
+6. **错误处理**：
+   - 处理函数未定义的情况
+   - 验证参数数量和类型
+   - 提供详细的错误信息
+
+7. **调用约定**：
+   - 支持 C 调用约定
+   - 处理可变参数函数
+   - 考虑调用者/被调用者保存的寄存器
+
+8. **性能优化**：
+   - 内联小函数
+   - 尾调用优化
+   - 参数传递优化
 
 ### 方法调用表达式生成
 
-```cpp
-std::string ExpressionGenerator::generateMethodCallExpression(std::shared_ptr<MethodCallExpression> expr) {
-    // 生成接收者表达式（可能是复杂的嵌套表达式，包括字段访问）
-    std::string receiverReg = generateExpression(expr->receiver);
-    std::string receiverType = getExpressionType(expr->receiver);
-    
-    // 查找方法
-    std::string methodName = expr->method_name;
-    auto methodSymbol = findMethod(receiverType, methodName);
-    
-    if (!methodSymbol) {
-        reportError("Method not found: " + receiverType + "::" + methodName);
-        return "null";
-    }
-    
-    // 生成参数表达式
-    std::vector<std::string> argRegs;
-    
-    // 第一个参数是 self
-    if (isReferenceType(methodSymbol->parameters[0]->type)) {
-        // self 是引用类型
-        argRegs.push_back(receiverReg);
-    } else {
-        // self 是值类型，需要解引用
-        std::string derefReg = irBuilder->newRegister();
-        irBuilder->emitLoad(derefReg, receiverReg, receiverType);
-        argRegs.push_back(derefReg);
-    }
-    
-    // 生成其他参数
-    auto callParams = expr->callparams->expressions;
-    for (size_t i = 0; i < callParams.size(); ++i) {
-        std::string argReg = generateExpression(callParams[i]);
-        argRegs.push_back(argReg);
-    }
-    
-    // 生成方法调用
-    std::string resultReg = irBuilder->newRegister();
-    std::string mangledName = mangleMethodName(receiverType, methodName);
-    std::string returnType = typeMapper->mapSemanticTypeToLLVM(methodSymbol->returnType);
-    
-    irBuilder->emitCall(resultReg, mangledName, argRegs, returnType);
-    
-    return resultReg;
-}
-```
+方法调用表达式生成采用以下策略：
+
+1. **接收者表达式生成**：
+   - 生成接收者表达式的代码（可能是复杂的嵌套表达式，包括字段访问）
+   - 获取接收者的类型信息
+   - 处理复杂接收者表达式的副作用
+
+2. **方法查找**：
+   - 根据接收者类型和方法名查找方法符号
+   - 处理方法未找到的错误情况
+   - 支持方法重载和继承关系
+
+3. **参数处理策略**：
+   - **self 参数**：作为第一个参数，根据类型决定传递方式
+   - **引用类型 self**：直接传递接收者寄存器
+   - **值类型 self**：需要解引用后传递
+   - **其他参数**：递归生成所有参数表达式
+
+4. **方法名处理**：
+   - 使用名称修饰（name mangling）生成唯一的函数名
+   - 处理重载方法的区分
+   - 支持关联函数和静态方法
+
+5. **调用生成**：
+   - 使用 IRBuilder 生成 call 指令
+   - 处理返回值的类型映射
+   - 支持多值返回（通过结构体）
+
+6. **错误处理**：
+   - 处理方法未找到的情况
+   - 验证参数类型匹配
+   - 提供详细的错误信息
 
 ### 字段访问表达式生成
 
-```cpp
-std::string ExpressionGenerator::generateFieldExpression(std::shared_ptr<FieldExpression> expr) {
-    // 生成接收者表达式（支持嵌套字段访问：obj.field1.field2）
-    std::string receiverReg = generateExpression(expr->expression);
-    std::string receiverType = getExpressionType(expr->expression);
-    
-    // 获取字段信息
-    std::string fieldName = expr->identifier;
-    auto fieldInfo = getFieldInfo(receiverType, fieldName);
-    
-    if (!fieldInfo) {
-        reportError("Field not found: " + receiverType + "." + fieldName);
-        return "null";
-    }
-    
-    // 生成 GEP 指令获取字段地址
-    std::string fieldPtrReg = irBuilder->newRegister();
-    std::vector<std::pair<std::string, std::string>> indices = {
-        {"0", "i32"},  // 结构体第一个元素
-        {std::to_string(fieldInfo->index), "i32"}  // 字段索引
-    };
-    
-    irBuilder->emitGetElementPtr(fieldPtrReg, receiverReg, indices);
-    
-    // 加载字段值
-    std::string fieldReg = irBuilder->newRegister();
-    std::string fieldType = typeMapper->mapSemanticTypeToLLVM(fieldInfo->type);
-    irBuilder->emitLoad(fieldReg, fieldPtrReg, fieldType);
-    
-    return fieldReg;
-}
-```
+字段访问表达式生成采用以下策略：
+
+1. **接收者表达式生成**：
+   - 支持嵌套字段访问：`obj.field1.field2`
+   - 递归生成接收者表达式的代码
+   - 获取接收者的类型信息
+
+2. **字段信息获取**：
+   - 根据接收者类型和字段名查找字段信息
+   - 处理字段未找到的错误情况
+   - 获取字段在结构体中的索引和类型
+
+3. **地址计算**：
+   - 使用 getelementptr 指令计算字段地址
+   - 生成正确的索引序列（结构体索引 + 字段索引）
+   - 处理继承和嵌套结构体的字段访问
+
+4. **字段值加载**：
+   - 从计算出的地址加载字段值
+   - 处理不同类型的加载方式
+   - 考虑对齐和内存访问优化
+
+5. **类型安全**：
+   - 验证字段访问的类型正确性
+   - 处理私有字段访问（如果需要）
+   - 确保字段类型的匹配
+
+6. **性能优化**：
+   - 优化连续的字段访问
+   - 利用结构体布局信息
+   - 减少不必要的内存访问
 
 ### 字段访问内套方法调用的处理
 
-在 `generateMethodCallExpression` 中，当接收者是 `FieldExpression` 时，自动处理 `obj.field.method()` 的情况：
+字段访问嵌套方法调用的处理策略：
 
-```cpp
-// 在 generateMethodCallExpression 中的特殊处理
-if (auto fieldExpr = std::dynamic_pointer_cast<FieldExpression>(expr->receiver)) {
-    // 接收者是字段访问：obj.field.method()
-    // 字段访问已经在上面通过 generateExpression(fieldExpr) 完成
-    // receiverReg 现在包含字段的值，receiverType 是字段类型
-    // 继续正常的方法调用流程...
-}
-```
+1. **自动识别**：
+   - 在 `generateMethodCallExpression` 中检测接收者是否为 `FieldExpression`
+   - 自动处理 `obj.field.method()` 的情况
+   - 无需用户显式区分
+
+2. **处理流程**：
+   - 字段访问通过 `generateExpression(fieldExpr)` 完成
+   - `receiverReg` 现在包含字段的值
+   - `receiverType` 是字段类型
+   - 继续正常的方法调用流程
+
+3. **类型一致性**：
+   - 确保字段类型与方法期望的接收者类型匹配
+   - 处理类型转换（如果需要）
+   - 维护类型安全的调用约定
+
+4. **表达式链优化**：
+   - 避免重复计算字段访问
+   - 优化连续的字段访问和方法调用
+   - 保持表达式的语义正确性
 
 ### 控制流表达式生成
 
 #### if 表达式
 
-```cpp
-std::string ExpressionGenerator::generateIfExpression(std::shared_ptr<IfExpression> expr) {
-    // 生成条件表达式
-    std::string condReg = generateExpression(expr->conditions->expression);
-    
-    // 创建基本块
-    std::string thenBB = irBuilder->newBasicBlock("if.then");
-    std::string elseBB = irBuilder->newBasicBlock("if.else");
-    std::string endBB = irBuilder->newBasicBlock("if.end");
-    
-    // 生成条件跳转
-    irBuilder->emitCondBr(condReg, thenBB, elseBB);
-    
-    // 生成 then 分支
-    irBuilder->emitLabel(thenBB);
-    std::string thenReg = generateExpression(expr->ifblockexpression);
-    irBuilder->emitBr(endBB);
-    
-    // 生成 else 分支
-    irBuilder->emitLabel(elseBB);
-    std::string elseReg;
-    if (expr->elseexpression) {
-        elseReg = generateExpression(expr->elseexpression);
-    } else {
-        // 没有 else 分支，使用单元类型
-        elseReg = generateUnitValue();
-    }
-    irBuilder->emitBr(endBB);
-    
-    // 生成 phi 节点
-    irBuilder->emitLabel(endBB);
-    std::string resultReg = irBuilder->newRegister();
-    std::string resultType = getExpressionType(expr);
-    std::string llvmType = typeMapper->mapRxTypeToLLVM(resultType);
-    irBuilder->emitPhi(resultReg, llvmType, {thenReg, elseReg}, {thenBB, elseBB});
-    
-    return resultReg;
-}
-```
+if 表达式生成采用以下策略：
+
+1. **条件表达式生成**：
+   - 生成条件表达式的代码
+   - 获取条件的类型信息
+   - 处理复杂条件表达式的副作用
+
+2. **基本块创建**：
+   - 创建 then、else、end 三个基本块
+   - 使用 IRBuilder 的基本块管理功能
+   - 确保基本块名称的唯一性
+
+3. **条件跳转生成**：
+   - 使用 emitCondBr 生成条件跳转指令
+   - 根据条件值跳转到相应分支
+   - 处理布尔类型到整数的转换
+
+4. **分支生成**：
+   - **then 分支**：生成 then 块表达式的代码，跳转到 end
+   - **else 分支**：生成 else 表达式或单元类型值，跳转到 end
+   - **无 else 分支**：使用单元类型作为默认值
+
+5. **phi 节点生成**：
+   - 在 end 基本块生成 phi 节点
+   - 合并两个分支的值
+   - 处理类型不匹配的情况
+
+6. **类型安全**：
+   - 确保两个分支返回类型兼容
+   - 处理类型转换和提升
+   - 维护表达式的类型正确性
 
 #### loop 表达式
 
 loop 表达式是一种无限循环，只能通过 break 语句退出。它的值来自于 break 语句提供的值，如果没有 break 语句或 break 不带值，则为 unit 类型。
 
-```cpp
-std::string ExpressionGenerator::generateLoopExpression(std::shared_ptr<InfiniteLoopExpression> expr) {
-    // 创建基本块
-    std::string loopBB = irBuilder->newBasicBlock("loop.start");
-    std::string endBB = irBuilder->newBasicBlock("loop.end");
-    
-    // 创建循环上下文，用于处理 break/continue
-    LoopContext context;
-    context.loopStartBB = loopBB;
-    context.loopEndBB = endBB;
-    context.hasBreak = false;
-    context.breakValueReg = "";  // 初始化为空，表示没有 break 值
-    context.breakValueType = "unit";  // 默认为 unit 类型
-    
-    // 将循环上下文压入栈
-    pushLoopContext(context);
-    
-    // 跳转到循环开始
-    irBuilder->emitBr(loopBB);
-    
-    // 生成循环体
-    irBuilder->emitLabel(loopBB);
-    
-    // 注意：循环体的值不直接使用，因为 loop 表达式的值来自 break
-    generateExpression(expr->blockexpression);
-    
-    // 如果循环体执行到这里，说明没有遇到 break，继续循环
-    irBuilder->emitBr(loopBB);
-    
-    // 循环结束标签
-    irBuilder->emitLabel(endBB);
-    
-    // 获取循环上下文中的 break 信息
-    context = getCurrentLoopContext();
-    
-    // 清理循环上下文
-    popLoopContext();
-    
-    // 处理 loop 表达式的返回值
-    if (context.hasBreak) {
-        // 有 break 语句，返回 break 提供的值
-        if (context.breakValueReg.empty()) {
-            // break 不带值，返回 unit 类型
-            return generateUnitValue();
-        } else {
-            // break 带值，返回 break 的值
-            return context.breakValueReg;
-        }
-    } else {
-        // 没有 break 语句，返回 unit 类型
-        return generateUnitValue();
-    }
-}
-```
+1. **基本块创建**：
+   - 创建循环开始和结束基本块
+   - 使用语义化的基本块名称
+   - 确保基本块的全局唯一性
+
+2. **循环上下文管理**：
+   - 创建 LoopContext 结构存储循环信息
+   - 包含循环开始/结束基本块、break 信息等
+   - 将上下文压入循环上下文栈
+
+3. **循环体生成**：
+   - 跳转到循环开始基本块
+   - 生成循环体表达式的代码
+   - 循环体结束后跳回循环开始
+
+4. **break 值处理**：
+   - 检查是否有 break 语句发生
+   - 处理 break 带值和不带值的情况
+   - 返回适当的值（break 值或 unit）
+
+5. **循环结束处理**：
+   - 生成循环结束标签
+   - 清理循环上下文栈
+   - 根据上下文信息返回最终值
 
 ##### break 表达式的值处理
 
 break 表达式可以带值或不带值，它的值成为整个 loop 表达式的返回值：
 
-```cpp
-std::string ExpressionGenerator::generateBreakExpression(std::shared_ptr<BreakExpression> expr) {
-    // 获取当前循环上下文
-    LoopContext& context = getCurrentLoopContext();
-    context.hasBreak = true;
-    
-    // 处理 break 表达式的值（如果有）
-    if (expr->expression) {
-        // break 带值：break value
-        std::string breakValueReg = generateExpression(expr->expression);
-        context.breakValueReg = breakValueReg;
-        context.breakValueType = getExpressionType(expr->expression);
-        
-        // 跳转到循环结束
-        irBuilder->emitBr(context.loopEndBB);
-    } else {
-        // break 不带值
-        context.breakValueReg = "";  // 空字符串表示没有值
-        context.breakValueType = "unit";
-        
-        // 跳转到循环结束
-        irBuilder->emitBr(context.loopEndBB);
-    }
-    
-    // break 表达式本身不产生值，因为它会中断控制流
-    // 这里返回一个哑值，实际不会使用
-    return generateUnitValue();
-}
-```
+1. **上下文更新**：
+   - 获取当前循环上下文
+   - 标记循环中有 break 语句
+   - 处理 break 表达式的值（如果有）
+
+2. **break 值处理**：
+   - **带值 break**：生成 break 表达式，存储值和类型信息
+   - **不带值 break**：标记为无值，使用 unit 类型
+   - 跳转到循环结束基本块
+
+3. **控制流中断**：
+   - break 表达式本身不产生值（中断控制流）
+   - 返回哑值（实际不会使用）
+   - 确保后续代码不会被执行
 
 ##### continue 表达式的跳转处理
 
 continue 表达式用于跳过当前迭代，直接进入下一次迭代：
 
-```cpp
-std::string ExpressionGenerator::generateContinueExpression(std::shared_ptr<ContinueExpression> expr) {
-    // 获取当前循环上下文
-    LoopContext& context = getCurrentLoopContext();
-    
-    // 跳转到循环开始
-    irBuilder->emitBr(context.loopStartBB);
-    
-    // continue 表达式本身不产生值，因为它会中断控制流
-    // 这里返回一个哑值，实际不会使用
-    return generateUnitValue();
-}
-```
+1. **上下文获取**：
+   - 获取当前循环上下文
+   - 验证循环上下文的有效性
+
+2. **跳转生成**：
+   - 跳转到循环开始基本块
+   - 中断当前迭代的执行
+   - 不产生返回值
+
+3. **控制流处理**：
+   - continue 表达式中断控制流
+   - 返回哑值（实际不会使用）
+   - 确保循环结构的正确性
 
 ##### 循环上下文管理
 
 为了正确处理 break/continue 的跳转，需要维护循环上下文栈：
 
-```cpp
-class ExpressionGenerator {
-private:
-    struct LoopContext {
-        std::string loopStartBB;      // 循环开始基本块
-        std::string loopEndBB;        // 循环结束基本块
-        bool hasBreak;                // 是否有 break 语句
-        std::string breakValueReg;    // break 语句的值寄存器
-        std::string breakValueType;   // break 值的类型
-    };
-    
-    std::vector<LoopContext> loopContextStack;  // 循环上下文栈
-    
-    // 压入新的循环上下文
-    void pushLoopContext(const LoopContext& context) {
-        loopContextStack.push_back(context);
-    }
-    
-    // 弹出当前循环上下文
-    void popLoopContext() {
-        if (!loopContextStack.empty()) {
-            loopContextStack.pop_back();
-        }
-    }
-    
-    // 获取当前循环上下文
-    LoopContext& getCurrentLoopContext() {
-        if (loopContextStack.empty()) {
-            reportError("No loop context available for break/continue");
-            // 返回一个默认上下文，避免崩溃
-            static LoopContext defaultContext;
-            return defaultContext;
-        }
-        return loopContextStack.back();
-    }
-};
-```
+1. **上下文结构**：
+   - loopStartBB：循环开始基本块
+   - loopEndBB：循环结束基本块
+   - hasBreak：是否有 break 语句
+   - breakValueReg：break 语句的值寄存器
+   - breakValueType：break 值的类型
+
+2. **栈管理**：
+   - pushLoopContext：压入新的循环上下文
+   - popLoopContext：弹出当前循环上下文
+   - getCurrentLoopContext：获取当前循环上下文
+
+3. **错误处理**：
+   - 处理无循环上下文的 break/continue
+   - 提供默认上下文避免崩溃
+   - 报告控制流错误
 
 #### while 表达式
 
 while 表达式是条件循环，当条件为真时重复执行循环体，条件为假时退出。与 loop 不同，while 表达式的值**恒定为 unit 类型**，无论是否有 break 语句。
 
-```cpp
-std::string ExpressionGenerator::generateWhileExpression(std::shared_ptr<PredicateLoopExpression> expr) {
-    // 创建基本块
-    std::string condBB = irBuilder->newBasicBlock("while.cond");
-    std::string bodyBB = irBuilder->newBasicBlock("while.body");
-    std::string endBB = irBuilder->newBasicBlock("while.end");
-    
-    // 创建循环上下文，用于处理 break/continue
-    LoopContext context;
-    context.loopStartBB = condBB;  // while 循环的"开始"是条件检查
-    context.loopEndBB = endBB;
-    context.hasBreak = false;
-    context.breakValueReg = "";    // while 不需要 break 值，因为返回值始终是 unit
-    context.breakValueType = "unit";
-    
-    // 将循环上下文压入栈
-    pushLoopContext(context);
-    
-    // 跳转到条件检查
-    irBuilder->emitBr(condBB);
-    
-    // 生成条件检查
-    irBuilder->emitLabel(condBB);
-    std::string condReg = generateExpression(expr->conditions->expression);
-    
-    // 条件为假时跳转到循环结束
-    irBuilder->emitCondBr(condReg, bodyBB, endBB);
-    
-    // 生成循环体
-    irBuilder->emitLabel(bodyBB);
-    generateExpression(expr->blockexpression);
-    
-    // 循环体执行完毕，跳回条件检查
-    irBuilder->emitBr(condBB);
-    
-    // 循环结束标签
-    irBuilder->emitLabel(endBB);
-    
-    // 清理循环上下文
-    popLoopContext();
-    
-    // while 表达式的值恒定为 unit 类型
-    return generateUnitValue();
-}
-```
+1. **基本块创建**：
+   - 创建条件检查、循环体、结束三个基本块
+   - 使用语义化的基本块名称
+   - 确保基本块的全局唯一性
+
+2. **循环上下文设置**：
+   - 设置 loopStartBB 为条件检查基本块
+   - while 循环的"开始"是条件检查
+   - break 值被忽略（返回值始终是 unit）
+
+3. **循环结构生成**：
+   - 跳转到条件检查
+   - 生成条件表达式和条件跳转
+   - 生成循环体并跳回条件检查
+
+4. **返回值处理**：
+   - while 表达式的值恒定为 unit 类型
+   - 不依赖 break 语句的值
+   - 直接返回 generateUnitValue()
 
 ##### while 循环中的 break 表达式
 
 在 while 循环中，break 语句可以提前退出循环，但不会影响 while 表达式的返回值（始终为 unit）：
 
-```cpp
-std::string ExpressionGenerator::generateBreakExpression(std::shared_ptr<BreakExpression> expr) {
-    // 获取当前循环上下文
-    LoopContext& context = getCurrentLoopContext();
-    context.hasBreak = true;
-    
-    // 处理 break 表达式的值（如果有）
-    if (expr->expression) {
-        // break 带值：break value
-        // 在 while 循环中，break 的值被忽略，但仍需生成表达式以处理副作用
-        std::string breakValueReg = generateExpression(expr->expression);
-        context.breakValueReg = breakValueReg;
-        context.breakValueType = getExpressionType(expr->expression);
-    } else {
-        // break 不带值
-        context.breakValueReg = "";
-        context.breakValueType = "unit";
-    }
-    
-    // 跳转到循环结束
-    irBuilder->emitBr(context.loopEndBB);
-    
-    // break 表达式本身不产生值，因为它会中断控制流
-    return generateUnitValue();
-}
-```
+1. **break 值处理**：
+   - 生成 break 表达式以处理副作用
+   - 存储 break 值到上下文（虽然会被忽略）
+   - 跳转到循环结束基本块
+
+2. **值忽略**：
+   - while 循环的返回值始终是 unit
+   - break 的值被忽略但仍需生成
+   - 保持语义的正确性
 
 ##### while 循环中的 continue 表达式
 
 在 while 循环中，continue 语句会跳转到条件检查，而不是循环体开始：
 
-```cpp
-std::string ExpressionGenerator::generateContinueExpression(std::shared_ptr<ContinueExpression> expr) {
-    // 获取当前循环上下文
-    LoopContext& context = getCurrentLoopContext();
-    
-    // 对于 while 循环，continue 跳转到条件检查
-    irBuilder->emitBr(context.loopStartBB);
-    
-    // continue 表达式本身不产生值，因为它会中断控制流
-    return generateUnitValue();
-}
-```
+1. **跳转目标**：
+   - continue 跳转到条件检查基本块
+   - 与 loop 循环的 continue 不同
+   - 确保循环逻辑的正确性
+
+2. **控制流处理**：
+   - 中断当前迭代的执行
+   - 不产生返回值
+   - 跳转到条件检查进行下一轮判断
 
 ##### loop 与 while 的关键区别
 
@@ -1345,276 +863,154 @@ std::string ExpressionGenerator::generateContinueExpression(std::shared_ptr<Cont
 
 对于嵌套循环，每个循环都有自己的上下文，break/continue 只影响最内层的循环：
 
-```cpp
-// 示例：loop { while condition { break; } break 42; }
+1. **上下文隔离**：
+   - 每个循环维护独立的上下文
+   - break/continue 只影响最内层循环
+   - 外层循环不受内层控制流影响
 
-// 外层 loop 上下文
-LoopContext outerContext;
-outerContext.loopStartBB = outerLoopBB;
-outerContext.loopEndBB = outerEndBB;
-pushLoopContext(outerContext);
-
-// 内层 while 上下文
-LoopContext innerContext;
-innerContext.loopStartBB = whileCondBB;
-innerContext.loopEndBB = whileEndBB;
-pushLoopContext(innerContext);
-
-// 内层 break 只退出 while 循环
-// 外层 break 退出 loop 循环并返回值 42
-```
+2. **上下文栈管理**：
+   - 使用栈结构管理嵌套循环上下文
+   - 正确处理上下文的压入和弹出
+   - 确保控制流的正确性
 
 ##### 循环中的值传递与优化
 
 在循环中，特别是 loop 表达式中，break 值的传递需要特别处理：
 
-```cpp
-// 处理不同类型的 break 值
-std::string ExpressionGenerator::handleLoopBreakValue(const LoopContext& context) {
-    if (!context.hasBreak) {
-        return generateUnitValue();
-    }
-    
-    if (context.breakValueReg.empty()) {
-        // break 不带值
-        return generateUnitValue();
-    }
-    
-    // break 带值，可能需要类型转换
-    std::string expectedType = getExpectedLoopReturnType();
-    std::string actualType = context.breakValueType;
-    
-    if (expectedType != actualType) {
-        // 需要类型转换
-        return generateImplicitConversion(context.breakValueReg, actualType, expectedType);
-    }
-    
-    return context.breakValueReg;
-}
-```
+1. **break 值类型处理**：
+   - 检查是否有 break 语句
+   - 处理 break 带值和不带值的情况
+   - 可能需要类型转换
+
+2. **值传递机制**：
+   - 通过循环上下文传递 break 值
+   - 在循环结束时提取正确的值
+   - 处理类型不匹配的情况
 
 ##### 循环展开与优化
 
 对于某些简单的循环，可以在编译时进行循环展开：
 
-```cpp
-std::string ExpressionGenerator::tryLoopUnrolling(std::shared_ptr<InfiniteLoopExpression> expr) {
-    // 检查是否是简单的计数循环
-    if (isSimpleCountingLoop(expr)) {
-        int iterations = getLoopIterationCount(expr);
-        if (iterations > 0 && iterations <= MAX_UNROLL_COUNT) {
-            return generateUnrolledLoop(expr, iterations);
-        }
-    }
-    
-    // 无法展开，使用标准循环生成
-    return generateLoopExpression(expr);
-}
-```
+1. **循环识别**：
+   - 检查是否为简单的计数循环
+   - 分析循环的迭代次数
+   - 判断是否适合展开
+
+2. **展开策略**：
+   - 对小迭代次数的循环进行展开
+   - 生成展开后的代码
+   - 避免循环开销
+
+3. **优化限制**：
+   - 设置最大展开次数限制
+   - 避免代码膨胀
+   - 平衡性能和代码大小
 
 ### 类型转换生成
 
-```cpp
-std::string ExpressionGenerator::generateTypeCastExpression(std::shared_ptr<TypeCastExpression> expr) {
-    std::string valueReg = generateExpression(expr->expression);
-    std::string fromType = getExpressionType(expr->expression);
-    std::string toType = typeMapper->mapRxTypeToLLVM(expr->typenobounds);
-    
-    return generateExplicitConversion(valueReg, fromType, toType);
-}
+类型转换生成采用以下策略：
 
-std::string ExpressionGenerator::generateExplicitConversion(const std::string& value,
-                                                         const std::string& fromType,
-                                                         const std::string& toType) {
-    if (fromType == toType) {
-        return value;
-    }
-    
-    std::string resultReg = irBuilder->newRegister();
-    
-    if (isIntegerType(fromType) && isIntegerType(toType)) {
-        // 整数到整数转换
-        if (getIntegerBitWidth(fromType) < getIntegerBitWidth(toType)) {
-            irBuilder->emitSext(resultReg, value, fromType, toType);
-        } else {
-            irBuilder->emitTrunc(resultReg, value, fromType, toType);
-        }
-    } else if (isPointerType(fromType) && isIntegerType(toType)) {
-        // 指针到整数转换
-        irBuilder->emitPtrtoint(resultReg, value, fromType, toType);
-    } else if (isIntegerType(fromType) && isPointerType(toType)) {
-        // 整数到指针转换
-        irBuilder->emitInttoptr(resultReg, value, fromType, toType);
-    } else {
-        reportError("Unsupported type conversion from " + fromType + " to " + toType);
-        return value;
-    }
-    
-    return resultReg;
-}
-```
+1. **显式转换处理**：
+   - 生成源表达式的代码
+   - 获取源类型和目标类型信息
+   - 调用专门的转换函数
+
+2. **类型转换分类**：
+   - **整数到整数**：扩展或截断
+   - **指针到整数**：ptrtoint 转换
+   - **整数到指针**：inttoptr 转换
+   - **其他转换**：报告错误或使用默认策略
+
+3. **整数转换规则**：
+   - **位宽扩展**：小位宽到大位宽使用 sext
+   - **位宽截断**：大位宽到小位宽使用 trunc
+   - **符号处理**：保持符号位的正确性
+
+4. **错误处理**：
+   - 对不支持的转换类型报告错误
+   - 提供安全的默认返回值
+   - 保持类型系统的完整性
 
 ### BlockExpression 生成
 
 BlockExpression 是一种特殊的表达式，它包含一系列语句和一个可选的尾表达式。BlockExpression 的值是尾表达式的值，如果没有尾表达式，则为单元类型值。
 
-```cpp
-std::string ExpressionGenerator::generateBlockExpression(std::shared_ptr<BlockExpression> expr) {
-    if (!statementGenerator) {
-        reportError("StatementGenerator not set for BlockExpression");
-        return generateUnitValue();
-    }
-    
-    // 创建新的作用域
-    scopeTree->EnterScope();
-    irBuilder->enterScope();
-    
-    // 生成块内的所有语句
-    generateBlockStatements(expr);
-    
-    // 处理尾表达式（如果有）
-    std::string resultValue;
-    if (expr->expressionwithoutblock) {
-        resultValue = generateExpression(expr->expressionwithoutblock);
-    } else {
-        // 没有尾表达式，返回单元类型
-        resultValue = generateUnitValue();
-    }
-    
-    // 退出作用域
-    irBuilder->exitScope();
-    scopeTree->ExitScope();
-    
-    return resultValue;
-}
+1. **作用域管理**：
+   - 创建新的作用域用于块中的变量
+   - 同步 IRBuilder 和 ScopeTree 的作用域状态
+   - 在块结束时正确退出作用域
 
-void ExpressionGenerator::generateBlockStatements(std::shared_ptr<BlockExpression> block) {
-    // 遍历块内的所有语句，使用 StatementGenerator 生成
-    for (const auto& stmt : block->statements) {
-        statementGenerator->generateStatement(stmt);
-    }
-}
+2. **语句生成**：
+   - 使用 StatementGenerator 生成块中的所有语句
+   - 处理语句的副作用和错误
+   - 确保语句的正确执行顺序
 
-std::string ExpressionGenerator::generateUnitValue() {
-    // 生成单元类型的值
-    std::string unitReg = irBuilder->newRegister();
-    irBuilder->emitInstruction("%" + unitReg + " = add i8 0, 0  ; unit value");
-    return unitReg;
-}
-```
+3. **尾表达式处理**：
+   - **有尾表达式**：生成尾表达式并返回其值
+   - **无尾表达式**：返回单元类型的默认值
+   - 确保块表达式总有返回值
+
+4. **错误处理**：
+   - 检查 StatementGenerator 是否正确设置
+   - 处理语句生成中的错误
+   - 提供安全的默认返回值
+
+5. **单元值生成**：
+   - 生成符合 LLVM 语法的单元类型值
+   - 使用简单的加法指令创建值
+   - 确保值的类型正确性
 
 #### BlockExpression 的值处理
 
 BlockExpression 作为表达式，必须有返回值：
 
 1. **有尾表达式的情况**：
-   ```cpp
-   // 示例：{ let x = 1; let y = 2; x + y }
-   // BlockExpression 的值是 x + y 的结果
-   std::string ExpressionGenerator::generateBlockExpression(std::shared_ptr<BlockExpression> expr) {
-       // ... 生成语句 ...
-       
-       if (expr->expressionwithoutblock) {
-           // 返回尾表达式的值
-           return generateExpression(expr->expressionwithoutblock);
-       }
-       // ...
-   }
-   ```
+   - 块的值是尾表达式的值
+   - 尾表达式可以是任意复杂表达式
+   - 正确处理尾表达式的副作用
 
 2. **无尾表达式的情况**：
-   ```cpp
-   // 示例：{ let x = 1; printlnInt(x); }
-   // BlockExpression 的值是单元类型
-   std::string ExpressionGenerator::generateBlockExpression(std::shared_ptr<BlockExpression> expr) {
-       // ... 生成语句 ...
-       
-       if (!expr->expressionwithoutblock) {
-           // 返回单元类型值
-           return generateUnitValue();
-       }
-       // ...
-   }
-   ```
+   - 块的值是单元类型
+   - 生成默认的单元类型值
+   - 确保类型系统的完整性
 
 #### 嵌套 BlockExpression 处理
 
 BlockExpression 可以嵌套，每个块都有自己的作用域：
 
-```cpp
-std::string ExpressionGenerator::generateNestedBlockExpression(std::shared_ptr<BlockExpression> expr) {
-    // 外层块作用域
-    scopeTree->EnterScope();
-    irBuilder->enterScope();
-    
-    // 生成外层块语句
-    generateBlockStatements(expr);
-    
-    // 处理内层块表达式
-    std::string result;
-    if (expr->expressionwithoutblock) {
-        if (auto innerBlock = std::dynamic_pointer_cast<BlockExpression>(expr->expressionwithoutblock)) {
-            // 递归处理内层块
-            result = generateBlockExpression(innerBlock);
-        } else {
-            // 普通表达式
-            result = generateExpression(expr->expressionwithoutblock);
-        }
-    } else {
-        result = generateUnitValue();
-    }
-    
-    // 退出外层块作用域
-    irBuilder->exitScope();
-    scopeTree->ExitScope();
-    
-    return result;
-}
-```
+1. **作用域嵌套**：
+   - 外层块和内层块有独立的作用域
+   - 正确处理作用域的进入和退出
+   - 维护变量遮蔽的语义
+
+2. **递归处理**：
+   - 递归生成内层块表达式
+   - 正确处理嵌套的尾表达式
+   - 保持返回值的正确传递
+
+3. **值传递**：
+   - 内层块的值正确传递到外层
+   - 处理类型转换和兼容性
+   - 确保表达式语义的正确性
 
 #### BlockExpression 在控制流中的使用
 
 BlockExpression 常用于控制流表达式中：
 
-```cpp
-// if 表达式中的 BlockExpression
-std::string ExpressionGenerator::generateIfExpression(std::shared_ptr<IfExpression> expr) {
-    // 生成条件
-    std::string condReg = generateExpression(expr->conditions->expression);
-    
-    // 创建基本块
-    std::string thenBB = irBuilder->newBasicBlock("if.then");
-    std::string elseBB = irBuilder->newBasicBlock("if.else");
-    std::string endBB = irBuilder->newBasicBlock("if.end");
-    
-    // 生成条件跳转
-    irBuilder->emitCondBr(condReg, thenBB, elseBB);
-    
-    // 生成 then 分支（BlockExpression）
-    irBuilder->emitLabel(thenBB);
-    std::string thenReg = generateBlockExpression(expr->ifblockexpression);
-    irBuilder->emitBr(endBB);
-    
-    // 生成 else 分支（BlockExpression 或其他表达式）
-    irBuilder->emitLabel(elseBB);
-    std::string elseReg;
-    if (expr->elseexpression) {
-        elseReg = generateExpression(expr->elseexpression);
-    } else {
-        elseReg = generateUnitValue();
-    }
-    irBuilder->emitBr(endBB);
-    
-    // 生成 phi 节点
-    irBuilder->emitLabel(endBB);
-    std::string resultReg = irBuilder->newRegister();
-    std::string resultType = getExpressionType(expr);
-    std::string llvmType = typeMapper->mapRxTypeToLLVM(resultType);
-    irBuilder->emitPhi(resultReg, llvmType, {thenReg, elseReg}, {thenBB, elseBB});
-    
-    return resultReg;
-}
-```
+1. **if 表达式中的块**：
+   - then 和 else 分支都可以是块表达式
+   - 块的值参与 phi 节点的合并
+   - 正确处理控制流和作用域
+
+2. **循环中的块**：
+   - 循环体通常是块表达式
+   - 正确处理 break/continue 的控制流
+   - 维护循环上下文的正确性
+
+3. **作用域与控制流**：
+   - 每个块创建独立的作用域
+   - 控制流不影响作用域的层次结构
+   - 确保变量生命周期的正确性
 
 ## 寄存器管理与 IRBuilder 集成
 
@@ -1622,181 +1018,139 @@ std::string ExpressionGenerator::generateIfExpression(std::shared_ptr<IfExpressi
 
 ExpressionGenerator **不直接管理寄存器**，而是通过 IRBuilder 的寄存器管理系统进行分配：
 
-```cpp
-class ExpressionGenerator {
-public:
-    // ExpressionGenerator 通过 IRBuilder 获取寄存器
-    std::string generateExpression(std::shared_ptr<Expression> expr) {
-        // 使用 IRBuilder 的寄存器分配
-        std::string resultReg = irBuilder->newRegister();
-        // ... 生成表达式逻辑 ...
-        return resultReg;
-    }
+1. **委托管理原则**：
+   - ExpressionGenerator 将所有寄存器管理委托给 IRBuilder
+   - 通过 IRBuilder 的接口获取和操作寄存器
+   - 避免重复实现寄存器管理逻辑
 
-private:
-    std::shared_ptr<IRBuilder> irBuilder;
-};
-```
+2. **寄存器获取**：
+   - 使用 `irBuilder->newRegister()` 获取新寄存器
+   - 支持带命名和类型的寄存器分配
+   - 确保寄存器名称的全局唯一性
+
+3. **寄存器生命周期**：
+   - 寄存器的生命周期由 IRBuilder 管理
+   - 支持作用域感知的寄存器清理
+   - 自动处理寄存器的重用和释放
+
+4. **类型安全**：
+   - 寄存器与类型信息关联
+   - 支持类型检查和验证
+   - 确保寄存器使用的类型正确性
 
 ### 与 IRBuilder 的寄存器接口集成
 
-```cpp
-// ExpressionGenerator 中的寄存器使用示例
-std::string ExpressionGenerator::generateBinaryExpression(std::shared_ptr<BinaryExpression> expr) {
-    // 生成左右操作数（递归调用，每个都会通过 IRBuilder 分配寄存器）
-    std::string leftReg = generateExpression(expr->leftexpression);
-    std::string rightReg = generateExpression(expr->rightexpression);
-    
-    // 通过 IRBuilder 分配结果寄存器
-    std::string resultReg = irBuilder->newRegister();
-    std::string resultType = getExpressionType(expr);
-    std::string llvmType = typeMapper->mapRxTypeToLLVM(resultType);
-    
-    // 通过 IRBuilder 生成算术指令
-    irBuilder->emitAdd(resultReg, leftReg, rightReg, llvmType);
-    
-    return resultReg;
-}
-```
+1. **表达式生成中的寄存器使用**：
+   - 递归生成操作数表达式时自动分配寄存器
+   - 为运算结果分配新的寄存器
+   - 通过 IRBuilder 生成相应的指令
+
+2. **指令生成集成**：
+   - 使用 IRBuilder 的指令生成方法
+   - 传递正确的寄存器和类型信息
+   - 确保指令语法的正确性
+
+3. **类型映射集成**：
+   - 通过 TypeMapper 将语义类型转换为 LLVM 类型
+   - 确保寄存器类型与指令类型匹配
+   - 处理类型转换和兼容性
 
 ### 变量寄存器的获取与管理
 
-```cpp
-std::string ExpressionGenerator::generatePathExpression(std::shared_ptr<PathExpression> expr) {
-    std::string pathName = getPathName(expr->simplepath);
-    
-    // 通过 IRBuilder 获取变量寄存器（基于作用域）
-    std::string varPtr = irBuilder->getVariableRegister(pathName);
-    if (varPtr.empty()) {
-        reportError("Undefined variable: " + pathName);
-        return "null";
-    }
-    
-    // 获取变量类型
-    auto symbol = scopeTree->LookupSymbol(pathName);
-    std::string llvmType = typeMapper->mapSemanticTypeToLLVM(symbol->type);
-    
-    // 通过 IRBuilder 分配值寄存器并加载变量值
-    std::string valueReg = irBuilder->newRegister();
-    irBuilder->emitLoad(valueReg, varPtr, llvmType);
-    
-    return valueReg;
-}
-```
+1. **变量访问策略**：
+   - 通过 IRBuilder 获取变量指针寄存器
+   - 基于作用域查找变量寄存器
+   - 处理未定义变量的错误情况
+
+2. **变量加载机制**：
+   - 从符号表获取变量类型信息
+   - 使用 IRBuilder 的 emitLoad 加载变量值
+   - 为加载的值分配新的寄存器
+
+3. **错误处理**：
+   - 对未定义变量生成错误信息
+   - 提供安全的默认返回值
+   - 维护编译过程的稳定性
 
 ### 作用域感知的寄存器管理
 
-```cpp
-class ExpressionGenerator {
-public:
-    // 在进入新作用域时同步 IRBuilder
-    void enterScope(std::shared_ptr<Scope> scope) {
-        scopeTree->GoToNode(scope);
-        irBuilder->syncWithScopeTree();
-    }
-    
-    // 在退出作用域时清理寄存器
-    void exitScope() {
-        auto currentScope = irBuilder->getCurrentScope();
-        irBuilder->cleanupScopeRegisters(currentScope);
-        scopeTree->ExitScope();
-    }
+1. **作用域同步机制**：
+   - 在进入新作用域时同步 IRBuilder 的状态
+   - 使用 ScopeTree 的导航功能
+   - 确保 IRBuilder 与当前作用域一致
 
-private:
-    std::shared_ptr<IRBuilder> irBuilder;
-    std::shared_ptr<ScopeTree> scopeTree;
-};
-```
+2. **寄存器清理策略**：
+   - 在退出作用域时清理相关寄存器
+   - 调用 IRBuilder 的清理方法
+   - 维护寄存器使用的正确性
+
+3. **作用域生命周期管理**：
+   - 正确处理作用域的进入和退出
+   - 维护作用域栈的一致性
+   - 确保变量生命周期的正确性
 
 ### 类型区分的寄存器使用
 
-```cpp
-std::string ExpressionGenerator::generateVariableAccess(const std::string& varName) {
-    // 通过 IRBuilder 获取不同类型的寄存器
-    std::string ptrReg = irBuilder->getVariableRegister(varName + "_ptr");
-    std::string valReg = irBuilder->newRegister(varName, "val");
-    
-    // 加载值到值寄存器
-    auto symbol = scopeTree->LookupSymbol(varName);
-    std::string llvmType = typeMapper->mapSemanticTypeToLLVM(symbol->type);
-    irBuilder->emitLoad(valReg, ptrReg, llvmType);
-    
-    return valReg;
-}
-```
+1. **寄存器类型区分**：
+   - 区分指针寄存器和值寄存器
+   - 使用命名约定区分不同类型寄存器
+   - 确保寄存器使用的语义正确性
 
+2. **类型安全加载**：
+   - 根据变量类型选择正确的加载方式
+   - 处理不同类型的内存访问
+   - 确保类型转换的正确性
+
+3. **寄存器命名策略**：
+   - 使用有意义的寄存器名称
+   - 包含类型和作用域信息
+   - 便于调试和代码理解
 
 ## 使用示例
 
 ### 基本使用
 
-```cpp
-// 创建 ExpressionGenerator
-auto irBuilder = std::make_shared<IRBuilder>(output);
-auto typeMapper = std::make_shared<TypeMapper>(scopeTree);
-auto scopeTree = semanticAnalyzer->getScopeTree();
-auto nodeTypeMap = typeChecker->getNodeTypeMap();
+1. **组件初始化**：
+   - 创建 IRBuilder、TypeMapper、ScopeTree 等依赖组件
+   - 从语义分析器获取必要的数据结构
+   - 初始化 ExpressionGenerator 实例
 
-ExpressionGenerator exprGen(irBuilder, typeMapper, scopeTree, nodeTypeMap);
+2. **简单表达式生成**：
+   - 生成字面量表达式的 IR 代码
+   - 生成二元运算表达式的 IR 代码
+   - 验证生成的 IR 代码的正确性
 
-// 生成简单表达式
-auto intLiteral = std::make_shared<LiteralExpression>("42", Token::kINTEGER_LITERAL);
-std::string result = exprGen.generateExpression(intLiteral);
-// 输出：42
-
-// 生成二元表达式
-auto left = std::make_shared<LiteralExpression>("10", Token::kINTEGER_LITERAL);
-auto right = std::make_shared<LiteralExpression>("20", Token::kINTEGER_LITERAL);
-auto binaryExpr = std::make_shared<BinaryExpression>(left, right, Token::kPlus);
-result = exprGen.generateExpression(binaryExpr);
-// 输出：%_1 = add i32 10, 20
-```
+3. **类型验证**：
+   - 确保生成的 IR 符合类型系统
+   - 验证寄存器类型的一致性
+   - 处理类型转换和提升
 
 ### 组件协作使用
 
-```cpp
-// 创建 FunctionCodegen 并设置组件间通信
-auto functionCodegen = std::make_shared<FunctionCodegen>(irBuilder, typeMapper, scopeTree);
-exprGen.setFunctionCodegen(functionCodegen);
-functionCodegen->setExpressionGenerator(exprGen);
+1. **组件间通信设置**：
+   - 设置 ExpressionGenerator 与 FunctionCodegen 的相互引用
+   - 建立组件间的协作机制
+   - 确保循环依赖的正确处理
 
-// 生成普通函数调用
-auto funcPath = std::make_shared<PathExpression>(
-    std::make_shared<SimplePath>("calculate", false, false));
-auto callParams = std::make_shared<CallParams>(
-    std::vector<std::shared_ptr<Expression>>{
-        std::make_shared<LiteralExpression>("100", Token::kINTEGER_LITERAL),
-        std::make_shared<LiteralExpression>("200", Token::kINTEGER_LITERAL)
-    });
-auto callExpr = std::make_shared<CallExpression>(funcPath, callParams);
+2. **函数调用生成**：
+   - 生成普通函数调用的 IR 代码
+   - 处理参数传递和返回值
+   - 验证调用约定的正确性
 
-std::string result = exprGen.generateExpression(callExpr);
-// 输出：%_2 = call i32 @calculate(i32 100, i32 200)
+3. **内置函数处理**：
+   - 自动识别内置函数调用
+   - 委托给 FunctionCodegen 处理
+   - 利用内置函数的优化特性
 
-// 生成内置函数调用（自动调用 FunctionCodegen）
-auto builtinCall = std::make_shared<PathExpression>(
-    std::make_shared<SimplePath>("printlnInt", false, false));
-auto builtinParams = std::make_shared<CallParams>(
-    std::vector<std::shared_ptr<Expression>>{
-        std::make_shared<LiteralExpression>("42", Token::kINTEGER_LITERAL)
-    });
-auto builtinExpr = std::make_shared<CallExpression>(builtinCall, builtinParams);
+4. **方法调用生成**：
+   - 生成实例方法调用的 IR 代码
+   - 处理 self 参数的传递
+   - 支持方法重载和名称修饰
 
-result = exprGen.generateExpression(builtinExpr);
-// 输出：call void @printlnInt(i32 42)
-
-// 生成方法调用
-auto receiver = std::make_shared<PathExpression>(
-    std::make_shared<SimplePath>("obj", false, false));
-auto methodParams = std::make_shared<CallParams>(
-    std::vector<std::shared_ptr<Expression>>{
-        std::make_shared<LiteralExpression>("5", Token::kINTEGER_LITERAL)
-    });
-auto methodCall = std::make_shared<MethodCallExpression>(receiver, "update", methodParams);
-
-result = exprGen.generateExpression(methodCall);
-// 输出：%_3 = call i32 @Struct_update(%Struct* %obj, i32 5)
-```
+5. **复杂表达式处理**：
+   - 支持嵌套的函数调用和方法调用
+   - 正确处理表达式的副作用
+   - 优化表达式的生成顺序
 
 ## 总结
 

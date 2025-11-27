@@ -81,72 +81,63 @@ AST → 符号表 → 类型信息 → IRGenerator → ExpressionGenerator/State
 ### 阶段 1：初始化准备
 
 1. **创建 IR 输出流**
-   ```cpp
-   std::ostringstream irOutput;
-   IRGenerator generator(irOutput);
-   ```
+   - 创建字符串输出流用于收集生成的IR代码
+   - 初始化IRGenerator实例，传入输出流引用
+   - 设置输出缓冲区和格式化参数
 
 2. **设置目标平台**
-   ```cpp
-   generator.emitTargetTriple("riscv32-unknown-unknown-elf");
-   generator.emitDataLayout(); // 如果需要
-   ```
+   - 通过IRBuilder输出目标三元组（riscv32-unknown-unknown-elf）
+   - 配置数据布局（如果需要）
+   - 设置模块级别的编译参数
 
 3. **声明内置函数**
-   ```cpp
-   generator.declareBuiltinFunctions();
-   // 输出：
-   // declare dso_local void @print(ptr)
-   // declare dso_local void @println(ptr)
-   // declare dso_local void @printInt(i32)
-   // declare dso_local void @printlnInt(i32)
-   // declare dso_local ptr @getString()
-   // declare dso_local i32 @getInt()
-   // declare dso_local ptr @builtin_memset(ptr nocapture writeonly, i8, i32)
-   // declare dso_local ptr @builtin_memcpy(ptr nocapture writeonly, ptr nocapture readonly, i32)
-   ```
+   - 调用BuiltinDeclarator生成所有内置函数声明
+   - 输出字符串I/O函数声明（print, println）
+   - 输出整数I/O函数声明（printInt, printlnInt）
+   - 输出输入函数声明（getString, getInt）
+   - 输出内存管理函数声明（builtin_memset, builtin_memcpy）
+   - 输出系统调用函数声明（exit等）
 
 ### 阶段 2：顶层处理
 
 1. **遍历 AST 顶层节点**
-   - 处理函数定义
-   - 处理全局常量
-   - 处理结构体定义
+   - 识别和处理函数定义节点
+   - 处理全局常量声明
+   - 处理结构体类型定义
+   - 处理模块级别的导入声明
 
 2. **建立全局符号表**
-   - 收集所有全局符号
-   - 创建对应的符号记录
+   - 从符号表中提取全局符号信息
+   - 创建全局符号到LLVM符号的映射
+   - 预处理符号依赖关系
 
 ### 阶段 3：函数生成
 
 对于每个函数：
 
 1. **创建函数定义**
-   ```cpp
-   // 示例：fn add(a: i32, b: i32) -> i32
-   generator.startFunction("add", "i32", {"i32", "i32"}, {"a", "b"});
-   // 输出：
-   // define i32 @add(i32 %a, i32 %b) {
-   ```
+   - 通过TypeMapper获取函数类型的LLVM表示
+   - 通过IRBuilder生成函数定义开始标记
+   - 处理函数名、返回类型和参数列表
+   - 输出格式：define <return_type> @<function_name>(<params>) {
 
 2. **创建入口基本块**
-   ```cpp
-   generator.startBasicBlock("start");
-   // 输出：
-   // start:
-   ```
+   - 为函数创建入口基本块
+   - 设置当前活动基本块
+   - 生成基本块标签
+   - 输出格式：<label>:
 
 3. **处理函数体**
-   - 为参数分配栈空间（如果需要）
-   - 生成函数体语句的 IR
-   - 处理返回语句
+   - 为函数参数分配栈空间（如果需要）
+   - 生成函数体语句的IR代码
+   - 处理控制流和返回语句
+   - 管理局部变量的生命周期
 
 4. **结束函数定义**
-   ```cpp
-   generator.endFunction();
-   // 输出：
-   // }
-   ```
+   - 生成函数定义结束标记
+   - 清理函数相关的临时数据
+   - 验证函数结构的完整性
+   - 输出格式：}
 
 ### 阶段 4：表达式和语句生成
 
@@ -155,277 +146,164 @@ AST → 符号表 → 类型信息 → IRGenerator → ExpressionGenerator/State
 对于每个表达式：
 
 1. **确定表达式类型**
-   - 从语义分析阶段获取类型信息
-   - 映射到对应的 LLVM 类型
+   - 从语义分析阶段的类型信息中获取表达式类型
+   - 通过TypeMapper将Rx类型映射为LLVM类型
+   - 处理类型转换和类型检查
 
 2. **生成表达式 IR**
-   - 字面量：创建常量值
-   - 变量：加载变量值
-   - 二元操作：生成算术/逻辑指令
-   - 函数调用：生成调用指令
+   - 字面量表达式：生成对应的常量值
+   - 变量表达式：从符号表加载变量值
+   - 二元操作表达式：生成算术或逻辑运算指令
+   - 函数调用表达式：生成函数调用指令
    - 控制流表达式：生成基本块和跳转指令
 
 3. **寄存器管理**
-   ```cpp
-   // 示例：加法表达式 a + b
-   std::string leftReg = generateExpression(expr->getLeft());
-   std::string rightReg = generateExpression(expr->getRight());
-   std::string resultReg = irBuilder->newRegister();
-   irBuilder->emitAdd(resultReg, leftReg, rightReg, "i32");
-   // 输出：%_3 = add i32 %_4, %_5
-   ```
+   - 为表达式结果分配临时寄存器
+   - 通过IRBuilder管理寄存器生命周期
+   - 处理复杂表达式的寄存器依赖关系
+   - 示例流程：生成左右操作数→分配结果寄存器→生成运算指令
 
 #### 语句生成
 
 对于每个语句：
 
 1. **语句类型识别**
-   - Let 语句：变量声明和初始化
-   - ExpressionStatement：表达式语句（有分号）
-   - Item 语句：函数定义、结构体定义等
+   - Let语句：处理变量声明和初始化
+   - ExpressionStatement：处理表达式语句（有分号）
+   - Item语句：处理函数定义、结构体定义等
 
 2. **循环依赖处理**
-    ```cpp
-    // ExpressionGenerator 完全处理 BlockExpression
-    std::string ExpressionGenerator::generateBlockExpression(std::shared_ptr<BlockExpression> expr) {
-        if (!statementGenerator) {
-            reportError("StatementGenerator not set");
-            return generateUnitValue();
-        }
-        
-        // 创建新作用域
-        scopeTree->EnterScope();
-        irBuilder->enterScope();
-        
-        // 处理块内的所有语句（通过 StatementGenerator）
-        for (const auto& stmt : expr->statements) {
-            statementGenerator->generateStatement(stmt);
-        }
-        
-        // 处理尾表达式
-        std::string resultValue;
-        if (expr->expressionwithoutblock) {
-            resultValue = generateExpression(expr->expressionwithoutblock);
-        } else {
-            // 没有尾表达式，返回单元类型
-            resultValue = generateUnitValue();
-        }
-        
-        // 退出作用域
-        irBuilder->exitScope();
-        scopeTree->ExitScope();
-        
-        return resultValue;
-    }
-    ```
+   - ExpressionGenerator完全负责BlockExpression的处理
+   - 创建新的作用域和基本块上下文
+   - 通过StatementGenerator处理块内语句
+   - 处理尾表达式并返回结果值
+   - 管理作用域的进入和退出
+   - 错误处理：检测StatementGenerator未设置的情况
 
 3. **寄存器和作用域管理**
-    ```cpp
-    // StatementGenerator 处理 Let 语句
-    void StatementGenerator::generateLetStatement(std::shared_ptr<LetStatement> stmt) {
-        // 分配变量空间
-        std::string varPtrReg = irBuilder->newRegister(varName, "ptr");
-        irBuilder->emitAlloca(varPtrReg, varType);
-        
-        // 生成初始化表达式（调用 ExpressionGenerator）
-        if (stmt->expression && exprGenerator) {
-            std::string initReg = exprGenerator->generateExpression(stmt->expression);
-            irBuilder->emitStore(initReg, varPtrReg, varType);
-        }
-        
-        // 注册变量到作用域
-        scopeTree->InsertSymbol(varName, symbol);
-        irBuilder->setVariableRegister(varName, varPtrReg);
-    }
-    
-    // 注意：StatementGenerator 不再处理 BlockExpression
-    // BlockExpression 完全由 ExpressionGenerator 处理
-    ```
+   - StatementGenerator处理Let语句的变量分配
+   - 为变量分配栈空间并生成alloca指令
+   - 通过ExpressionGenerator生成初始化表达式
+   - 将变量注册到符号表和IRBuilder中
+   - 职责划分：StatementGenerator不处理BlockExpression
 
 ### 阶段 5：语句生成
 
 对于每个语句：
 
 1. **控制流语句**
-   ```cpp
-   // if 语句
-   std::string condReg = generateExpression(ifStmt->getCondition());
-   std::string thenBB = generator.newBasicBlock("if.then");
-   std::string elseBB = generator.newBasicBlock("if.else");
-   std::string endBB = generator.newBasicBlock("if.end");
-   
-   generator.emitInstruction("br i1 %" + condReg + ", label %" + thenBB + ", label %" + elseBB);
-   // 输出：br i1 %_3, label %bb4, label %bb5
-   ```
+   - 生成条件表达式的IR代码
+   - 创建then、else和end基本块
+   - 生成条件分支指令
+   - 处理分支间的跳转和合并
+   - 输出格式：br i1 %<condition>, label %<then_label>, label %<else_label>
 
 2. **声明语句**
-   ```cpp
-   // 变量声明
-   std::string varName = varDecl->getName();
-   std::string llvmType = typeMapper.mapType(varDecl->getType());
-   std::string allocaReg = generator.newRegister();
-   generator.emitInstruction("%" + allocaReg + " = alloca " + llvmType + ", align 4");
-   // 输出：%_6 = alloca i32, align 4
-   ```
+   - 获取变量名称和类型信息
+   - 通过TypeMapper获取LLVM类型表示
+   - 分配变量寄存器并生成alloca指令
+   - 设置变量的对齐要求
+   - 输出格式：%<reg> = alloca <type>, align <alignment>
 
 3. **赋值语句**
-   ```cpp
-   // 赋值语句 x = value
-   std::string valueReg = generateExpression(assignStmt->getValue());
-   std::string varPtr = getVariablePointer(assignStmt->getVariableName());
-   generator.emitInstruction("store i32 %" + valueReg + ", " + varPtr + ", align 4");
-   // 输出：store i32 %_7, i32* %_6, align 4
-   ```
+   - 生成赋值右侧表达式的IR代码
+   - 获取目标变量的指针
+   - 生成存储指令将值存入变量
+   - 处理类型转换和对齐要求
+   - 输出格式：store <type> %<value>, <ptr_type> %<ptr>, align <alignment>
 
 ### 阶段 6：内存管理
 
 1. **栈分配**
-   ```cpp
-   // 局部变量分配
-   std::string allocaReg = newRegister();
-   emitInstruction("%" + allocaReg + " = alloca " + llvmType + ", align " + alignment);
-   // 输出：%_8 = alloca i32, align 4
-   ```
+   - 为局部变量分配栈空间
+   - 通过IRBuilder生成alloca指令
+   - 设置适当的对齐要求
+   - 输出格式：%<reg> = alloca <type>, align <alignment>
 
 2. **堆分配**
-   ```cpp
-   // 调用 malloc
-   std::string sizeReg = generateExpression(sizeExpr);
-   std::string mallocReg = newRegister();
-   emitInstruction("%" + mallocReg + " = call ptr @malloc(i32 %" + sizeReg + ")");
-   // 输出：%_9 = call ptr @malloc(i32 %_10)
-   ```
+   - 生成堆内存分配表达式
+   - 调用malloc等内存分配函数
+   - 处理分配失败的情况
+   - 输出格式：%<reg> = call ptr @malloc(i32 %<size>)
 
 3. **内存操作**
-   ```cpp
-   // 调用 memset
-   std::string memsetReg = newRegister();
-   emitInstruction("%" + memsetReg + " = call ptr @builtin_memset(ptr " + destPtr + ", i8 0, i32 " + size + ")");
-   // 输出：%_11 = call ptr @builtin_memset(ptr %_12, i8 0, i32 64)
-   ```
+   - 生成内存初始化指令
+   - 调用memset、memcpy等内存操作函数
+   - 处理内存对齐和边界检查
+   - 输出格式：%<reg> = call ptr @builtin_memset(ptr %<dest>, i8 <value>, i32 %<size>)
 
 ### 阶段 7：内置函数处理
 
 1. **函数声明**
-   ```cpp
-   // 声明所有内置函数
-   void declareBuiltinFunctions() {
-       emitInstruction("declare dso_local void @print(ptr)");
-       emitInstruction("declare dso_local void @println(ptr)");
-       emitInstruction("declare dso_local void @printInt(i32)");
-       emitInstruction("declare dso_local void @printlnInt(i32)");
-       emitInstruction("declare dso_local ptr @getString()");
-       emitInstruction("declare dso_local i32 @getInt()");
-       emitInstruction("declare dso_local ptr @builtin_memset(ptr nocapture writeonly, i8, i32)");
-       emitInstruction("declare dso_local ptr @builtin_memcpy(ptr nocapture writeonly, ptr nocapture readonly, i32)");
-   }
-   ```
+   - 通过BuiltinDeclarator生成所有内置函数声明
+   - 声明字符串I/O函数（print, println）
+   - 声明整数I/O函数（printInt, printlnInt）
+   - 声明输入函数（getString, getInt）
+   - 声明内存管理函数（builtin_memset, builtin_memcpy）
+   - 设置函数属性和调用约定
 
 2. **函数调用**
-   ```cpp
-   // 生成 printlnInt 调用
-   std::string valueReg = generateExpression(callExpr->getArgument(0));
-   emitInstruction("call void @printlnInt(i32 %" + valueReg + ")");
-   // 输出：call void @printlnInt(i32 %_13)
-   ```
+   - 生成内置函数的调用指令
+   - 处理参数传递和返回值
+   - 特殊处理可变参数函数
+   - 输出格式：call <return_type> @<function_name>(<args>)
 
 ## 自定义 IR 构建器设计
 
 ### IRBuilder 核心功能
 
-```cpp
-class IRBuilder {
-public:
-    IRBuilder(std::ostream& output) : output(output), regCounter(0), bbCounter(0) {}
-    
-    // 寄存器管理
-    std::string newRegister() {
-        return "_" + std::to_string(++regCounter);
-    }
-    
-    // 基本块管理
-    std::string newBasicBlock(const std::string& prefix) {
-        return prefix + std::to_string(++bbCounter);
-    }
-    
-    // 指令生成
-    void emitInstruction(const std::string& instruction) {
-        output << "  " << instruction << "\n";
-    }
-    
-    void emitLabel(const std::string& label) {
-        output << label << ":\n";
-    }
-    
-    // 类型指令
-    void emitAlloca(const std::string& reg, const std::string& type, int align) {
-        emitInstruction("%" + reg + " = alloca " + type + ", align " + std::to_string(align));
-    }
-    
-    void emitStore(const std::string& value, const std::string& ptr, const std::string& type, int align) {
-        emitInstruction("store " + type + " %" + value + ", " + ptr + ", align " + std::to_string(align));
-    }
-    
-    void emitLoad(const std::string& reg, const std::string& ptr, const std::string& type, int align) {
-        emitInstruction("%" + reg + " = load " + type + ", " + ptr + ", align " + std::to_string(align));
-    }
-    
-    // 算术指令
-    void emitAdd(const std::string& result, const std::string& left, const std::string& right, const std::string& type) {
-        emitInstruction("%" + result + " = add " + type + " %" + left + ", %" + right);
-    }
-    
-    void emitSub(const std::string& result, const std::string& left, const std::string& right, const std::string& type) {
-        emitInstruction("%" + result + " = sub " + type + " %" + left + ", %" + right);
-    }
-    
-    void emitMul(const std::string& result, const std::string& left, const std::string& right, const std::string& type) {
-        emitInstruction("%" + result + " = mul " + type + " %" + left + ", %" + right);
-    }
-    
-    // 比较指令
-    void emitIcmp(const std::string& result, const std::string& cond, const std::string& left, const std::string& right, const std::string& type) {
-        emitInstruction("%" + result + " = icmp " + cond + " " + type + " %" + left + ", %" + right);
-    }
-    
-    // 控制流指令
-    void emitBr(const std::string& condition, const std::string& thenLabel, const std::string& elseLabel) {
-        emitInstruction("br i1 %" + condition + ", label %" + thenLabel + ", label %" + elseLabel);
-    }
-    
-    void emitBr(const std::string& label) {
-        emitInstruction("br label %" + label);
-    }
-    
-    void emitRet(const std::string& value, const std::string& type) {
-        if (type == "void") {
-            emitInstruction("ret void");
-        } else {
-            emitInstruction("ret " + type + " %" + value);
-        }
-    }
-    
-    // 函数调用
-    void emitCall(const std::string& result, const std::string& funcName, const std::vector<std::string>& args, const std::string& returnType) {
-        std::string call = "call " + returnType + " @" + funcName + "(";
-        for (size_t i = 0; i < args.size(); ++i) {
-            if (i > 0) call += ", ";
-            call += args[i];
-        }
-        call += ")";
-        if (!result.empty()) {
-            emitInstruction("%" + result + " = " + call);
-        } else {
-            emitInstruction(call);
-        }
-    }
+IRBuilder提供完整的LLVM IR文本生成功能，核心组件包括：
 
-private:
-    std::ostream& output;
-    size_t regCounter;
-    size_t bbCounter;
-};
-```
+- **初始化接口**：
+  - 构造函数接收输出流引用
+  - 初始化寄存器和基本块计数器
+  - 设置输出格式和缩进规则
+
+- **寄存器管理**：
+  - newRegister() - 生成唯一寄存器名称
+  - newNamedRegister() - 生成带前缀的命名寄存器
+  - 维护递增计数器确保名称唯一性
+
+- **基本块管理**：
+  - newBasicBlock() - 生成基本块标签
+  - 维护基本块计数器和命名约定
+  - 支持控制流相关的命名模式
+
+- **指令生成**：
+  - emitInstruction() - 输出通用指令
+  - emitLabel() - 输出基本块标签
+  - 确保正确的LLVM语法和缩进
+
+- **类型指令**：
+  - emitAlloca() - 生成栈分配指令
+  - emitStore() - 生成存储指令
+  - emitLoad() - 生成加载指令
+  - 处理类型和对齐信息
+
+- **算术指令**：
+  - emitAdd(), emitSub(), emitMul() - 基本算术运算
+  - emitDiv(), emitRem() - 除法和取余运算
+  - 处理类型化的算术指令
+
+- **比较指令**：
+  - emitIcmp() - 生成整数比较指令
+  - 支持各种比较条件（eq, ne, slt, sgt等）
+  - 生成布尔值结果
+
+- **控制流指令**：
+  - emitBr() - 生成条件和无条件跳转
+  - emitRet() - 生成返回指令
+  - 处理基本块间的控制流转移
+
+- **函数调用**：
+  - emitCall() - 生成函数调用指令
+  - 处理参数列表和返回值
+  - 支持可变参数函数
+
+- **内部状态管理**：
+  - 维护输出流引用
+  - 管理寄存器和基本块计数器
+  - 跟踪当前基本块和作用域
 
 ## 关键设计决策
 
@@ -551,42 +429,23 @@ bb2:
 
 ### 1. 语义分析接口
 
-```cpp
-class IRGenerator {
-public:
-    IRGenerator(const SymbolTable& symbolTable, const TypeChecker& typeChecker);
-    bool generateIR(const std::vector<std::unique_ptr<Item>>& items);
-    std::string getIROutput() const { return output.str(); }
+IRGenerator提供与语义分析阶段的集成接口：
 
-private:
-    const SymbolTable& symbolTable;
-    const TypeChecker& typeChecker;
-    std::ostringstream output;
-    IRBuilder builder;
-    TypeMapper typeMapper;
-    // ... 其他组件
-};
-```
+- **构造函数**：接收符号表和类型检查器引用
+- **主要生成方法**：generateIR() - 处理AST顶层节点列表
+- **输出获取方法**：getIROutput() - 返回生成的IR文本
+- **内部组件**：包含IRBuilder、TypeMapper等子组件实例
+- **错误处理**：提供错误状态检查和错误信息获取方法
 
 ### 2. 主程序集成
 
-```cpp
-int main(int argc, char* argv[]) {
-    // ... 词法分析、语法分析、语义分析
-    
-    // IR 生成
-    IRGenerator irGenerator(symbolTable, typeChecker);
-    bool success = irGenerator.generateIR(ast);
-    
-    if (success) {
-        std::cout << irGenerator.getIROutput();
-        return 0;
-    } else {
-        std::cerr << "IR generation failed" << std::endl;
-        return 1;
-    }
-}
-```
+主程序中的IR生成集成流程：
+
+- **初始化阶段**：创建IRGenerator实例，传入符号表和类型检查器
+- **生成阶段**：调用generateIR()方法处理AST
+- **输出阶段**：成功时输出IR到stdout，失败时输出错误信息
+- **返回值处理**：根据生成结果返回适当的退出码
+- **管道支持**：支持与后续LLVM工具链的管道操作
 
 ## 总结
 

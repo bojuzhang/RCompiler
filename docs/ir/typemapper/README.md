@@ -17,651 +17,454 @@ TypeMapper 组件负责将 Rx 语言的类型系统映射到 LLVM IR 类型系�
 
 TypeMapper 维护一个从 Rx 类型到 LLVM 类型的映射表，针对 32 位机器进行优化：
 
-```cpp
-// 基础类型映射（32位机器）
-static const std::unordered_map<std::string, std::string> BASIC_TYPE_MAP = {
-    {"i32", "i32"},
-    {"u32", "u32"},
-    {"isize", "i32"},  // 32位机器上isize对应i32
-    {"usize", "u32"},  // 32位机器上usize对应u32
-    {"bool", "i1"},
-    {"str", "i8*"},
-    {"char", "i8"},
-    {"()", "void"}
-};
+1. **基础类型映射**：
+   - 整数类型：i32 → i32, u32 → u32
+   - 平台相关类型：isize → i32（32位机器）, usize → u32（32位机器）
+   - 布尔类型：bool → i1
+   - 字符串类型：str → i8*
+   - 字符类型：char → i8
+   - 单元类型：() → void
 
-// SemanticType 特殊类型映射
-static const std::unordered_map<std::string, std::string> SEMANTIC_TYPE_MAP = {
-    {"Int", "i32"},        // Int类型对应i32
-    {"SignedInt", "i32"},  // SignedInt类型对应i32
-    {"UnsignedInt", "u32"}  // UnsignedInt类型对应u32
-};
-```
+2. **SemanticType 特殊类型映射**：
+   - Int 类型 → i32
+   - SignedInt 类型 → i32
+   - UnsignedInt 类型 → u32
 
-### 复合类型映射
-
-对于复合类型，TypeMapper 提供递归的映射策略：
-
-1. **数组类型**：`[T; N]` → `[N x T]`
-2. **引用类型**：`&T`, `&mut T` → `T*`
-3. **函数类型**：`fn(A, B) -> C` → `C (A, B)*`
-4. **结构体类型**：`%struct_Name`（注意避免C++转义问题）
+3. **复合类型映射策略**：
+   - 数组类型：`[T; N]` 映射为 `[N x T]`
+   - 引用类型：`&T`, `&mut T` 映射为 `T*`
+   - 函数类型：`fn(A, B) -> C` 映射为 `C (A, B)*`
+   - 结构体类型：映射为 `%struct_Name`（避免C++转义问题）
 
 ### 类型缓存机制
 
-```cpp
-class TypeMapper {
-private:
-    std::shared_ptr<ScopeTree> scopeTree;
-    std::unordered_map<std::string, std::string> typeCache;
-    
-public:
-    TypeMapper(std::shared_ptr<ScopeTree> scopeTree);
-    
-    // 核心映射接口
-    std::string mapRxTypeToLLVM(const std::string& rxType);
-    std::string mapSemanticTypeToLLVM(std::shared_ptr<SemanticType> semanticType);
-    
-    // 复合类型映射
-    std::string mapArrayTypeToLLVM(std::shared_ptr<ArrayTypeWrapper> arrayType);
-    std::string mapReferenceTypeToLLVM(std::shared_ptr<ReferenceTypeWrapper> refType);
-    std::string mapFunctionTypeToLLVM(std::shared_ptr<FunctionType> funcType);
-    std::string mapStructTypeToLLVM(const std::string& structName);
-    
-    // 类型信息查询
-    std::string getElementType(const std::string& compositeType);
-    bool areTypesCompatible(const std::string& type1, const std::string& type2);
-    std::string getCommonType(const std::string& type1, const std::string& type2);
-    
-    // 类型大小和对齐
-    int getTypeSize(const std::string& llvmType);
-    int getTypeAlignment(const std::string& llvmType);
-};
-```
+1. **核心数据结构**：
+   - ScopeTree 引用用于符号查找
+   - 类型缓存映射表避免重复计算
+   - 多级缓存提高查找效率
+
+2. **核心映射接口**：
+   - `mapRxTypeToLLVM()`: 将 Rx 类型字符串映射为 LLVM 类型
+   - `mapSemanticTypeToLLVM()`: 将语义类型对象映射为 LLVM 类型
+
+3. **复合类型映射接口**：
+   - `mapArrayTypeToLLVM()`: 处理数组类型的映射
+   - `mapReferenceTypeToLLVM()`: 处理引用类型的映射
+   - `mapFunctionTypeToLLVM()`: 处理函数类型的映射
+   - `mapStructTypeToLLVM()`: 处理结构体类型的映射
+
+4. **类型信息查询接口**：
+   - `getElementType()`: 获取复合类型的元素类型
+   - `areTypesCompatible()`: 检查类型兼容性
+   - `getCommonType()`: 计算两个类型的公共类型
+
+5. **类型属性接口**：
+   - `getTypeSize()`: 获取类型的字节大小
+   - `getTypeAlignment()`: 获取类型的对齐要求
 
 ## 实现策略
 
 ### 基础类型映射
 
-```cpp
-std::string TypeMapper::mapRxTypeToLLVM(const std::string& rxType) {
-    // 检查缓存
-    auto it = typeCache.find(rxType);
-    if (it != typeCache.end()) {
-        return it->second;
-    }
-    
-    // SemanticType 特殊类型映射
-    auto semanticIt = SEMANTIC_TYPE_MAP.find(rxType);
-    if (semanticIt != SEMANTIC_TYPE_MAP.end()) {
-        typeCache[rxType] = semanticIt->second;
-        return semanticIt->second;
-    }
-    
-    // 基础类型查找
-    auto basicIt = BASIC_TYPE_MAP.find(rxType);
-    if (basicIt != BASIC_TYPE_MAP.end()) {
-        typeCache[rxType] = basicIt->second;
-        return basicIt->second;
-    }
-    
-    // 复合类型处理
-    std::string result;
-    if (rxType.find("[") == 0 && rxType.find("]") != std::string::npos) {
-        // 数组类型：[T; N]
-        result = mapArrayTypeString(rxType);
-    } else if (rxType.find("&") == 0) {
-        // 引用类型：&T, &mut T
-        result = mapReferenceTypeString(rxType);
-    } else if (rxType.find("fn(") == 0) {
-        // 函数类型
-        result = mapFunctionTypeString(rxType);
-    } else {
-        // 自定义类型（结构体、枚举等）
-        result = mapCustomType(rxType);
-    }
-    
-    typeCache[rxType] = result;
-    return result;
-}
-```
+1. **缓存优先策略**：
+   - 首先检查类型缓存，避免重复计算
+   - 如果缓存命中，直接返回缓存结果
+   - 将新计算的结果存入缓存
+
+2. **特殊类型处理**：
+   - 优先处理 SemanticType 特殊类型映射
+   - 检查是否为 Int、SignedInt、UnsignedInt 等特殊类型
+   - 使用预定义的映射表进行转换
+
+3. **基础类型查找**：
+   - 在基础类型映射表中查找直接匹配
+   - 处理常见的整数、布尔、字符串等类型
+   - 确保基础类型的快速映射
+
+4. **复合类型识别**：
+   - 通过字符串前缀识别数组类型 `[T; N]`
+   - 通过前缀识别引用类型 `&T`, `&mut T`
+   - 通过前缀识别函数类型 `fn(...)`
+   - 将其他类型作为自定义类型处理
+
+5. **结果缓存**：
+   - 将计算结果存入类型缓存
+   - 确保后续相同类型的快速查找
+   - 维护缓存的一致性
 
 ### SemanticType 映射
 
-```cpp
-std::string TypeMapper::mapSemanticTypeToLLVM(std::shared_ptr<SemanticType> semanticType) {
-    if (!semanticType) {
-        return "i8*"; // 默认类型
-    }
-    
-    std::string typeStr = semanticType->tostring();
-    
-    // 检查缓存
-    auto it = typeCache.find(typeStr);
-    if (it != typeCache.end()) {
-        return it->second;
-    }
-    
-    // 处理特殊SemanticType
-    if (dynamic_cast<IntType*>(semanticType.get())) {
-        typeCache[typeStr] = "i32";
-        return "i32";
-    } else if (dynamic_cast<SignedIntType*>(semanticType.get())) {
-        typeCache[typeStr] = "i32";
-        return "i32";
-    } else if (dynamic_cast<UnsignedIntType*>(semanticType.get())) {
-        typeCache[typeStr] = "u32";
-        return "u32";
-    }
-    
-    // 处理复合类型
-    if (auto arrayType = dynamic_cast<ArrayTypeWrapper*>(semanticType.get())) {
-        return mapArrayTypeToLLVM(arrayType);
-    } else if (auto refType = dynamic_cast<ReferenceTypeWrapper*>(semanticType.get())) {
-        return mapReferenceTypeToLLVM(refType);
-    } else if (auto funcType = dynamic_cast<FunctionType*>(semanticType.get())) {
-        return mapFunctionTypeToLLVM(funcType);
-    } else {
-        // 简单类型
-        return mapRxTypeToLLVM(typeStr);
-    }
-}
-```
+1. **空值处理**：
+   - 检查语义类型指针的有效性
+   - 为空指针提供安全的默认类型
+   - 使用 `i8*` 作为通用默认类型
+
+2. **类型字符串化**：
+   - 将语义类型转换为字符串表示
+   - 用于缓存键值的生成
+   - 支持类型的一致性比较
+
+3. **动态类型识别**：
+   - 使用动态类型转换识别具体语义类型
+   - 处理 IntType、SignedIntType、UnsignedIntType
+   - 为每种特殊类型提供精确的映射
+
+4. **复合类型委托**：
+   - 将数组类型委托给专门的数组映射方法
+   - 将引用类型委托给引用映射方法
+   - 将函数类型委托给函数映射方法
+
+5. **简单类型回退**：
+   - 对于无法识别的复合类型，回退到字符串映射
+   - 确保类型映射的完整性
+   - 提供统一的映射接口
 
 ### 数组类型映射
 
-```cpp
-std::string TypeMapper::mapArrayTypeToLLVM(std::shared_ptr<ArrayTypeWrapper> arrayType) {
-    // 递归映射元素类型
-    std::string elementType = mapSemanticTypeToLLVM(arrayType->GetElementType());
-    
-    // 获取数组大小
-    std::string sizeStr = "0";
-    if (auto sizeExpr = arrayType->GetSizeExpression()) {
-        if (auto literal = dynamic_cast<LiteralExpression*>(sizeExpr.get())) {
-            sizeStr = literal->literal;
-        }
-    }
-    
-    // 构造 LLVM 数组类型：[N x T]
-    return "[" + sizeStr + " x " + elementType + "]";
-}
-```
+1. **递归元素映射**：
+   - 递归调用映射函数处理元素类型
+   - 确保嵌套类型的正确处理
+   - 维护类型映射的一致性
+
+2. **大小信息提取**：
+   - 从大小表达式中提取数组大小
+   - 处理字面量大小值
+   - 为无法确定的大小提供默认值
+
+3. **LLVM 数组类型构造**：
+   - 按照 LLVM 语法构造数组类型字符串
+   - 使用 `[N x T]` 格式表示数组
+   - 确保类型字符串的正确性
 
 ### 引用类型映射
 
-```cpp
-std::string TypeMapper::mapReferenceTypeToLLVM(std::shared_ptr<ReferenceTypeWrapper> refType) {
-    // 递归映射目标类型
-    std::string targetType = mapSemanticTypeToLLVM(refType->getTargetType());
-    
-    // LLVM 中所有引用都是指针类型
-    return targetType + "*";
-}
-```
+1. **目标类型映射**：
+   - 递归映射引用的目标类型
+   - 处理复杂的嵌套引用情况
+   - 确保目标类型的正确转换
+
+2. **指针类型生成**：
+   - 在目标类型后添加 `*` 表示指针
+   - 统一处理可变和不可变引用
+   - 符合 LLVM 的指针类型表示
 
 ### 结构体类型映射
 
-```cpp
-std::string TypeMapper::mapStructTypeToLLVM(const std::string& structName) {
-    // 查找结构体符号
-    auto structSymbol = scopeTree->LookupSymbol(structName);
-    if (!structSymbol || structSymbol->kind != SymbolKind::Struct) {
-        return "i8*"; // 未知类型，使用 void*
-    }
-    
-    // 构造结构体类型：%struct_Name（避免C++转义问题）
-    return "%struct_" + structName;
-}
-```
+1. **符号查找**：
+   - 在作用域树中查找结构体符号
+   - 验证符号的类型和有效性
+   - 处理未找到符号的情况
+
+2. **类型名称构造**：
+   - 使用 `%struct_` 前缀构造结构体类型
+   - 避免 C++ 关键字冲突问题
+   - 确保类型名称的唯一性
+
+3. **错误处理**：
+   - 为未知结构体提供安全的默认类型
+   - 使用 `i8*` 作为通用指针类型
+   - 保持类型系统的安全性
 
 ### 多层嵌套类型处理
 
-```cpp
-std::string TypeMapper::mapNestedType(const std::string& rxType) {
-    std::string current = rxType;
-    std::string result = current;
-    
-    // 处理多层嵌套：&[&[i32; 3]; 2]
-    while (true) {
-        if (current.find("[") == 0 && current.find("]") != std::string::npos) {
-            // 处理数组类型
-            size_t closeBracket = current.find_last_of("]");
-            std::string innerType = current.substr(1, closeBracket - 1);
-            std::string sizePart = current.substr(closeBracket + 1);
-            
-            std::string mappedInner = mapNestedType(innerType);
-            result = "[" + sizePart + " x " + mappedInner + "]";
-            break;
-        } else if (current.find("&") == 0) {
-            // 处理引用类型
-            size_t mutPos = current.find("mut ");
-            if (mutPos != std::string::npos) {
-                current = current.substr(mutPos + 4); // 跳过 "mut "
-            } else {
-                current = current.substr(1); // 跳过 "&"
-            }
-            continue;
-        } else {
-            // 基础类型或SemanticType
-            auto basicIt = BASIC_TYPE_MAP.find(current);
-            if (basicIt != BASIC_TYPE_MAP.end()) {
-                result = basicIt->second;
-            } else {
-                auto semanticIt = SEMANTIC_TYPE_MAP.find(current);
-                if (semanticIt != SEMANTIC_TYPE_MAP.end()) {
-                    result = semanticIt->second;
-                } else {
-                    result = "%struct_" + current; // 避免C++转义问题
-                }
-            }
-            break;
-        }
-    }
-    
-    return result;
-}
-```
+1. **递归解析策略**：
+   - 使用循环结构处理多层嵌套
+   - 逐步解析外层类型到内层类型
+   - 维护解析状态的一致性
+
+2. **数组嵌套处理**：
+   - 识别数组类型的开始和结束位置
+   - 提取内层类型和大小信息
+   - 递归处理内层类型的映射
+
+3. **引用嵌套处理**：
+   - 处理可变引用 `&mut T` 的特殊情况
+   - 逐步剥离引用符号
+   - 继续处理内层类型
+
+4. **基础类型识别**：
+   - 在解析完成后识别基础类型
+   - 使用映射表进行最终转换
+   - 处理自定义结构体类型
 
 ### 多层嵌套数组处理
 
-```cpp
-std::string TypeMapper::mapMultiDimensionalArray(std::shared_ptr<ArrayTypeWrapper> arrayType) {
-    // 递归处理多维数组
-    std::string elementTypeStr = mapSemanticTypeToLLVM(arrayType->GetElementType());
-    
-    // 检查元素类型是否也是数组
-    if (auto innerArray = dynamic_cast<ArrayTypeWrapper*>(arrayType->GetElementType().get())) {
-        // 多维数组：[[T; M]; N] -> [N x [M x T]]
-        std::string innerArrayType = mapMultiDimensionalArray(innerArray);
-        
-        // 获取当前维度大小
-        std::string sizeStr = "0";
-        if (auto sizeExpr = arrayType->GetSizeExpression()) {
-            if (auto literal = dynamic_cast<LiteralExpression*>(sizeExpr.get())) {
-                sizeStr = literal->literal;
-            }
-        }
-        
-        return "[" + sizeStr + " x " + innerArrayType + "]";
-    } else {
-        // 一维数组
-        return mapArrayTypeToLLVM(arrayType);
-    }
-}
-```
+1. **递归数组检测**：
+   - 检查数组元素是否也是数组类型
+   - 识别多维数组的结构
+   - 递归处理内层数组类型
+
+2. **多维数组构造**：
+   - 按照维度顺序构造 LLVM 数组类型
+   - 使用嵌套的 `[N x [M x T]]` 格式
+   - 确保维度信息的正确性
+
+3. **大小信息处理**：
+   - 提取每个维度的大小信息
+   - 处理字面量大小表达式
+   - 为缺失大小提供默认值
 
 ### 多层嵌套引用处理
 
-```cpp
-std::string TypeMapper::mapMultiLevelReference(std::shared_ptr<ReferenceTypeWrapper> refType) {
-    // 递归处理多层引用
-    std::string targetTypeStr = mapSemanticTypeToLLVM(refType->getTargetType());
-    
-    // 检查目标类型是否也是引用
-    if (auto innerRef = dynamic_cast<ReferenceTypeWrapper*>(refType->getTargetType().get())) {
-        // 多层引用：&&T -> T**
-        std::string innerRefType = mapMultiLevelReference(innerRef);
-        return innerRefType + "*";
-    } else {
-        // 单层引用：&T -> T*
-        return targetTypeStr + "*";
-    }
-}
-```
+1. **引用层次检测**：
+   - 检查引用目标是否也是引用类型
+   - 识别多层引用的结构
+   - 处理 `&&T` 等复杂引用
+
+2. **递归引用映射**：
+   - 递归处理内层引用类型
+   - 逐层添加指针符号
+   - 构造正确的多级指针类型
+
+3. **单层引用处理**：
+   - 为简单引用生成单级指针
+   - 使用 `T*` 格式表示引用
+   - 确保指针类型的正确性
 
 ## 类型兼容性检查
 
 ### 兼容性规则
 
-```cpp
-bool TypeMapper::areTypesCompatible(const std::string& type1, const std::string& type2) {
-    // 完全相同
-    if (type1 == type2) return true;
-    
-    // 指针类型兼容性
-    if (isPointerType(type1) && isPointerType(type2)) {
-        std::string base1 = getBaseType(type1);
-        std::string base2 = getBaseType(type2);
-        return areTypesCompatible(base1, base2);
-    }
-    
-    // 数组类型兼容性
-    if (isArrayType(type1) && isArrayType(type2)) {
-        std::string elem1 = getElementType(type1);
-        std::string elem2 = getElementType(type2);
-        return areTypesCompatible(elem1, elem2);
-    }
-    
-    // 整数类型兼容性（32位机器上的隐式转换）
-    if (isIntegerType(type1) && isIntegerType(type2)) {
-        return true; // LLVM 支持整数类型的隐式转换
-    }
-    
-    return false;
-}
-```
+1. **完全相同检查**：
+   - 首先检查两个类型是否完全相同
+   - 相同类型直接返回兼容
+   - 提供最快的兼容性判断
+
+2. **指针类型兼容性**：
+   - 检查两个类型是否都是指针类型
+   - 递归检查指针基类型的兼容性
+   - 忽略指针层级的差异
+
+3. **数组类型兼容性**：
+   - 检查两个类型是否都是数组类型
+   - 递归检查数组元素类型的兼容性
+   - 忽略数组大小的差异
+
+4. **整数类型兼容性**：
+   - 检查两个类型是否都是整数类型
+   - 在 32 位机器上支持整数类型的隐式转换
+   - 利用 LLVM 的类型转换能力
+
+5. **默认不兼容**：
+   - 对于不匹配的类型组合返回不兼容
+   - 确保类型系统的安全性
+   - 防止错误的类型转换
 
 ### 公共类型计算
 
-```cpp
-std::string TypeMapper::getCommonType(const std::string& type1, const std::string& type2) {
-    if (type1 == type2) return type1;
-    
-    // 整数类型的公共类型（32位机器）
-    if (isIntegerType(type1) && isIntegerType(type2)) {
-        // 在32位机器上，i32是大多数操作的默认类型
-        return "i32";
-    }
-    
-    // 指针类型的公共类型
-    if (isPointerType(type1) && isPointerType(type2)) {
-        std::string base1 = getBaseType(type1);
-        std::string base2 = getBaseType(type2);
-        std::string commonBase = getCommonType(base1, base2);
-        return commonBase + "*";
-    }
-    
-    // 默认返回第一个类型
-    return type1;
-}
-```
+1. **相同类型优化**：
+   - 如果两个类型相同，直接返回该类型
+   - 避免不必要的计算
+   - 提高性能
+
+2. **整数类型公共类型**：
+   - 在 32 位机器上，整数类型的公共类型为 i32
+   - 符合大多数操作的默认类型选择
+   - 确保整数运算的一致性
+
+3. **指针类型公共类型**：
+   - 递归计算指针基类型的公共类型
+   - 在公共基类型后添加指针符号
+   - 保持指针层级的一致性
+
+4. **默认策略**：
+   - 对于无法计算公共类型的情况，返回第一个类型
+   - 提供安全的默认行为
+   - 保持类型系统的稳定性
 
 ## 类型大小和对齐信息
 
-```cpp
-int TypeMapper::getTypeSize(const std::string& llvmType) {
-    static const std::unordered_map<std::string, int> SIZE_MAP = {
-        {"i1", 1}, {"i8", 1}, {"i16", 2}, {"i32", 4}, {"u32", 4},
-        {"void*", 4}, {"i8*", 4}  // 32位机器
-    };
-    
-    auto it = SIZE_MAP.find(llvmType);
-    return (it != SIZE_MAP.end()) ? it->second : 4; // 默认 4 字节（32位机器）
-}
+1. **大小映射表**：
+   - 维护基础类型到字节大小的映射
+   - 针对 32 位机器进行优化
+   - 包含常见 LLVM 类型的大小信息
 
-int TypeMapper::getTypeAlignment(const std::string& llvmType) {
-    // 对齐通常与大小相同
-    return getTypeSize(llvmType);
-}
-```
+2. **默认大小处理**：
+   - 为未知类型提供默认大小（4字节）
+   - 适应 32 位机器的内存布局
+   - 确保大小信息的完整性
+
+3. **对齐计算**：
+   - 大多数类型的对齐要求与大小相同
+   - 简化对齐计算逻辑
+   - 提供一致的对齐策略
 
 ## 与其他组件的集成
 
 ### 与 IRBuilder 的集成
 
-```cpp
-class IRBuilder {
-private:
-    std::shared_ptr<TypeMapper> typeMapper;
-    
-public:
-    IRBuilder(std::shared_ptr<ScopeTree> scopeTree) 
-        : typeMapper(std::make_shared<TypeMapper>(scopeTree)) {}
-    
-    void emitAlloca(const std::string& result, const std::string& rxType, int size = 1) {
-        std::string llvmType = typeMapper->mapRxTypeToLLVM(rxType);
-        emitInstruction(result + " = alloca " + llvmType);
-    }
-    
-    void emitLoad(const std::string& result, const std::string& ptr, const std::string& rxType) {
-        std::string llvmType = typeMapper->mapRxTypeToLLVM(rxType);
-        emitInstruction(result + " = load " + llvmType + ", " + llvmType + "* " + ptr);
-    }
-};
-```
+1. **组件初始化**：
+   - IRBuilder 创建并持有 TypeMapper 实例
+   - 传入 ScopeTree 作为共享依赖
+   - 建立组件间的紧密集成
+
+2. **指令生成集成**：
+   - 在 alloca 指令生成中使用类型映射
+   - 在 load 指令生成中使用类型信息
+   - 确保生成指令的类型正确性
+
+3. **类型转换支持**：
+   - 为 IRBuilder 提供类型转换接口
+   - 支持各种类型间的转换操作
+   - 维护类型转换的安全性
 
 ### 与 ExpressionGenerator 的集成
 
-```cpp
-class ExpressionGenerator {
-private:
-    std::shared_ptr<TypeMapper> typeMapper;
-    
-public:
-    std::string generateBinaryOp(const std::string& left, const std::string& right, 
-                               Token op, const std::string& resultType) {
-        std::string llvmType = typeMapper->mapRxTypeToLLVM(resultType);
-        std::string result = newRegister();
-        
-        switch (op) {
-            case Token::kPlus:
-                emitInstruction(result + " = add " + llvmType + " " + left + ", " + right);
-                break;
-            case Token::kMinus:
-                emitInstruction(result + " = sub " + llvmType + " " + left + ", " + right);
-                break;
-            // ... 其他运算符
-        }
-        
-        return result;
-    }
-};
-```
+1. **二进制操作支持**：
+   - 为表达式生成提供类型映射服务
+   - 确保二进制操作的类型一致性
+   - 生成正确的 LLVM 指令
+
+2. **表达式类型处理**：
+   - 处理表达式结果类型的映射
+   - 支持复杂表达式的类型计算
+   - 维护表达式类型系统的正确性
 
 ## 错误处理
 
 ### 类型映射错误
 
-```cpp
-std::string TypeMapper::handleUnknownType(const std::string& rxType) {
-    // 记录错误
-    std::cerr << "Warning: Unknown type '" << rxType << "', using i8*" << std::endl;
-    
-    // 返回安全的默认类型
-    return "i8*";
-}
-```
+1. **未知类型处理**：
+   - 记录未知类型的警告信息
+   - 提供安全的默认类型（i8*）
+   - 确保编译过程的继续进行
+
+2. **错误日志记录**：
+   - 将错误信息输出到标准错误流
+   - 包含详细的错误上下文
+   - 便于问题诊断和调试
 
 ### 类型不匹配错误
 
-```cpp
-void TypeMapper::reportTypeMismatch(const std::string& expected, const std::string& actual) {
-    std::cerr << "Type Error: Expected '" << expected 
-              << "', but found '" << actual << "'" << std::endl;
-}
-```
+1. **不匹配检测**：
+   - 检测期望类型与实际类型的不匹配
+   - 提供详细的类型信息
+   - 帮助开发者定位问题
+
+2. **错误报告**：
+   - 格式化错误信息为可读格式
+   - 包含期望类型和实际类型
+   - 提供清晰的错误描述
 
 ## 性能优化
 
 ### 类型缓存策略
 
-```cpp
-class TypeMapper {
-private:
-    // 多级缓存
-    std::unordered_map<std::string, std::string> basicTypeCache;
-    std::unordered_map<std::string, std::string> arrayTypeCache;
-    std::unordered_map<std::string, std::string> refTypeCache;
-    std::unordered_map<std::string, std::string> semanticTypeCache;
-    
-public:
-    std::string mapRxTypeToLLVM(const std::string& rxType) {
-        // 根据类型特征选择合适的缓存
-        if (isArrayTypeString(rxType)) {
-            return mapArrayTypeWithCache(rxType);
-        } else if (isReferenceTypeString(rxType)) {
-            return mapReferenceTypeWithCache(rxType);
-        } else {
-            return mapBasicTypeWithCache(rxType);
-        }
-    }
-    
-    std::string mapSemanticTypeToLLVM(std::shared_ptr<SemanticType> semanticType) {
-        std::string typeStr = semanticType->tostring();
-        auto it = semanticTypeCache.find(typeStr);
-        if (it != semanticTypeCache.end()) {
-            return it->second;
-        }
-        
-        std::string result = computeSemanticTypeMapping(semanticType);
-        semanticTypeCache[typeStr] = result;
-        return result;
-    }
-};
-```
+1. **多级缓存设计**：
+   - 为不同类型的映射使用独立的缓存
+   - 基础类型、数组类型、引用类型分别缓存
+   - 提高缓存命中率
+
+2. **智能缓存选择**：
+   - 根据类型特征选择合适的缓存
+   - 减少缓存查找的时间复杂度
+   - 优化缓存使用效率
+
+3. **语义类型缓存**：
+   - 为语义类型对象提供专门缓存
+   - 使用类型字符串作为缓存键
+   - 避免重复的语义类型分析
 
 ### 内存池优化
 
-```cpp
-class TypeMapper {
-private:
-    // 字符串池减少内存分配
-    std::unordered_set<std::string> stringPool;
-    
-    const std::string* internString(const std::string& str) {
-        auto it = stringPool.find(str);
-        if (it != stringPool.end()) {
-            return &(*it);
-        }
-        auto result = stringPool.insert(str).first;
-        return &(*result);
-    }
-};
-```
+1. **字符串池机制**：
+   - 使用字符串池减少内存分配
+   - 重用相同的字符串对象
+   - 降低内存使用和碎片化
+
+2. **字符串内化**：
+   - 将常用字符串内化到池中
+   - 返回字符串的指针而非副本
+   - 提高字符串比较效率
 
 ## 测试策略
 
 ### 单元测试
 
-```cpp
-// 基础类型映射测试（32位机器）
-TEST(TypeMapperTest, BasicTypeMapping) {
-    TypeMapper mapper(scopeTree);
-    EXPECT_EQ(mapper.mapRxTypeToLLVM("i32"), "i32");
-    EXPECT_EQ(mapper.mapRxTypeToLLVM("u32"), "u32");
-    EXPECT_EQ(mapper.mapRxTypeToLLVM("isize"), "i32");  // 32位机器
-    EXPECT_EQ(mapper.mapRxTypeToLLVM("usize"), "u32");  // 32位机器
-    EXPECT_EQ(mapper.mapRxTypeToLLVM("bool"), "i1");
-    EXPECT_EQ(mapper.mapRxTypeToLLVM("str"), "i8*");
-}
+1. **基础类型映射测试**：
+   - 验证基础类型的正确映射
+   - 测试 32 位机器的特殊类型映射
+   - 确保平台相关类型的正确性
 
-// SemanticType映射测试
-TEST(TypeMapperTest, SemanticTypeMapping) {
-    TypeMapper mapper(scopeTree);
-    
-    auto intType = std::make_shared<IntType>();
-    auto signedIntType = std::make_shared<SignedIntType>();
-    auto unsignedIntType = std::make_shared<UnsignedIntType>();
-    
-    EXPECT_EQ(mapper.mapSemanticTypeToLLVM(intType), "i32");
-    EXPECT_EQ(mapper.mapSemanticTypeToLLVM(signedIntType), "i32");
-    EXPECT_EQ(mapper.mapSemanticTypeToLLVM(unsignedIntType), "u32");
-}
+2. **SemanticType 映射测试**：
+   - 测试各种语义类型的映射
+   - 验证特殊语义类型的处理
+   - 确保语义类型系统的正确性
 
-// 复合类型映射测试
-TEST(TypeMapperTest, CompositeTypeMapping) {
-    TypeMapper mapper(scopeTree);
-    EXPECT_EQ(mapper.mapRxTypeToLLVM("[i32; 10]"), "[10 x i32]");
-    EXPECT_EQ(mapper.mapRxTypeToLLVM("&i32"), "i32*");
-    EXPECT_EQ(mapper.mapRxTypeToLLVM("&mut i32"), "i32*");
-}
+3. **复合类型映射测试**：
+   - 测试数组类型的映射
+   - 测试引用类型的映射
+   - 验证复合类型的构造规则
 
-// 嵌套类型映射测试
-TEST(TypeMapperTest, NestedTypeMapping) {
-    TypeMapper mapper(scopeTree);
-    EXPECT_EQ(mapper.mapRxTypeToLLVM("&[&i32; 3]"), "[3 x i32]**");
-    EXPECT_EQ(mapper.mapRxTypeToLLVM("[[i32; 3]; 2]"), "[2 x [3 x i32]]");
-    EXPECT_EQ(mapper.mapRxTypeToLLVM("&&i32"), "i32**");
-}
+4. **嵌套类型测试**：
+   - 测试多层嵌套类型的处理
+   - 验证复杂嵌套结构的正确性
+   - 确保递归映射的正确性
 
-// 多维数组测试
-TEST(TypeMapperTest, MultiDimensionalArrayMapping) {
-    TypeMapper mapper(scopeTree);
-    
-    // 创建二维数组类型 [[i32; 3]; 2]
-    auto innerArrayType = std::make_shared<ArrayTypeWrapper>(
-        std::make_shared<SimpleType>("i32"), 
-        std::make_shared<LiteralExpression>("3", Token::kINTEGER_LITERAL)
-    );
-    auto outerArrayType = std::make_shared<ArrayTypeWrapper>(
-        innerArrayType,
-        std::make_shared<LiteralExpression>("2", Token::kINTEGER_LITERAL)
-    );
-    
-    std::string result = mapper.mapArrayTypeToLLVM(outerArrayType);
-    EXPECT_EQ(result, "[2 x [3 x i32]]");
-}
-```
+5. **多维数组测试**：
+   - 测试多维数组类型的映射
+   - 验证维度信息的正确处理
+   - 确保数组类型的正确构造
 
 ### 集成测试
 
-```cpp
-// 与 IRBuilder 集成测试
-TEST(TypeMapperIntegrationTest, IRBuilderIntegration) {
-    auto scopeTree = std::make_shared<ScopeTree>();
-    IRBuilder builder(scopeTree);
-    
-    // 测试类型映射在 IR 生成中的使用
-    builder.emitAlloca("%x", "i32");
-    builder.emitLoad("%val", "%x", "i32");
-    
-    // 验证生成的 IR 包含正确的类型
-    std::string ir = builder.getIR();
-    EXPECT_TRUE(ir.find("%x = alloca i32") != std::string::npos);
-    EXPECT_TRUE(ir.find("%val = load i32, i32* %x") != std::string::npos);
-}
-```
+1. **IRBuilder 集成测试**：
+   - 测试类型映射在 IR 生成中的使用
+   - 验证生成指令的类型正确性
+   - 确保组件集成的稳定性
 
 ## 使用示例
 
 ### 基本使用
 
-```cpp
-// 创建 TypeMapper
-auto scopeTree = semanticAnalyzer->getScopeTree();
-TypeMapper typeMapper(scopeTree);
+1. **组件初始化**：
+   - 从语义分析器获取作用域树
+   - 创建 TypeMapper 实例
+   - 准备进行类型映射
 
-// 映射基础类型（32位机器）
-std::string i32Type = typeMapper.mapRxTypeToLLVM("i32");        // "i32"
-std::string u32Type = typeMapper.mapRxTypeToLLVM("u32");        // "u32"
-std::string isizeType = typeMapper.mapRxTypeToLLVM("isize");   // "i32"（32位机器）
-std::string usizeType = typeMapper.mapRxTypeToLLVM("usize");   // "u32"（32位机器）
-std::string boolType = typeMapper.mapRxTypeToLLVM("bool");      // "i1"
-std::string strType = typeMapper.mapRxTypeToLLVM("str");        // "i8*"
+2. **基础类型映射**：
+   - 映射整数类型（i32, u32）
+   - 映射平台相关类型（isize, usize）
+   - 映射布尔和字符串类型
 
-// 映射复合类型
-std::string arrayType = typeMapper.mapRxTypeToLLVM("[i32; 10]"); // "[10 x i32]"
-std::string refType = typeMapper.mapRxTypeToLLVM("&i32");        // "i32*"
-```
+3. **复合类型映射**：
+   - 映射数组类型
+   - 映射引用类型
+   - 验证复合类型的正确构造
 
 ### 高级使用
 
-```cpp
-// 从语义类型映射
-auto semanticType = symbol->type;
-std::string llvmType = typeMapper.mapSemanticTypeToLLVM(semanticType);
+1. **语义类型映射**：
+   - 从符号获取语义类型
+   - 进行语义类型到 LLVM 类型的映射
+   - 处理特殊语义类型
 
-// 映射特殊SemanticType
-auto intType = std::make_shared<IntType>();
-auto signedIntType = std::make_shared<SignedIntType>();
-auto unsignedIntType = std::make_shared<UnsignedIntType>();
+2. **类型兼容性检查**：
+   - 检查两个类型的兼容性
+   - 计算类型的公共类型
+   - 进行类型系统的验证
 
-std::string intLLVM = typeMapper.mapSemanticTypeToLLVM(intType);        // "i32"
-std::string signedIntLLVM = typeMapper.mapSemanticTypeToLLVM(signedIntType); // "i32"
-std::string unsignedIntLLVM = typeMapper.mapSemanticTypeToLLVM(unsignedIntType); // "u32"
-
-// 类型兼容性检查
-bool compatible = typeMapper.areTypesCompatible("i32", "u32");
-std::string commonType = typeMapper.getCommonType("i32", "u32");
-
-// 获取类型信息（32位机器）
-int size = typeMapper.getTypeSize("i32");        // 4
-int alignment = typeMapper.getTypeAlignment("i32"); // 4
-```
+3. **类型信息查询**：
+   - 获取类型的字节大小
+   - 获取类型的对齐要求
+   - 进行内存布局分析
 
 ### 多层嵌套类型示例
 
-```cpp
-// 多层嵌套数组
-std::string multiDimArray = typeMapper.mapRxTypeToLLVM("[[i32; 3]; 2]"); // "[2 x [3 x i32]]"
+1. **多维数组处理**：
+   - 处理二维数组类型
+   - 验证维度信息的正确性
+   - 生成正确的 LLVM 数组类型
 
-// 多层嵌套引用
-std::string multiRef = typeMapper.mapRxTypeToLLVM("&&i32"); // "i32**"
+2. **多层引用处理**：
+   - 处理多级指针类型
+   - 验证引用层级的正确性
+   - 生成正确的指针类型
 
-// 复杂嵌套：&[&[&i32; 3]; 2]
-std::string complexNested = typeMapper.mapRxTypeToLLVM("&[&[&i32; 3]; 2]"); // "[2 x [3 x i32***]]**"
-```
+3. **复杂嵌套结构**：
+   - 处理数组和引用的复杂嵌套
+   - 验证嵌套结构的正确解析
+   - 生成正确的复合类型
 
 ## 总结
 
