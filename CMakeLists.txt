@@ -26,7 +26,8 @@ add_library(compiler_lib src/lexer.cpp
                          src/irbuilder.cpp
                          src/typemapper.cpp
                          src/builtindeclarator.cpp
-                         src/statementgenerator.cpp)
+                         src/statementgenerator.cpp
+                         src/expressiongenerator.cpp)
 
 add_executable(code src/semanticmain.cpp)
 target_link_libraries(code PRIVATE compiler_lib)

@@ -66,6 +66,19 @@ target_link_libraries(builtindeclarator_test
 # 添加测试
 add_test(NAME BuiltinDeclaratorTests COMMAND builtindeclarator_test)
 
+# 添加 ExpressionGenerator 测试可执行文件
+add_executable(expressiongenerator_test expressiongenerator_test.cpp)
+
+# 链接库
+target_link_libraries(expressiongenerator_test
+    compiler_lib
+    GTest::GTest
+    GTest::Main
+)
+
+# 添加测试
+add_test(NAME ExpressionGeneratorTests COMMAND expressiongenerator_test)
+
 # 添加 StatementGenerator 测试可执行文件
 add_executable(statementgenerator_test statementgenerator_test.cpp)
 
