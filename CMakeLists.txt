@@ -22,7 +22,9 @@ add_library(compiler_lib src/lexer.cpp
                          src/constevaluator.cpp
                          src/controlflow.cpp
                          src/typeinference.cpp
-                         src/semantic.cpp)
+                         src/semantic.cpp
+                         src/irbuilder.cpp
+                         src/typemapper.cpp)
 
 add_executable(code src/semanticmain.cpp)
 target_link_libraries(code PRIVATE compiler_lib)

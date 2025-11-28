@@ -26,3 +26,29 @@ target_link_libraries(parser_test
 
 # 添加测试
 add_test(NAME ParserTests COMMAND parser_test)
+
+# 添加 IRBuilder 测试可执行文件
+add_executable(irbuilder_test irbuilder_test.cpp)
+
+# 链接库
+target_link_libraries(irbuilder_test
+    compiler_lib
+    GTest::GTest
+    GTest::Main
+)
+
+# 添加测试
+add_test(NAME IRBuilderTests COMMAND irbuilder_test)
+
+# 添加 TypeMapper 测试可执行文件
+add_executable(typemapper_test typemapper_test.cpp)
+
+# 链接库
+target_link_libraries(typemapper_test
+    compiler_lib
+    GTest::GTest
+    GTest::Main
+)
+
+# 添加测试
+add_test(NAME TypeMapperTests COMMAND typemapper_test)
