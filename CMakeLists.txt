@@ -24,7 +24,8 @@ add_library(compiler_lib src/lexer.cpp
                          src/typeinference.cpp
                          src/semantic.cpp
                          src/irbuilder.cpp
-                         src/typemapper.cpp)
+                         src/typemapper.cpp
+                         src/builtindeclarator.cpp)
 
 add_executable(code src/semanticmain.cpp)
 target_link_libraries(code PRIVATE compiler_lib)

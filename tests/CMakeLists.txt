@@ -52,3 +52,16 @@ target_link_libraries(typemapper_test
 
 # 添加测试
 add_test(NAME TypeMapperTests COMMAND typemapper_test)
+
+# 添加 BuiltinDeclarator 测试可执行文件
+add_executable(builtindeclarator_test builtindeclarator_test.cpp)
+
+# 链接库
+target_link_libraries(builtindeclarator_test
+    compiler_lib
+    GTest::GTest
+    GTest::Main
+)
+
+# 添加测试
+add_test(NAME BuiltinDeclaratorTests COMMAND builtindeclarator_test)
