@@ -328,6 +328,10 @@ std::string IRBuilder::generateBasicBlockName(const std::string& prefix) {
     if (prefix.empty()) {
         return "bb" + std::to_string(++basicBlockCounter);
     }
+    // 对于特殊的基本块名称（如 entry），不添加计数器
+    if (prefix == "entry") {
+        return "entry";
+    }
     return prefix + std::to_string(++basicBlockCounter);
 }
 

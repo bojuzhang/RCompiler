@@ -91,3 +91,16 @@ target_link_libraries(statementgenerator_test
 
 # 添加测试
 add_test(NAME StatementGeneratorTests COMMAND statementgenerator_test)
+
+# 添加 FunctionCodegen 测试可执行文件
+add_executable(functioncodegen_test functioncodegen_test.cpp)
+
+# 链接库
+target_link_libraries(functioncodegen_test
+    compiler_lib
+    GTest::GTest
+    GTest::Main
+)
+
+# 添加测试
+add_test(NAME FunctionCodegenTests COMMAND functioncodegen_test)
