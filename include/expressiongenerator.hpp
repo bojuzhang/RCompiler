@@ -518,4 +518,19 @@ private:
      * @return 类型字符串表示
      */
     std::string typeToStringHelper(std::shared_ptr<Type> type);
+    
+    /**
+     * 从符号表获取函数返回类型
+     * @param functionName 函数名
+     * @return 返回类型的 LLVM 类型字符串
+     */
+    std::string getFunctionReturnType(const std::string& functionName);
+    
+    /**
+     * 从结构体定义获取字段类型
+     * @param structName 结构体名
+     * @param fieldName 字段名
+     * @return 字段类型的 LLVM 类型字符串
+     */
+    std::string getStructFieldType(const std::string& structName, const std::string& fieldName);
 };

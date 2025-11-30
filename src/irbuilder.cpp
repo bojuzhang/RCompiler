@@ -21,7 +21,7 @@ IRBuilder::IRBuilder(std::ostream& output, std::shared_ptr<ScopeTree> scopeTree)
 // ==================== 寄存器管理接口 ====================
 
 std::string IRBuilder::newRegister() {
-    std::string regName = "%" + std::to_string(++registerCounter);
+    std::string regName = "%" + std::to_string(registerCounter++);
     addRegister(regName, "i32", false, true);
     return regName;
 }

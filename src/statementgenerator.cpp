@@ -4,8 +4,8 @@
 #include <vector>
 #include <memory>
 
-// 前向声明 ExpressionGenerator 类（将在实际实现中包含对应的头文件）
-// #include "expressiongenerator.hpp"
+// 包含 ExpressionGenerator 头文件以解决前向声明问题
+#include "expressiongenerator.hpp"
 
 // 构造函数
 StatementGenerator::StatementGenerator(std::shared_ptr<IRBuilder> irBuilder,
@@ -108,16 +108,22 @@ bool StatementGenerator::generateLetStatement(std::shared_ptr<LetStatement> letS
         // 2. 确定变量类型
         std::string llvmType;
         if (letStatement->type) {
-            // 使用显式类型
-            // TODO: 这里需要从 Type 节点获取类型信息
-            // 暂时使用默认类型
-            llvmType = "i32";
+            // 使用显式类型 - 从 Type 节点获取类型信息
+            llvmType = typeToStringHelper(letStatement->type);
+            if (llvmType.empty()) {
+                llvmType = "i32"; // 默认类型
+            }
         } else {
             // 从初始化表达式推断类型
             if (letStatement->expression) {
-                // TODO: 这里需要调用 ExpressionGenerator 获取表达式类型
-                // 暂时使用默认类型
-                llvmType = "i32";
+                // 调用 ExpressionGenerator 获取表达式类型
+                if (validateExpressionGenerator()) {
+                    // 这里需要从语义分析阶段获取类型信息
+                    // 暂时使用默认类型，实际应该从 nodeTypeMap 获取
+                    llvmType = "i32";
+                } else {
+                    llvmType = "i32";
+                }
             } else {
                 // 使用默认类型
                 llvmType = "i32";
@@ -138,10 +144,8 @@ bool StatementGenerator::generateLetStatement(std::shared_ptr<LetStatement> letS
                 return false;
             }
             
-            // TODO: 调用 ExpressionGenerator 生成初始化表达式
-            // std::string initReg = expressionGenerator->generateExpression(letStatement->expression);
-            // 暂时使用空字符串
-            std::string initReg = "";
+            // 调用 ExpressionGenerator 生成初始化表达式
+            std::string initReg = expressionGenerator->generateExpression(letStatement->expression);
             
             if (!initReg.empty()) {
                 // 存储初始值到变量
@@ -173,13 +177,11 @@ bool StatementGenerator::generateExpressionStatement(std::shared_ptr<ExpressionS
     
     try {
         // 检查表达式是否为控制流表达式
-        // TODO: 这里需要检查表达式类型，如果是控制流表达式则委托给 ExpressionGenerator
-        // 暂时统一委托给 ExpressionGenerator
+        // 控制流表达式（if、loop、while、break、continue、return）都应该委托给 ExpressionGenerator
+        // 因为它们都是 Expression 的子类
         
-        // TODO: 调用 ExpressionGenerator 生成表达式
-        // std::string resultReg = expressionGenerator->generateExpression(exprStatement->astnode);
-        // 暂时使用空字符串
-        std::string resultReg = "";
+        // 调用 ExpressionGenerator 生成表达式
+        std::string resultReg = expressionGenerator->generateExpression(exprStatement->astnode);
         
         // 对于有分号的表达式语句，丢弃结果
         if (exprStatement->hassemi && !resultReg.empty()) {
@@ -287,17 +289,14 @@ std::string StatementGenerator::getCurrentContinueTarget() {
 
 std::string StatementGenerator::allocateVariable(const std::string& variableName, const std::string& type) {
     try {
-        // 使用 IRBuilder 分配栈空间
-        std::string reg = irBuilder->emitAlloca(type);
-        
         // 为变量设置特定的寄存器名
         std::string variableReg = irBuilder->newRegister(variableName, "_ptr");
         
-        // 如果 IRBuilder 返回的寄存器名不同，需要重新分配
-        if (reg != variableReg) {
-            // TODO: 这里可能需要更复杂的寄存器重命名逻辑
-            // 暂时使用 IRBuilder 返回的寄存器
-        }
+        // 使用 IRBuilder 分配栈空间，但使用我们指定的寄存器名
+        std::string reg = irBuilder->emitAlloca(type);
+        
+        // 手动设置寄存器映射，确保变量名映射到正确的寄存器
+        irBuilder->setRegisterType(variableReg, type + "*");
         
         return variableReg;
     }
@@ -360,8 +359,31 @@ std::string StatementGenerator::getStatementType(std::shared_ptr<Statement> stat
 }
 
 bool StatementGenerator::isStatementTerminator(std::shared_ptr<Statement> statement) {
-    // TODO: 实现语句终止符检查逻辑
-    // 需要检查语句是否包含 return、break、continue 等终止符
+    if (!statement || !statement->astnode) {
+        return false;
+    }
+    
+    // 检查表达式语句是否包含终止符
+    if (auto exprStmt = std::dynamic_pointer_cast<ExpressionStatement>(statement->astnode)) {
+        if (!exprStmt->astnode) {
+            return false;
+        }
+        
+        // 检查是否为控制流表达式
+        return (std::dynamic_pointer_cast<ReturnExpression>(exprStmt->astnode) != nullptr) ||
+               (std::dynamic_pointer_cast<BreakExpression>(exprStmt->astnode) != nullptr) ||
+               (std::dynamic_pointer_cast<ContinueExpression>(exprStmt->astnode) != nullptr);
+    }
+    
+    // 检查项语句中的函数定义
+    if (auto item = std::dynamic_pointer_cast<Item>(statement->astnode)) {
+        if (auto function = std::dynamic_pointer_cast<Function>(item->item)) {
+            // 函数定义本身不是终止符，但函数体可能包含
+            // 这里简化处理，返回 false
+            return false;
+        }
+    }
+    
     return false;
 }
 
@@ -381,7 +403,28 @@ std::string StatementGenerator::extractVariableName(std::shared_ptr<Pattern> pat
         return identPattern->identifier;
     }
     
-    // TODO: 处理其他模式类型
+    // 处理其他模式类型
+    if (auto wildcardPattern = std::dynamic_pointer_cast<WildcardPattern>(pattern)) {
+        return "_"; // 通配符模式
+    }
+    
+    if (auto refPattern = std::dynamic_pointer_cast<ReferencePattern>(pattern)) {
+        // 引用模式，递归处理内部模式
+        return extractVariableName(refPattern->pattern);
+    }
+    
+    if (auto pathPattern = std::dynamic_pointer_cast<PathPattern>(pattern)) {
+        // 路径模式，从路径中提取变量名
+        if (auto pathExpr = std::dynamic_pointer_cast<PathExpression>(pathPattern->pathexpression)) {
+            if (pathExpr->simplepath) {
+                auto segments = pathExpr->simplepath->simplepathsegements;
+                if (!segments.empty()) {
+                    return segments.back()->identifier;
+                }
+            }
+        }
+    }
+    
     return "";
 }
 
@@ -412,28 +455,158 @@ void StatementGenerator::reportError(const std::string& message) {
 // ==================== 私有辅助方法 ====================
 
 bool StatementGenerator::generateFunctionItem(std::shared_ptr<Function> function) {
-    // TODO: 实现函数定义生成
-    // 这需要与 FunctionCodegen 组件协作
-    irBuilder->emitComment("Function definition: " + function->identifier_name);
-    return true;
+    if (!function) {
+        reportError("Function is null");
+        return false;
+    }
+    
+    try {
+        irBuilder->emitComment("Function definition: " + function->identifier_name);
+        
+        // 这里应该与 FunctionCodegen 组件协作
+        // 由于 StatementGenerator 主要处理语句，函数定义应该委托给专门的组件
+        // 暂时只生成注释，实际实现需要调用 FunctionCodegen
+        
+        // 注意：在实际的编译器架构中，函数定义通常在顶层处理
+        // StatementGenerator 主要处理函数体内的语句
+        
+        return true;
+    }
+    catch (const std::exception& e) {
+        reportError("Exception in generateFunctionItem: " + std::string(e.what()));
+        return false;
+    }
 }
 
 bool StatementGenerator::generateStructItem(std::shared_ptr<StructStruct> structDef) {
-    // TODO: 实现结构体定义生成
-    irBuilder->emitComment("Struct definition: " + structDef->identifier);
-    return true;
+    if (!structDef) {
+        reportError("Struct definition is null");
+        return false;
+    }
+    
+    try {
+        irBuilder->emitComment("Struct definition: " + structDef->identifier);
+        
+        // 生成结构体类型定义
+        std::string structName = structDef->identifier;
+        std::string structType = "%struct_" + structName;
+        
+        // 收集字段信息
+        std::vector<std::string> fieldTypes;
+        if (structDef->structfields) {
+            for (const auto& field : structDef->structfields->structfields) {
+                if (field && field->type) {
+                    std::string fieldType = typeToStringHelper(field->type);
+                    if (!fieldType.empty()) {
+                        fieldTypes.push_back(fieldType);
+                    } else {
+                        fieldTypes.push_back("i32"); // 默认类型
+                    }
+                }
+            }
+        }
+        
+        // 生成结构体类型定义
+        std::string structDefStr = structType + " = type {";
+        for (size_t i = 0; i < fieldTypes.size(); ++i) {
+            if (i > 0) structDefStr += ", ";
+            structDefStr += fieldTypes[i];
+        }
+        structDefStr += "}";
+        
+        // 这里应该将结构体定义添加到模块头部
+        // 暂时只生成注释
+        irBuilder->emitComment("Struct type: " + structDefStr);
+        
+        return true;
+    }
+    catch (const std::exception& e) {
+        reportError("Exception in generateStructItem: " + std::string(e.what()));
+        return false;
+    }
 }
 
 bool StatementGenerator::generateConstantItem(std::shared_ptr<ConstantItem> constant) {
-    // TODO: 实现常量定义生成
-    irBuilder->emitComment("Constant definition: " + constant->identifier);
-    return true;
+    if (!constant) {
+        reportError("Constant definition is null");
+        return false;
+    }
+    
+    try {
+        irBuilder->emitComment("Constant definition: " + constant->identifier);
+        
+        // 确定常量类型
+        std::string constType;
+        if (constant->type) {
+            constType = typeToStringHelper(constant->type);
+        } else {
+            // 从表达式推断类型
+            if (constant->expression && validateExpressionGenerator()) {
+                // 这里应该从表达式推断类型，暂时使用默认类型
+                constType = "i32";
+            } else {
+                constType = "i32";
+            }
+        }
+        
+        // 生成常量值
+        if (constant->expression && validateExpressionGenerator()) {
+            std::string constValue = expressionGenerator->generateExpression(constant->expression);
+            if (!constValue.empty()) {
+                // 生成全局常量定义
+                std::string globalName = "@" + constant->identifier;
+                std::string globalDecl = globalName + " = constant " + constType + " " + constValue;
+                
+                // 这里应该将全局常量添加到模块头部
+                // 暂时只生成注释
+                irBuilder->emitComment("Global constant: " + globalDecl);
+            }
+        }
+        
+        return true;
+    }
+    catch (const std::exception& e) {
+        reportError("Exception in generateConstantItem: " + std::string(e.what()));
+        return false;
+    }
 }
 
 bool StatementGenerator::generateImplItem(std::shared_ptr<InherentImpl> impl) {
-    // TODO: 实现 impl 块生成
-    irBuilder->emitComment("Impl block");
-    return true;
+    if (!impl) {
+        reportError("Impl block is null");
+        return false;
+    }
+    
+    try {
+        irBuilder->emitComment("Impl block");
+        
+        // 获取实现的目标类型
+        std::string targetType;
+        if (impl->type) {
+            targetType = typeToStringHelper(impl->type);
+        }
+        
+        irBuilder->emitComment("Impl for type: " + targetType);
+        
+        // 处理关联项（方法、常量等）
+        for (const auto& item : impl->associateditems) {
+            if (item && item->consttantitem_or_function) {
+                if (auto function = std::dynamic_pointer_cast<Function>(item->consttantitem_or_function)) {
+                    irBuilder->emitComment("Method: " + function->identifier_name);
+                    // 这里应该生成方法定义
+                } else if (auto constant = std::dynamic_pointer_cast<ConstantItem>(item->consttantitem_or_function)) {
+                    irBuilder->emitComment("Associated constant: " + constant->identifier);
+                    // 这里应该生成关联常量定义
+                }
+            }
+        }
+        
+        return true;
+    }
+    catch (const std::exception& e) {
+        reportError("Exception in generateImplItem: " + std::string(e.what()));
+        return false;
+    }
 }
 
 std::string StatementGenerator::createUnreachableBlock() {
@@ -464,15 +637,67 @@ bool StatementGenerator::validateExpressionGenerator() {
 }
 
 std::string StatementGenerator::getVariableLLVMType(const std::string& variableName) {
-    // TODO: 从符号表获取变量的类型信息
-    // 暂时返回默认类型
-    return "i32";
+    // 从符号表获取变量的类型信息
+    if (scopeTree) {
+        auto currentScope = scopeTree->GetCurrentScope();
+        if (currentScope) {
+            auto symbol = currentScope->Lookup(variableName);
+            if (symbol && symbol->type) {
+                return typeMapper->mapSemanticTypeToLLVM(symbol->type);
+            }
+        }
+    }
+    
+    return "i32"; // 默认类型
+}
+
+// ==================== 私有辅助方法实现 ====================
+
+std::string StatementGenerator::typeToStringHelper(std::shared_ptr<Type> type) {
+    if (!type) {
+        return "i32"; // 默认类型
+    }
+    
+    // 根据 Type 的具体子类型进行转换
+    if (auto typePath = std::dynamic_pointer_cast<TypePath>(type)) {
+        if (typePath->simplepathsegement) {
+            return typePath->simplepathsegement->identifier;
+        }
+    } else if (auto arrayType = std::dynamic_pointer_cast<ArrayType>(type)) {
+        std::string elementType = typeToStringHelper(arrayType->type);
+        std::string sizeStr = "10"; // 默认大小，实际应该从表达式求值
+        return "[" + elementType + "; " + sizeStr + "]";
+    } else if (auto refType = std::dynamic_pointer_cast<ReferenceType>(type)) {
+        std::string targetType = typeToStringHelper(refType->type);
+        return (refType->ismut ? "&mut " : "&") + targetType;
+    } else if (auto unitType = std::dynamic_pointer_cast<UnitType>(type)) {
+        return "()";
+    }
+    
+    return "i32"; // 默认类型
 }
 
 void StatementGenerator::registerVariable(const std::string& variableName, const std::string& type, const std::string& registerName) {
-    // TODO: 创建符号并注册到符号表
-    // 这需要与 ScopeTree 协作
-    
-    // 暂时只添加注释
-    irBuilder->emitComment("Register variable: " + variableName + " of type " + type);
+    // 创建符号并注册到符号表
+    if (scopeTree) {
+        auto currentScope = scopeTree->GetCurrentScope();
+        if (currentScope) {
+            // 创建变量符号
+            auto symbol = std::make_shared<Symbol>(variableName, SymbolKind::Variable);
+            
+            // 创建语义类型
+            auto semanticType = std::make_shared<SimpleType>(type);
+            symbol->type = semanticType;
+            symbol->ismutable = true; // let 绑定的变量默认可变
+            
+            // 注册到符号表
+            currentScope->Insert(variableName, symbol);
+            
+            irBuilder->emitComment("Register variable: " + variableName + " of type " + type + " at " + registerName);
+        } else {
+            reportError("No current scope available for variable registration: " + variableName);
+        }
+    } else {
+        reportError("ScopeTree not available for variable registration: " + variableName);
+    }
 }

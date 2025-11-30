@@ -466,8 +466,10 @@ std::string ExpressionGenerator::generateCallExpression(std::shared_ptr<CallExpr
         std::vector<std::string> args = generateCallArguments(callExpr->callparams);
         
         // 获取函数返回类型
-        // TODO: 从符号表获取函数类型信息
-        std::string returnType = "i32"; // 默认返回类型
+        std::string returnType = getFunctionReturnType(functionName);
+        if (returnType.empty()) {
+            returnType = "i32"; // 默认返回类型
+        }
         
         // 生成函数调用
         std::string resultReg = irBuilder->emitCall(functionName, args, returnType);
@@ -543,7 +545,10 @@ std::string ExpressionGenerator::generateFieldExpression(std::shared_ptr<FieldEx
         }
         
         // 获取字段类型
-        std::string fieldType = "i32"; // TODO: 从结构体定义获取字段类型
+        std::string fieldType = getStructFieldType(receiverType, fieldExpr->identifier);
+        if (fieldType.empty()) {
+            fieldType = "i32"; // 默认类型
+        }
         
         // 加载字段值
         std::string valueReg = irBuilder->emitLoad(fieldPtrReg, fieldType);
@@ -975,7 +980,10 @@ std::pair<std::string, std::string> ExpressionGenerator::analyzeLValue(std::shar
             std::string receiverReg = generateExpression(fieldExpr->expression);
             std::string receiverType = getExpressionType(fieldExpr->expression);
             std::string fieldPtrReg = generateFieldAccessAddress(receiverReg, fieldExpr->identifier, receiverType);
-            std::string fieldType = "i32"; // TODO: 从结构体定义获取字段类型
+            std::string fieldType = getStructFieldType(receiverType, fieldExpr->identifier);
+            if (fieldType.empty()) {
+                fieldType = "i32"; // 默认类型
+            }
             return {fieldPtrReg, fieldType};
         }
         else if (auto indexExpr = std::dynamic_pointer_cast<IndexExpression>(expression)) {
@@ -1025,7 +1033,7 @@ std::string ExpressionGenerator::generateStringConstant(const std::string& strin
                            std::to_string(escapedValue.length() + 1) + " x i8] c\"" + 
                            escapedValue + "\\00\"";
     
-    // TODO: 需要将全局常量声明添加到模块头部
+    // 记录全局常量信息，稍后由 IRGenerator 添加到模块头部
     // 暂时只记录常量名称
     stringConstants[stringValue] = constantName;
     
@@ -1071,9 +1079,36 @@ std::string ExpressionGenerator::generateFieldAccessAddress(const std::string& b
 }
 
 int ExpressionGenerator::getStructFieldIndex(const std::string& structName, const std::string& fieldName) {
-    // TODO: 从符号表获取结构体定义并查找字段索引
-    // 暂时返回 -1 表示未找到
-    return -1;
+    try {
+        // 从符号表查找结构体定义
+        auto currentScope = scopeTree->GetCurrentScope();
+        if (!currentScope) {
+            return -1;
+        }
+        
+        auto symbol = currentScope->Lookup(structName);
+        if (!symbol || symbol->kind != SymbolKind::Struct) {
+            return -1;
+        }
+        
+        auto structSymbol = std::dynamic_pointer_cast<StructSymbol>(symbol);
+        if (!structSymbol) {
+            return -1;
+        }
+        
+        // 查找字段索引
+        for (size_t i = 0; i < structSymbol->fields.size(); ++i) {
+            if (structSymbol->fields[i]->name == fieldName) {
+                return static_cast<int>(i);
+            }
+        }
+        
+        return -1; // 未找到字段
+    }
+    catch (const std::exception& e) {
+        reportError("Exception in getStructFieldIndex: " + std::string(e.what()));
+        return -1;
+    }
 }
 
 std::vector<std::string> ExpressionGenerator::generateCallArguments(std::shared_ptr<CallParams> callParams) {
@@ -1312,7 +1347,7 @@ std::string ExpressionGenerator::generateBlockExpression(std::shared_ptr<BlockEx
     
     try {
         // 创建新的作用域
-        // TODO: 实现作用域管理
+        scopeTree->EnterScope(Scope::ScopeType::Block, blockExpr.get());
         
         // 生成块中的所有语句
         if (!generateBlockStatements(blockExpr->statements)) {
@@ -1322,10 +1357,16 @@ std::string ExpressionGenerator::generateBlockExpression(std::shared_ptr<BlockEx
         
         // 如果有尾表达式，生成它
         if (blockExpr->expressionwithoutblock) {
-            return generateExpression(blockExpr->expressionwithoutblock);
+            std::string result = generateExpression(blockExpr->expressionwithoutblock);
+            // 退出作用域
+            scopeTree->ExitScope();
+            return result;
         } else {
             // 没有尾表达式，返回 unit 值
-            return generateUnitValue();
+            std::string result = generateUnitValue();
+            // 退出作用域
+            scopeTree->ExitScope();
+            return result;
         }
     }
     catch (const std::exception& e) {
@@ -1634,6 +1675,68 @@ std::string ExpressionGenerator::storeExpressionResult(std::shared_ptr<Expressio
     }
     catch (const std::exception& e) {
         reportError("Exception in storeExpressionResult: " + std::string(e.what()));
+        return "";
+    }
+}
+
+// ==================== 新增的辅助方法实现 ====================
+
+std::string ExpressionGenerator::getFunctionReturnType(const std::string& functionName) {
+    try {
+        // 从符号表查找函数定义
+        auto currentScope = scopeTree->GetCurrentScope();
+        if (!currentScope) {
+            return "";
+        }
+        
+        auto symbol = currentScope->Lookup(functionName);
+        if (!symbol || symbol->kind != SymbolKind::Function) {
+            return "";
+        }
+        
+        auto functionSymbol = std::dynamic_pointer_cast<FunctionSymbol>(symbol);
+        if (!functionSymbol || !functionSymbol->returntype) {
+            return "";
+        }
+        
+        // 将语义类型映射为 LLVM 类型
+        return typeMapper->mapSemanticTypeToLLVM(functionSymbol->returntype);
+    }
+    catch (const std::exception& e) {
+        reportError("Exception in getFunctionReturnType: " + std::string(e.what()));
+        return "";
+    }
+}
+
+std::string ExpressionGenerator::getStructFieldType(const std::string& structName, const std::string& fieldName) {
+    try {
+        // 从符号表查找结构体定义
+        auto currentScope = scopeTree->GetCurrentScope();
+        if (!currentScope) {
+            return "";
+        }
+        
+        auto symbol = currentScope->Lookup(structName);
+        if (!symbol || symbol->kind != SymbolKind::Struct) {
+            return "";
+        }
+        
+        auto structSymbol = std::dynamic_pointer_cast<StructSymbol>(symbol);
+        if (!structSymbol) {
+            return "";
+        }
+        
+        // 查找字段类型
+        for (const auto& field : structSymbol->fields) {
+            if (field->name == fieldName && field->type) {
+                return typeMapper->mapSemanticTypeToLLVM(field->type);
+            }
+        }
+        
+        return ""; // 未找到字段
+    }
+    catch (const std::exception& e) {
+        reportError("Exception in getStructFieldType: " + std::string(e.what()));
         return "";
     }
 }

@@ -335,4 +335,12 @@ private:
      * @param registerName 寄存器名
      */
     void registerVariable(const std::string& variableName, const std::string& type, const std::string& registerName);
+    
+private:
+    /**
+     * 将 Type 节点转换为字符串表示
+     * @param type Type 节点指针
+     * @return 类型字符串表示
+     */
+    std::string typeToStringHelper(std::shared_ptr<Type> type);
 };

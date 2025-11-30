@@ -145,25 +145,20 @@ bool FunctionCodegen::generateFunctionBody(std::shared_ptr<Function> function) {
     }
     
     try {
-        // 检查函数体是否为空 - 暂时跳过 StatementGenerator 验证
-        // if (!validateStatementGenerator()) {
-        //     reportError("StatementGenerator not set for function body generation");
-        //     return false;
-        // }
+        // 检查函数体是否为空
+        if (!validateStatementGenerator()) {
+            reportError("StatementGenerator not set for function body generation");
+            return false;
+        }
         
         // 生成函数体语句
-        // 注意：这里需要与 StatementGenerator 协作
-        // 暂时添加注释
-        irBuilder->emitComment("Function body generation - to be implemented with StatementGenerator");
-        
-        // TODO: 实际实现需要调用 StatementGenerator 处理函数体
-        // std::vector<std::shared_ptr<Statement>> statements = function->blockexpression->statements;
-        // for (const auto& stmt : statements) {
-        //     if (!statementGenerator->generateStatement(stmt)) {
-        //         reportError("Failed to generate statement in function body");
-        //         return false;
-        //     }
-        // }
+        std::vector<std::shared_ptr<Statement>> statements = function->blockexpression->statements;
+        for (const auto& stmt : statements) {
+            if (!statementGenerator->generateStatement(stmt)) {
+                reportError("Failed to generate statement in function body");
+                return false;
+            }
+        }
         
         // 处理尾表达式（如果存在）
         if (function->blockexpression->expressionwithoutblock) {
@@ -407,12 +402,16 @@ std::string FunctionCodegen::generateReturnValue(std::shared_ptr<Expression> exp
         // }
         
         // 生成表达式值
-        std::string valueReg = "%_dummy"; // 暂时使用虚拟寄存器
-        // std::string valueReg = expressionGenerator->generateExpression(expression);
-        // if (valueReg.empty()) {
-        //     reportError("Failed to generate return value expression");
-        //     return "";
-        // }
+        if (!validateExpressionGenerator()) {
+            reportError("ExpressionGenerator not set for return value generation");
+            return "";
+        }
+        
+        std::string valueReg = expressionGenerator->generateExpression(expression);
+        if (valueReg.empty()) {
+            reportError("Failed to generate return value expression");
+            return "";
+        }
         
         // 获取表达式类型
         std::string valueType = getNodeLLVMType(expression);
@@ -638,9 +637,13 @@ std::vector<std::string> FunctionCodegen::generateCallArguments(std::shared_ptr<
         //     return args;
         // }
         
+        if (!validateExpressionGenerator()) {
+            reportError("ExpressionGenerator not set for call argument generation");
+            return args;
+        }
+        
         for (const auto& expr : callParams->expressions) {
-            std::string argReg = "%_dummy"; // 暂时使用虚拟寄存器
-            // std::string argReg = expressionGenerator->generateExpression(expr);
+            std::string argReg = expressionGenerator->generateExpression(expr);
             if (!argReg.empty()) {
                 args.push_back(argReg);
             }
