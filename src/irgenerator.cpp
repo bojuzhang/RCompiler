@@ -34,8 +34,8 @@ IRGenerator::IRGenerator(std::shared_ptr<ScopeTree> scopeTree,
     
     // 初始化节点类型映射（如果有的话）
     if (typeChecker) {
-        // TODO: 从 typeChecker 获取节点类型映射
-        // nodeTypeMap = typeChecker->getNodeTypeMap();
+        // 从 typeChecker 获取节点类型映射
+        nodeTypeMap = typeChecker->getNodeTypeMap();
     }
     
     // 初始化组件

@@ -245,4 +245,8 @@ private:
     // exit 函数检查
     void CheckExitFunctionUsage(CallExpression& expr);
     void CheckMainFunctionExitRequirement(BlockExpression& blockExpr);
+    
+public:
+    // 获取节点类型映射，供 IRGenerator 使用
+    std::unordered_map<ASTNode*, std::shared_ptr<SemanticType>>& getNodeTypeMap();
 };

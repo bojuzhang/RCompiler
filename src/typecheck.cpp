@@ -4415,3 +4415,7 @@ bool TypeChecker::AreTypesCompatibleNonRecursive(std::shared_ptr<SemanticType> e
     return false;
 }
 
+std::unordered_map<ASTNode*, std::shared_ptr<SemanticType>>& TypeChecker::getNodeTypeMap() {
+    return nodeTypeMap;
+}
+

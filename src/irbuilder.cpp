@@ -21,7 +21,7 @@ IRBuilder::IRBuilder(std::ostream& output, std::shared_ptr<ScopeTree> scopeTree)
 // ==================== 寄存器管理接口 ====================
 
 std::string IRBuilder::newRegister() {
-    std::string regName = "%" + std::to_string(registerCounter++);
+    std::string regName = "%var_" + std::to_string(registerCounter++);
     addRegister(regName, "i32", false, true);
     return regName;
 }
@@ -94,15 +94,8 @@ std::string IRBuilder::getVariableRegister(const std::string& variableName) {
             // 找到变量，返回对应的寄存器
             int counter = it->variableCounters[variableName];
             
-            // 构建期望的寄存器名模式
-            std::string expectedPattern;
-            if (counter == 1) {
-                // 第一个变量，可能没有后缀，也可能有
-                expectedPattern = "%" + variableName;
-            } else {
-                // 有多个同名变量，最后一个应该有计数器
-                expectedPattern = "%" + variableName + "_" + std::to_string(counter);
-            }
+            // 构建期望的变量寄存器名模式
+            std::string expectedPattern = "%" + variableName + "_ptr";
             
             // 在该作用域的寄存器中查找
             for (const auto& regName : it->registers) {
@@ -115,12 +108,15 @@ std::string IRBuilder::getVariableRegister(const std::string& variableName) {
                 if (regName.find(expectedPattern) == 0) {
                     return regName;
                 }
-                
-                // 对于第一个变量（counter == 1），还要检查是否有后缀的情况
-                if (counter == 1) {
-                    std::string basePattern = "%" + variableName;
-                    if (regName.find(basePattern) == 0 && regName != basePattern) {
-                        // 如果找到以变量名开头但不是完全匹配的，可能是带后缀的
+            }
+            
+            // 如果没找到带_ptr后缀的，尝试查找以变量名开头的
+            std::string basePattern = "%" + variableName;
+            for (const auto& regName : it->registers) {
+                if (regName.find(basePattern) == 0) {
+                    // 检查它是否是指针类型
+                    auto regIt = registers.find(regName);
+                    if (regIt != registers.end() && regIt->second->llvmType.find('*') != std::string::npos) {
                         return regName;
                     }
                 }

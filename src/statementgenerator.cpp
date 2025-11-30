@@ -292,11 +292,18 @@ std::string StatementGenerator::allocateVariable(const std::string& variableName
         // 为变量设置特定的寄存器名
         std::string variableReg = irBuilder->newRegister(variableName, "_ptr");
         
-        // 使用 IRBuilder 分配栈空间，但使用我们指定的寄存器名
-        std::string reg = irBuilder->emitAlloca(type);
-        
-        // 手动设置寄存器映射，确保变量名映射到正确的寄存器
+        // 手动设置寄存器类型
         irBuilder->setRegisterType(variableReg, type + "*");
+        
+        // 生成 alloca 指令，但使用变量寄存器作为结果
+        std::string alignStr = "";
+        int autoAlign = 4; // 默认对齐
+        if (autoAlign > 0) {
+            alignStr = ", align " + std::to_string(autoAlign);
+        }
+        
+        std::string instruction = variableReg + " = alloca " + type + alignStr;
+        irBuilder->emitInstruction(instruction);
         
         return variableReg;
     }

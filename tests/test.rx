@@ -1,18 +1,7 @@
 fn main() {
     let mut a : i32 = 1;
     let mut b : i32 = 1;
-    if (a > b) {
-        printlnInt(a + b);
-    } else {
-        printlnInt(a - b);
-    }
-    let test : i32 = loop {
-        a = a - 1;
-        if (a < 0) {
-            break 10;
-        }
-        break 5;
-    };
-    printInt(test);
+    let test : i32 = if (a > b) {a + b} else {a - b};
+    printlnInt(test);
     exit(0);
 }

@@ -1241,12 +1241,15 @@ std::string ExpressionGenerator::generateArithmeticOperation(const std::string& 
     }
 }
 
-std::string ExpressionGenerator::generateComparisonOperation(const std::string& left, const std::string& right, 
+std::string ExpressionGenerator::generateComparisonOperation(const std::string& left, const std::string& right,
                                                           Token opType, const std::string& resultType) {
     try {
         std::string resultReg = irBuilder->newRegister();
         std::string condition = getComparisonCondition(opType);
-        std::string instruction = resultReg + " = icmp " + condition + " " + resultType + " " + left + ", " + right;
+        // 对于比较操作，操作数类型应该是操作数的实际类型，而不是结果类型
+        // 比较操作的结果总是 i1，但操作数类型应该是 i32（整数比较）
+        std::string operandType = "i32"; // 假设整数比较，实际应该从操作数类型推断
+        std::string instruction = resultReg + " = icmp " + condition + " " + operandType + " " + left + ", " + right;
         
         irBuilder->emitInstruction(instruction);
         irBuilder->setRegisterType(resultReg, "i1");
@@ -1340,6 +1343,10 @@ std::string ExpressionGenerator::typeToStringHelper(std::shared_ptr<Type> type) 
 // ==================== 块表达式和控制流表达式实现 ====================
 
 std::string ExpressionGenerator::generateBlockExpression(std::shared_ptr<BlockExpression> blockExpr) {
+    return generateBlockExpression(blockExpr, true);
+}
+
+std::string ExpressionGenerator::generateBlockExpression(std::shared_ptr<BlockExpression> blockExpr, bool needsValue) {
     if (!blockExpr) {
         reportError("BlockExpression is null");
         return "";
@@ -1352,6 +1359,7 @@ std::string ExpressionGenerator::generateBlockExpression(std::shared_ptr<BlockEx
         // 生成块中的所有语句
         if (!generateBlockStatements(blockExpr->statements)) {
             reportError("Failed to generate block statements");
+            scopeTree->ExitScope();
             return "";
         }
         
@@ -1362,11 +1370,16 @@ std::string ExpressionGenerator::generateBlockExpression(std::shared_ptr<BlockEx
             scopeTree->ExitScope();
             return result;
         } else {
-            // 没有尾表达式，返回 unit 值
-            std::string result = generateUnitValue();
+            // 没有尾表达式
             // 退出作用域
             scopeTree->ExitScope();
-            return result;
+            if (needsValue) {
+                // 只有在需要值时才生成 unit 值
+                return generateUnitValue();
+            } else {
+                // 不需要值，返回空字符串
+                return "";
+            }
         }
     }
     catch (const std::exception& e) {
@@ -1415,6 +1428,20 @@ std::string ExpressionGenerator::generateIfExpression(std::shared_ptr<IfExpressi
             return "";
         }
         
+        // 获取 if 表达式的类型
+        auto ifTypeIt = nodeTypeMap.find(ifExpr.get());
+        std::shared_ptr<SemanticType> ifType = nullptr;
+        if (ifTypeIt != nodeTypeMap.end()) {
+            ifType = ifTypeIt->second;
+        }
+        
+        // 检查 if 表达式是否需要生成值（非 unit 类型）
+        bool needsValue = false;
+        if (ifType) {
+            std::string typeStr = ifType->tostring();
+            needsValue = (typeStr != "()" && typeStr != "!");
+        }
+        
         // 创建基本块
         std::string thenBB = irBuilder->newBasicBlock("if.then");
         std::string elseBB = irBuilder->newBasicBlock("if.else");
@@ -1425,27 +1452,56 @@ std::string ExpressionGenerator::generateIfExpression(std::shared_ptr<IfExpressi
         
         // 生成 then 分支
         irBuilder->emitLabel(thenBB);
-        std::string thenResult = generateExpression(ifExpr->ifblockexpression);
+        std::string thenResult;
+        if (auto blockExpr = std::dynamic_pointer_cast<BlockExpression>(ifExpr->ifblockexpression)) {
+            thenResult = generateBlockExpression(blockExpr, needsValue);
+        } else {
+            if (needsValue) {
+                thenResult = generateExpression(ifExpr->ifblockexpression);
+            } else {
+                generateExpression(ifExpr->ifblockexpression);
+                thenResult = "";
+            }
+        }
         irBuilder->emitBr(endBB);
         
         // 生成 else 分支（如果存在）
         std::string elseResult;
         if (ifExpr->elseexpression) {
             irBuilder->emitLabel(elseBB);
-            elseResult = generateExpression(ifExpr->elseexpression);
+            if (auto blockExpr = std::dynamic_pointer_cast<BlockExpression>(ifExpr->elseexpression)) {
+                elseResult = generateBlockExpression(blockExpr, needsValue);
+            } else {
+                if (needsValue) {
+                    elseResult = generateExpression(ifExpr->elseexpression);
+                } else {
+                    generateExpression(ifExpr->elseexpression);
+                    elseResult = "";
+                }
+            }
             irBuilder->emitBr(endBB);
         } else {
             irBuilder->emitLabel(elseBB);
-            elseResult = generateUnitValue();
+            if (needsValue) {
+                elseResult = generateUnitValue();
+            } else {
+                elseResult = "";
+            }
             irBuilder->emitBr(endBB);
         }
         
         // 生成合并点
         irBuilder->emitLabel(endBB);
         
-        // 简化处理：返回 then 分支的结果
-        // 实际实现中应该使用 phi 节点
-        return thenResult;
+        // 如果需要值，生成 phi 节点或返回其中一个分支的值
+        if (needsValue) {
+            // 简化处理：返回 then 分支的结果
+            // 实际实现中应该使用 phi 节点
+            return thenResult;
+        } else {
+            // 如果不需要值，返回空字符串
+            return "";
+        }
     }
     catch (const std::exception& e) {
         reportError("Exception in generateIfExpression: " + std::string(e.what()));

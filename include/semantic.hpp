@@ -26,6 +26,7 @@ public:
     // 访问器方法
     std::shared_ptr<ScopeTree> getScopeTree() const;
     std::shared_ptr<TypeChecker> getTypeChecker() const;
+    const std::unordered_map<ASTNode*, std::shared_ptr<SemanticType>>& getNodeTypeMap() const;
     
 private:
     bool RunSymbolCollection();
