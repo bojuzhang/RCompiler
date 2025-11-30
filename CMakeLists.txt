@@ -31,7 +31,7 @@ add_library(compiler_lib src/lexer.cpp
                          src/functioncodegen.cpp
                          src/irgenerator.cpp)
 
-add_executable(code src/semanticmain.cpp)
+add_executable(code src/main.cpp)
 target_link_libraries(code PRIVATE compiler_lib)
 
 if(Boost_FOUND)

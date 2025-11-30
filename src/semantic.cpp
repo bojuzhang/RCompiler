@@ -41,6 +41,14 @@ bool CompleteSemanticAnalyzer::HasAnalysisErrors() const {
     return hasErrors;
 }
 
+std::shared_ptr<ScopeTree> CompleteSemanticAnalyzer::getScopeTree() const {
+    return scopeTree;
+}
+
+std::shared_ptr<TypeChecker> CompleteSemanticAnalyzer::getTypeChecker() const {
+    return typeChecker;
+}
+
 bool CompleteSemanticAnalyzer::RunSymbolCollection() {
     std::cerr << "Step 1: Symbol Collection" << std::endl;
     

@@ -23,6 +23,10 @@ public:
     bool Analyze();
     bool HasAnalysisErrors() const;
     
+    // 访问器方法
+    std::shared_ptr<ScopeTree> getScopeTree() const;
+    std::shared_ptr<TypeChecker> getTypeChecker() const;
+    
 private:
     bool RunSymbolCollection();
     bool RunConstantEvaluation();
