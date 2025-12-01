@@ -96,6 +96,9 @@ std::string ExpressionGenerator::generateExpression(std::shared_ptr<Expression> 
         else if (auto blockExpr = std::dynamic_pointer_cast<BlockExpression>(expression)) {
             return generateBlockExpression(blockExpr);
         }
+        else if (auto groupedExpr = std::dynamic_pointer_cast<GroupedExpression>(expression)) {
+            return generateGroupedExpression(groupedExpr);
+        }
         else if (auto ifExpr = std::dynamic_pointer_cast<IfExpression>(expression)) {
             return generateIfExpression(ifExpr);
         }
@@ -1337,6 +1340,25 @@ std::string ExpressionGenerator::typeToStringHelper(std::shared_ptr<Type> type) 
     return "i32"; // 默认类型
 }
 
+// ==================== 分组表达式实现 ====================
+
+std::string ExpressionGenerator::generateGroupedExpression(std::shared_ptr<GroupedExpression> groupedExpr) {
+    if (!groupedExpr || !groupedExpr->expression) {
+        reportError("GroupedExpression or its expression is null");
+        return "";
+    }
+    
+    try {
+        // 分组表达式的值就是内部表达式的值
+        // 直接生成内部表达式并返回其结果
+        return generateExpression(groupedExpr->expression);
+    }
+    catch (const std::exception& e) {
+        reportError("Exception in generateGroupedExpression: " + std::string(e.what()));
+        return "";
+    }
+}
+
 // ==================== 块表达式和控制流表达式实现 ====================
 
 std::string ExpressionGenerator::generateBlockExpression(std::shared_ptr<BlockExpression> blockExpr) {
@@ -1437,11 +1459,21 @@ std::string ExpressionGenerator::generateIfExpression(std::shared_ptr<IfExpressi
             ifType = ifTypeIt->second;
         }
         
-        // 检查 if 表达式是否需要生成值（非 unit 类型）
+        // 检查 if 表达式是否需要生成值（非 unit 或 never 类型）
         bool needsValue = false;
+        std::string ifTypeStr;
         if (ifType) {
-            std::string typeStr = ifType->tostring();
-            needsValue = (typeStr != "()" && typeStr != "!");
+            ifTypeStr = ifType->tostring();
+            needsValue = (ifTypeStr != "()" && ifTypeStr != "!");
+        }
+        
+        // 声明一个值来存储 if 表达式的结果（如果需要值）
+        std::string resultPtr;
+        std::string resultType;
+        if (needsValue) {
+            resultType = getExpressionType(ifExpr);
+            // 分配内存来存储 if 表达式的结果
+            resultPtr = irBuilder->emitAlloca(resultType);
         }
         
         // 创建基本块
@@ -1454,24 +1486,43 @@ std::string ExpressionGenerator::generateIfExpression(std::shared_ptr<IfExpressi
         
         // 生成 then 分支
         irBuilder->emitLabel(thenBB);
-        std::string thenResult;
-        // 修复：块表达式自己决定是否需要生成值，不再传递 needsValue 参数
-        thenResult = generateExpression(ifExpr->ifblockexpression);
+        std::string thenResult = generateExpression(ifExpr->ifblockexpression);
+        if (needsValue && !thenResult.empty()) {
+            // 检查 then 结果是否为 unit 类型，如果是则跳过赋值
+            auto thenTypeIt = nodeTypeMap.find(ifExpr->ifblockexpression.get());
+            if (thenTypeIt != nodeTypeMap.end()) {
+                std::string thenTypeStr = thenTypeIt->second->tostring();
+                if (thenTypeStr != "()") {
+                    // 将 then 分支的结果存储到分配的内存中
+                    irBuilder->emitStore(thenResult, resultPtr);
+                }
+            }
+        }
         irBuilder->emitBr(endBB);
         
         // 生成 else 分支（如果存在）
-        std::string elseResult;
         if (ifExpr->elseexpression) {
             irBuilder->emitLabel(elseBB);
-            // 修复：块表达式自己决定是否需要生成值，不再传递 needsValue 参数
-            elseResult = generateExpression(ifExpr->elseexpression);
+            std::string elseResult = generateExpression(ifExpr->elseexpression);
+            if (needsValue && !elseResult.empty()) {
+                // 检查 else 结果是否为 unit 类型，如果是则跳过赋值
+                auto elseTypeIt = nodeTypeMap.find(ifExpr->elseexpression.get());
+                if (elseTypeIt != nodeTypeMap.end()) {
+                    std::string elseTypeStr = elseTypeIt->second->tostring();
+                    if (elseTypeStr != "()") {
+                        // 将 else 分支的结果存储到分配的内存中
+                        irBuilder->emitStore(elseResult, resultPtr);
+                    }
+                }
+            }
             irBuilder->emitBr(endBB);
         } else {
             irBuilder->emitLabel(elseBB);
             if (needsValue) {
-                elseResult = generateUnitValue();
-            } else {
-                elseResult = "";
+                std::string elseResult = generateUnitValue();
+                // 对于没有 else 分支的情况，如果需要值，则赋 unit 值
+                // 但根据类型检查，这种情况应该已经在 typecheck 阶段报错了
+                irBuilder->emitStore(elseResult, resultPtr);
             }
             irBuilder->emitBr(endBB);
         }
@@ -1479,11 +1530,9 @@ std::string ExpressionGenerator::generateIfExpression(std::shared_ptr<IfExpressi
         // 生成合并点
         irBuilder->emitLabel(endBB);
         
-        // 如果需要值，生成 phi 节点或返回其中一个分支的值
+        // 如果需要值，从内存中加载结果并返回
         if (needsValue) {
-            // 简化处理：返回 then 分支的结果
-            // 实际实现中应该使用 phi 节点
-            return thenResult;
+            return irBuilder->emitLoad(resultPtr, resultType);
         } else {
             // 如果不需要值，返回空字符串
             return "";
@@ -1502,6 +1551,30 @@ std::string ExpressionGenerator::generateLoopExpression(std::shared_ptr<Infinite
     }
     
     try {
+        // 获取 loop 表达式的类型
+        auto loopTypeIt = nodeTypeMap.find(loopExpr.get());
+        std::shared_ptr<SemanticType> loopType = nullptr;
+        if (loopTypeIt != nodeTypeMap.end()) {
+            loopType = loopTypeIt->second;
+        }
+        
+        // 检查 loop 表达式是否需要生成值（非 unit 或 never 类型）
+        bool needsValue = false;
+        std::string loopTypeStr;
+        std::string resultType;
+        if (loopType) {
+            loopTypeStr = loopType->tostring();
+            needsValue = (loopTypeStr != "()" && loopTypeStr != "!");
+        }
+        
+        // 声明一个值来存储 loop 表达式的结果（如果需要值）
+        std::string resultPtr;
+        if (needsValue) {
+            resultType = getExpressionType(loopExpr);
+            // 分配内存来存储 loop 表达式的结果
+            resultPtr = irBuilder->emitAlloca(resultType);
+        }
+        
         // 创建循环基本块
         std::string startBB = irBuilder->newBasicBlock("loop.start");
         std::string bodyBB = irBuilder->newBasicBlock("loop.body");
@@ -1510,11 +1583,24 @@ std::string ExpressionGenerator::generateLoopExpression(std::shared_ptr<Infinite
         // 进入循环上下文
         enterLoopContext(startBB, endBB, bodyBB);
         
+        // 设置循环上下文的结果存储信息
+        if (!loopContextStack.empty()) {
+            loopContextStack.top().resultPtr = resultPtr;
+            loopContextStack.top().resultType = resultType;
+        }
+        
+        // 初始化循环结果存储位置（如果需要值）
+        if (needsValue && !resultPtr.empty()) {
+            std::string initValue = generateUnitValue();
+            irBuilder->emitStore(initValue, resultPtr);
+        }
+        
         // 跳转到循环开始
         irBuilder->emitBr(startBB);
         
         // 循环开始标签
         irBuilder->emitLabel(startBB);
+        
         irBuilder->emitBr(bodyBB);
         
         // 循环体
@@ -1528,8 +1614,13 @@ std::string ExpressionGenerator::generateLoopExpression(std::shared_ptr<Infinite
         // 退出循环上下文
         exitLoopContext();
         
-        // 循环表达式返回 unit 类型
-        return generateUnitValue();
+        // 如果需要值，从内存中加载结果并返回
+        if (needsValue && !resultPtr.empty()) {
+            return irBuilder->emitLoad(resultPtr, resultType);
+        } else {
+            // 如果不需要值，返回空字符串
+            return "";
+        }
     }
     catch (const std::exception& e) {
         reportError("Exception in generateLoopExpression: " + std::string(e.what()));
@@ -1598,9 +1689,23 @@ std::string ExpressionGenerator::generateBreakExpression(std::shared_ptr<BreakEx
         // 如果有 break 值表达式，生成它
         if (breakExpr->expression) {
             std::string breakValue = generateExpression(breakExpr->expression);
-            setBreakValue(breakValue, getExpressionType(breakExpr->expression));
+            std::string breakType = getExpressionType(breakExpr->expression);
+            
+            // 如果循环需要值且有结果存储指针，存储 break 值
+            if (!loopCtx.resultPtr.empty()) {
+                irBuilder->emitStore(breakValue, loopCtx.resultPtr);
+            }
+            
+            setBreakValue(breakValue, breakType);
         } else {
-            setBreakValue(generateUnitValue(), "i32");
+            // 如果没有 break 值表达式，但有结果存储指针，存储 unit 值
+            if (!loopCtx.resultPtr.empty()) {
+                std::string unitValue = generateUnitValue();
+                irBuilder->emitStore(unitValue, loopCtx.resultPtr);
+                setBreakValue(unitValue, "i32");
+            } else {
+                setBreakValue(generateUnitValue(), "i32");
+            }
         }
         
         // 跳转到循环结束

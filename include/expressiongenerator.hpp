@@ -49,6 +49,8 @@ private:
         bool hasBreak;
         std::string breakValueReg;
         std::string breakValueType;
+        std::string resultPtr;  // 存储循环结果的指针
+        std::string resultType; // 循环结果的类型
         
         LoopContext() : hasBreak(false) {}
         
@@ -198,6 +200,13 @@ public:
      * @return 生成的结果寄存器名称
      */
     std::string generateTypeCastExpression(std::shared_ptr<TypeCastExpression> typeCastExpr);
+    
+    /**
+     * 处理分组表达式（括号表达式）
+     * @param groupedExpr 分组表达式节点
+     * @return 生成的结果寄存器名称
+     */
+    std::string generateGroupedExpression(std::shared_ptr<GroupedExpression> groupedExpr);
     
     // ==================== 块表达式处理 ====================
     
