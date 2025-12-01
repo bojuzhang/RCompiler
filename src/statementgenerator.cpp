@@ -118,9 +118,11 @@ bool StatementGenerator::generateLetStatement(std::shared_ptr<LetStatement> letS
             if (letStatement->expression) {
                 // 调用 ExpressionGenerator 获取表达式类型
                 if (validateExpressionGenerator()) {
-                    // 这里需要从语义分析阶段获取类型信息
-                    // 暂时使用默认类型，实际应该从 nodeTypeMap 获取
-                    llvmType = "i32";
+                    // 从语义分析阶段获取类型信息
+                    llvmType = expressionGenerator->getNodeTypeLLVM(letStatement->expression);
+                    if (llvmType.empty()) {
+                        llvmType = "i32"; // 默认类型
+                    }
                 } else {
                     llvmType = "i32";
                 }
@@ -549,8 +551,11 @@ bool StatementGenerator::generateConstantItem(std::shared_ptr<ConstantItem> cons
         } else {
             // 从表达式推断类型
             if (constant->expression && validateExpressionGenerator()) {
-                // 这里应该从表达式推断类型，暂时使用默认类型
-                constType = "i32";
+                // 从表达式推断类型
+                constType = expressionGenerator->getNodeTypeLLVM(constant->expression);
+                if (constType.empty()) {
+                    constType = "i32";
+                }
             } else {
                 constType = "i32";
             }
@@ -668,7 +673,9 @@ std::string StatementGenerator::typeToStringHelper(std::shared_ptr<Type> type) {
     // 根据 Type 的具体子类型进行转换
     if (auto typePath = std::dynamic_pointer_cast<TypePath>(type)) {
         if (typePath->simplepathsegement) {
-            return typePath->simplepathsegement->identifier;
+            std::string typeName = typePath->simplepathsegement->identifier;
+            // 使用 TypeMapper 进行正确的类型映射
+            return typeMapper->mapRxTypeToLLVM(typeName);
         }
     } else if (auto arrayType = std::dynamic_pointer_cast<ArrayType>(type)) {
         std::string elementType = typeToStringHelper(arrayType->type);

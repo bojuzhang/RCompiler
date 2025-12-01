@@ -161,7 +161,7 @@ bool FunctionCodegen::generateFunctionBody(std::shared_ptr<Function> function) {
         }
         
         // 处理尾表达式（如果存在）
-        if (function->blockexpression->expressionwithoutblock) {
+        if (nodeTypeMap[function->blockexpression.get()]->tostring() != "()") {
             std::string tailValue = generateTailExpressionReturn(function->blockexpression->expressionwithoutblock);
             if (!tailValue.empty()) {
                 // 生成返回指令
@@ -856,10 +856,22 @@ std::string FunctionCodegen::getParameterLLVMType(std::shared_ptr<FunctionParam>
     }
     
     try {
-        // 将 Type 节点转换为字符串表示
-        // TODO: 这里需要更复杂的类型转换逻辑
-        // 暂时使用默认类型
-        return "i32";
+        // 使用 TypeMapper 进行正确的类型映射
+        // 首先将 Type 节点转换为字符串表示，然后映射到 LLVM 类型
+        std::string typeStr;
+        if (auto typePath = std::dynamic_pointer_cast<TypePath>(param->type)) {
+            if (typePath->simplepathsegement) {
+                typeStr = typePath->simplepathsegement->identifier;
+            }
+        }
+        
+        if (typeStr.empty()) {
+            // 如果无法确定类型字符串，使用默认类型
+            return "i32";
+        }
+        
+        // 使用 TypeMapper 映射到 LLVM 类型
+        return typeMapper->mapRxTypeToLLVM(typeStr);
     }
     catch (const std::exception& e) {
         reportError("Exception in getParameterLLVMType: " + std::string(e.what()));

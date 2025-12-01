@@ -1,13 +1,10 @@
 fn main() {
-    let mut a : i32 = 1;
-    let mut b : i32 = 1;
-    let test : i32 = loop {
-        a = a - 1;
-        if (a > 0) {
-            break 5;
-        }
-        break 10;
-    };
-    printlnInt(test);
+    let mut a : bool = true;
+    let mut b : bool = false;
+    if (a && b) {
+        println("true!");
+    } else {
+        println("false!");
+    }
     exit(0);
 }

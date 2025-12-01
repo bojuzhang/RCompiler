@@ -285,6 +285,13 @@ public:
     std::string getExpressionType(std::shared_ptr<Expression> expression);
     
     /**
+     * 从节点类型映射获取 LLVM 类型
+     * @param node AST 节点
+     * @return LLVM 类型字符串
+     */
+    std::string getNodeTypeLLVM(std::shared_ptr<ASTNode> node);
+    
+    /**
      * 判断表达式是否为左值（可赋值）
      * @param expression 表达式节点
      * @return 是否为左值

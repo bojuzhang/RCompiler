@@ -598,7 +598,7 @@ std::string ExpressionGenerator::generateUnaryExpression(std::shared_ptr<UnaryEx
             }
             case Token::kNot: {
                 // 逻辑非
-                std::string instruction = resultReg + " = xor " + operandType + " " + operandReg + ", 1";
+                std::string instruction = resultReg + " = xor " + operandType + " " + operandReg + ", -1";
                 irBuilder->emitInstruction(instruction);
                 irBuilder->setRegisterType(resultReg, operandType);
                 break;
@@ -1268,10 +1268,10 @@ std::string ExpressionGenerator::generateLogicalOperation(const std::string& lef
         std::string instruction;
         
         switch (opType) {
-            case Token::kAnd:
+            case Token::kAndAnd:
                 instruction = resultReg + " = and " + resultType + " " + left + ", " + right;
                 break;
-            case Token::kOr:
+            case Token::kOrOr:
                 instruction = resultReg + " = or " + resultType + " " + left + ", " + right;
                 break;
             default:
@@ -1324,7 +1324,9 @@ std::string ExpressionGenerator::typeToStringHelper(std::shared_ptr<Type> type) 
     // 根据 Type 的具体子类型进行转换
     if (auto typePath = std::dynamic_pointer_cast<TypePath>(type)) {
         if (typePath->simplepathsegement) {
-            return typePath->simplepathsegement->identifier;
+            std::string typeName = typePath->simplepathsegement->identifier;
+            // 使用 TypeMapper 进行正确的类型映射
+            return typeMapper->mapRxTypeToLLVM(typeName);
         }
     } else if (auto arrayType = std::dynamic_pointer_cast<ArrayType>(type)) {
         std::string elementType = typeToStringHelper(arrayType->type);
@@ -1909,5 +1911,18 @@ std::string ExpressionGenerator::loadExpressionValue(std::shared_ptr<Expression>
         reportError("Exception in loadExpressionValue: " + std::string(e.what()));
         return "";
     }
+}
+
+std::string ExpressionGenerator::getNodeTypeLLVM(std::shared_ptr<ASTNode> node) {
+    if (!node) {
+        return "i32"; // 默认类型
+    }
+    
+    auto it = nodeTypeMap.find(node.get());
+    if (it != nodeTypeMap.end()) {
+        return typeMapper->mapSemanticTypeToLLVM(it->second);
+    }
+    
+    return "i32"; // 默认类型
 }
 

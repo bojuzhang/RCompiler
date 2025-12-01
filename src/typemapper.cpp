@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <vector>
 #include <memory>
+#include <iostream>
 
 // ==================== 静态成员初始化 ====================
 
@@ -89,7 +90,8 @@ std::string TypeMapper::mapSemanticTypeToLLVM(std::shared_ptr<SemanticType> type
     
     // 获取类型字符串并映射
     std::string typeStr = type->tostring();
-    return mapRxTypeToLLVM(typeStr);
+    std::string mapped = mapRxTypeToLLVM(typeStr);
+    return mapped;
 }
 
 // ==================== 复合类型映射接口 ====================
@@ -342,9 +344,10 @@ std::string TypeMapper::mapSimpleTypeToLLVM(const std::string& typeName) {
     }
     
     // 如果已经是LLVM类型格式，直接返回
-    if (typeName.find('*') != std::string::npos || 
+    if (typeName.find('*') != std::string::npos ||
         typeName.find('[') != std::string::npos ||
-        typeName.find('%') == 0) {
+        typeName.find('%') == 0 ||
+        typeName == "i1" || typeName == "i8" || typeName == "i32" || typeName == "void") {
         return typeName;
     }
     
@@ -369,8 +372,8 @@ std::string TypeMapper::processNestedType(const std::string& typeStr) {
     }
     
     // 处理结构体类型
-    if (typeStr.find("struct_") != std::string::npos || 
-        std::all_of(typeStr.begin(), typeStr.end(), [](char c) { return std::isalnum(c) || c == '_'; })) {
+    if (typeStr.find("struct_") != std::string::npos ||
+        (typeStr.length() > 2 && std::all_of(typeStr.begin(), typeStr.end(), [](char c) { return std::isalnum(c) || c == '_'; }))) {
         return mapStructTypeToLLVM(typeStr);
     }
     
