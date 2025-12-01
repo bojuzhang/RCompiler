@@ -1173,18 +1173,15 @@ std::string ExpressionGenerator::generateTypeConversion(const std::string& value
         
         // 整数类型转换
         if (typeMapper->isIntegerType(fromType) && typeMapper->isIntegerType(toType)) {
-            if (fromType == "i1" && (toType == "i32" || toType == "i64")) {
-                // bool 到整数扩展
+            if (fromType == "i1" && toType == "i32") {
+                // bool 到整数扩展（32位机器）
                 instruction = resultReg + " = zext " + fromType + " " + valueReg + " to " + toType;
-            } else if ((fromType == "i32" || fromType == "i64") && toType == "i1") {
-                // 整数到 bool 截断
+            } else if (fromType == "i32" && toType == "i1") {
+                // 整数到 bool 截断（32位机器）
                 instruction = resultReg + " = trunc " + fromType + " " + valueReg + " to " + toType;
-            } else if (fromType == "i32" && toType == "i64") {
-                // i32 到 i64 扩展
-                instruction = resultReg + " = sext " + fromType + " " + valueReg + " to " + toType;
-            } else if (fromType == "i64" && toType == "i32") {
-                // i64 到 i32 截断
-                instruction = resultReg + " = trunc " + fromType + " " + valueReg + " to " + toType;
+            } else if (fromType == "i32" && toType == "i32") {
+                // i32 到 i32（无转换）
+                return valueReg;
             } else {
                 reportError("Unsupported integer type conversion: " + fromType + " to " + toType);
                 return "";
@@ -1343,10 +1340,6 @@ std::string ExpressionGenerator::typeToStringHelper(std::shared_ptr<Type> type) 
 // ==================== 块表达式和控制流表达式实现 ====================
 
 std::string ExpressionGenerator::generateBlockExpression(std::shared_ptr<BlockExpression> blockExpr) {
-    return generateBlockExpression(blockExpr, true);
-}
-
-std::string ExpressionGenerator::generateBlockExpression(std::shared_ptr<BlockExpression> blockExpr, bool needsValue) {
     if (!blockExpr) {
         reportError("BlockExpression is null");
         return "";
@@ -1370,16 +1363,25 @@ std::string ExpressionGenerator::generateBlockExpression(std::shared_ptr<BlockEx
             scopeTree->ExitScope();
             return result;
         } else {
-            // 没有尾表达式
+            // 没有尾表达式，需要根据块表达式的类型决定是否生成值
             // 退出作用域
             scopeTree->ExitScope();
-            if (needsValue) {
-                // 只有在需要值时才生成 unit 值
-                return generateUnitValue();
-            } else {
-                // 不需要值，返回空字符串
-                return "";
+            
+            // 获取块表达式的类型
+            auto blockTypeIt = nodeTypeMap.find(blockExpr.get());
+            if (blockTypeIt != nodeTypeMap.end()) {
+                std::shared_ptr<SemanticType> blockType = blockTypeIt->second;
+                if (blockType) {
+                    std::string typeStr = blockType->tostring();
+                    // 只有当类型不是 unit 或 never 时才需要生成值
+                    if (typeStr != "()" && typeStr != "!") {
+                        return generateUnitValue();
+                    }
+                }
             }
+            
+            // 默认情况下，不需要生成值（返回空字符串）
+            return "";
         }
     }
     catch (const std::exception& e) {
@@ -1453,32 +1455,16 @@ std::string ExpressionGenerator::generateIfExpression(std::shared_ptr<IfExpressi
         // 生成 then 分支
         irBuilder->emitLabel(thenBB);
         std::string thenResult;
-        if (auto blockExpr = std::dynamic_pointer_cast<BlockExpression>(ifExpr->ifblockexpression)) {
-            thenResult = generateBlockExpression(blockExpr, needsValue);
-        } else {
-            if (needsValue) {
-                thenResult = generateExpression(ifExpr->ifblockexpression);
-            } else {
-                generateExpression(ifExpr->ifblockexpression);
-                thenResult = "";
-            }
-        }
+        // 修复：块表达式自己决定是否需要生成值，不再传递 needsValue 参数
+        thenResult = generateExpression(ifExpr->ifblockexpression);
         irBuilder->emitBr(endBB);
         
         // 生成 else 分支（如果存在）
         std::string elseResult;
         if (ifExpr->elseexpression) {
             irBuilder->emitLabel(elseBB);
-            if (auto blockExpr = std::dynamic_pointer_cast<BlockExpression>(ifExpr->elseexpression)) {
-                elseResult = generateBlockExpression(blockExpr, needsValue);
-            } else {
-                if (needsValue) {
-                    elseResult = generateExpression(ifExpr->elseexpression);
-                } else {
-                    generateExpression(ifExpr->elseexpression);
-                    elseResult = "";
-                }
-            }
+            // 修复：块表达式自己决定是否需要生成值，不再传递 needsValue 参数
+            elseResult = generateExpression(ifExpr->elseexpression);
             irBuilder->emitBr(endBB);
         } else {
             irBuilder->emitLabel(elseBB);

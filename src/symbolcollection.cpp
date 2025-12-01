@@ -14,7 +14,7 @@ void SymbolCollector::BeginCollection() {
     
     // 添加内置类型
     auto builtinTypes = {
-        "i32", "i64", "u32", "u64", "bool", "char", "str", "usize", "isize", "unit"
+        "i32", "u32", "u64", "bool", "char", "str", "usize", "isize", "unit"  // 32位机器上没有i64
     };
     for (const auto& typeName : builtinTypes) {
         auto typeSymbol = std::make_shared<Symbol>(

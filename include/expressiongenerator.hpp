@@ -203,18 +203,11 @@ public:
     
     /**
      * 处理块表达式（包含语句和尾表达式）
+     * 块表达式自己决定是否需要生成尾表达式，不依赖外部上下文
      * @param blockExpr 块表达式节点
-     * @return 生成的结果寄存器名称
-     */
-    std::string generateBlockExpression(std::shared_ptr<BlockExpression> blockExpr);
-    
-    /**
-     * 处理块表达式（包含语句和尾表达式），支持控制是否生成值
-     * @param blockExpr 块表达式节点
-     * @param needsValue 是否需要生成返回值
      * @return 生成的结果寄存器名称，如果不需要值则返回空字符串
      */
-    std::string generateBlockExpression(std::shared_ptr<BlockExpression> blockExpr, bool needsValue);
+    std::string generateBlockExpression(std::shared_ptr<BlockExpression> blockExpr);
     
     /**
      * 生成块中的所有语句，委托给 StatementGenerator

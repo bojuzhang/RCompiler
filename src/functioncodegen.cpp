@@ -888,7 +888,7 @@ std::string FunctionCodegen::getFunctionReturnLLVMType(std::shared_ptr<Function>
                     } else if (typeName == "i32") {
                         return "i32";
                     } else if (typeName == "i64") {
-                        return "i64";
+                        return "i32";  // 32位机器上i64映射为i32
                     } else if (typeName == "bool") {
                         return "i1";
                     } else if (typeName == "str") {

@@ -341,7 +341,7 @@ bool IRBuilder::validateBasicBlock(const std::string& basicBlockName) {
 
 bool IRBuilder::validateType(const std::string& type) {
     // 简单的类型验证
-    return !type.empty() && (type == "i1" || type == "i8" || type == "i32" || type == "i64" || 
+    return !type.empty() && (type == "i1" || type == "i8" || type == "i32" ||
                              type == "void" || type.find('*') != std::string::npos ||
                              type.find('[') != std::string::npos || type.find('%') == 0);
 }
@@ -385,11 +385,11 @@ int IRBuilder::getTypeSize(const std::string& type) {
 }
 
 std::string IRBuilder::mapSimpleTypeToLLVM(const std::string& typeName) {
-    // 基本类型映射
+    // 基本类型映射（32位机器）
     if (typeName == "i32" || typeName == "SignedInt") return "i32";
-    if (typeName == "i64" || typeName == "Int") return "i64";
+    if (typeName == "i64" || typeName == "Int") return "i32";  // 32位机器上i64映射为i32
     if (typeName == "u32" || typeName == "UnsignedInt") return "i32";
-    if (typeName == "u64") return "i64";
+    if (typeName == "u64") return "i32";  // 32位机器上u64映射为i32
     if (typeName == "bool") return "i1";
     if (typeName == "char") return "i8";
     if (typeName == "str") return "i8*";

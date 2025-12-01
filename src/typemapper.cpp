@@ -9,18 +9,18 @@
 // ==================== 静态成员初始化 ====================
 
 const std::unordered_map<std::string, std::string> TypeMapper::BASIC_TYPE_MAPPING = {
-    // 基础整数类型
+    // 基础整数类型（32位机器，所有整数都映射为i32）
     {"i32", "i32"},
-    {"i64", "i64"},
+    {"i64", "i32"},  // 32位机器上i64映射为i32
     {"u32", "i32"},
-    {"u64", "i64"},
+    {"u64", "i32"},  // 32位机器上u64映射为i32
     
     // 平台相关类型（32位机器）
     {"isize", "i32"},
     {"usize", "i32"},
     
-    // 特殊语义类型
-    {"Int", "i64"},
+    // 特殊语义类型（32位机器）
+    {"Int", "i32"},      // 32位机器上Int映射为i32
     {"SignedInt", "i32"},
     {"UnsignedInt", "i32"},
     
@@ -39,18 +39,18 @@ const std::unordered_map<std::string, int> TypeMapper::TYPE_SIZE_MAPPING = {
     {"i1", 1},
     {"i8", 1},
     {"i32", 4},
-    {"i64", 8},
+    {"i64", 4},  // 32位机器上i64实际大小为4
     {"void", 0},
-    {"ptr", 4}  // 32位系统上指针大小为4
+    {"ptr", 4}   // 32位系统上指针大小为4
 };
 
 const std::unordered_map<std::string, int> TypeMapper::TYPE_ALIGNMENT_MAPPING = {
     {"i1", 1},
     {"i8", 1},
     {"i32", 4},
-    {"i64", 8},
+    {"i64", 4},  // 32位机器上i64对齐为4
     {"void", 0},
-    {"ptr", 4}  // 32位系统上指针对齐为4
+    {"ptr", 4}   // 32位系统上指针对齐为4
 };
 
 // ==================== 构造函数和析构函数 ====================
@@ -242,7 +242,7 @@ std::string TypeMapper::getCommonType(const std::string& type1, const std::strin
 // ==================== 类型属性接口 ====================
 
 bool TypeMapper::isIntegerType(const std::string& type) {
-    return type == "i1" || type == "i8" || type == "i32" || type == "i64";
+    return type == "i1" || type == "i8" || type == "i32";  // 32位机器上没有i64
 }
 
 bool TypeMapper::isPointerType(const std::string& type) {
@@ -484,9 +484,9 @@ std::string TypeMapper::handleSpecialSemanticType(std::shared_ptr<SemanticType> 
         return "";
     }
     
-    // 检查特殊整数类型
+    // 检查特殊整数类型（32位机器）
     if (dynamic_cast<IntType*>(type.get())) {
-        return "i64";
+        return "i32";  // 32位机器上Int映射为i32
     }
     
     if (dynamic_cast<SignedIntType*>(type.get())) {

@@ -467,8 +467,8 @@ bool BuiltinDeclarator::isTypeCompatible(const std::string& expected, const std:
         return true;
     }
     
-    // 整数兼容性：所有整数类型支持隐式转换
-    std::vector<std::string> intTypes = {"i1", "i8", "i16", "i32", "i64"};
+    // 整数兼容性：32位机器上所有整数类型支持隐式转换
+    std::vector<std::string> intTypes = {"i1", "i8", "i16", "i32"};  // 32位机器上没有i64
     bool expectedIsInt = std::find(intTypes.begin(), intTypes.end(), expected) != intTypes.end();
     bool actualIsInt = std::find(intTypes.begin(), intTypes.end(), actual) != intTypes.end();
     if (expectedIsInt && actualIsInt) {
