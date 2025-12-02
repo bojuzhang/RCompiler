@@ -152,6 +152,20 @@ public:
     bool isIntegerType(const std::string& type);
     
     /**
+     * 检查是否为无符号整数类型
+     * @param type 类型字符串
+     * @return 是否为无符号整数类型
+     */
+    bool isUnsignedIntegerType(const std::string& type);
+    
+    /**
+     * 检查语义类型是否为无符号整数类型
+     * @param type 语义类型对象
+     * @return 是否为无符号整数类型
+     */
+    bool isUnsignedIntegerType(std::shared_ptr<SemanticType> type);
+    
+    /**
      * 检查是否为指针类型
      * @param type 类型字符串
      * @return 是否为指针类型

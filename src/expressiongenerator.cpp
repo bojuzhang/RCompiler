@@ -1,4 +1,5 @@
 #include "expressiongenerator.hpp"
+#include <iostream>
 #include <stdexcept>
 #include <cctype>
 
@@ -660,6 +661,9 @@ std::string ExpressionGenerator::generateBinaryExpression(std::shared_ptr<Binary
         // 获取表达式类型
         std::string resultType = getExpressionType(binaryExpr);
         
+        // 在 BinaryExpression 阶段判断是否应该使用无符号运算
+        bool isUnsigned = shouldUseUnsignedOperation(binaryExpr);
+        
         // 根据运算符类型生成相应的 IR
         switch (binaryExpr->binarytype) {
             case Token::kPlus:
@@ -667,7 +671,7 @@ std::string ExpressionGenerator::generateBinaryExpression(std::shared_ptr<Binary
             case Token::kStar:
             case Token::kSlash:
             case Token::kPercent:
-                return generateArithmeticOperation(leftReg, rightReg, binaryExpr->binarytype, resultType);
+                return generateArithmeticOperation(leftReg, rightReg, binaryExpr->binarytype, resultType, isUnsigned);
                 
             case Token::kEqEq:
             case Token::kNe:
@@ -675,12 +679,14 @@ std::string ExpressionGenerator::generateBinaryExpression(std::shared_ptr<Binary
             case Token::kLe:
             case Token::kGt:
             case Token::kGe:
-                return generateComparisonOperation(leftReg, rightReg, binaryExpr->binarytype, resultType);
+                return generateComparisonOperation(leftReg, rightReg, binaryExpr->binarytype, resultType, isUnsigned);
                 
             case Token::kAndAnd:
             case Token::kOrOr:
                 return generateLogicalOperation(leftReg, rightReg, binaryExpr->binarytype, resultType);
                 
+            case Token::kAnd:
+            case Token::kOr:
             case Token::kCaret:
             case Token::kShl:
             case Token::kShr: {
@@ -816,7 +822,13 @@ std::string ExpressionGenerator::generateCompoundAssignmentExpression(std::share
                     case Token::kPercentEq: opType = Token::kPercent; break;
                     default: opType = Token::kPlus; break;
                 }
-                resultReg = generateArithmeticOperation(currentReg, rightReg, opType, leftType);
+                
+                // 对于复合赋值，我们需要判断是否应该使用无符号运算
+                // 创建一个临时的二元表达式来重用 shouldUseUnsignedOperation 方法
+                auto tempBinaryExpr = std::make_shared<BinaryExpression>(compoundAssignExpr->leftexpression, compoundAssignExpr->rightexpression, opType);
+                bool isUnsigned = shouldUseUnsignedOperation(tempBinaryExpr);
+                
+                resultReg = generateArithmeticOperation(currentReg, rightReg, opType, leftType, isUnsigned);
                 break;
             }
             case Token::kAndEq:
@@ -1204,8 +1216,8 @@ std::string ExpressionGenerator::generateTypeConversion(const std::string& value
     }
 }
 
-std::string ExpressionGenerator::generateArithmeticOperation(const std::string& left, const std::string& right, 
-                                                           Token opType, const std::string& resultType) {
+std::string ExpressionGenerator::generateArithmeticOperation(const std::string& left, const std::string& right,
+                                                           Token opType, const std::string& resultType, bool isUnsigned) {
     try {
         std::string resultReg = irBuilder->newRegister();
         std::string instruction;
@@ -1221,10 +1233,20 @@ std::string ExpressionGenerator::generateArithmeticOperation(const std::string& 
                 instruction = resultReg + " = mul " + resultType + " " + left + ", " + right;
                 break;
             case Token::kSlash:
-                instruction = resultReg + " = sdiv " + resultType + " " + left + ", " + right;
+                // 根据操作数类型选择有符号或无符号除法
+                if (isUnsigned) {
+                    instruction = resultReg + " = udiv " + resultType + " " + left + ", " + right;
+                } else {
+                    instruction = resultReg + " = sdiv " + resultType + " " + left + ", " + right;
+                }
                 break;
             case Token::kPercent:
-                instruction = resultReg + " = srem " + resultType + " " + left + ", " + right;
+                // 根据操作数类型选择有符号或无符号取模
+                if (isUnsigned) {
+                    instruction = resultReg + " = urem " + resultType + " " + left + ", " + right;
+                } else {
+                    instruction = resultReg + " = srem " + resultType + " " + left + ", " + right;
+                }
                 break;
             default:
                 reportError("Unsupported arithmetic operator");
@@ -1242,10 +1264,12 @@ std::string ExpressionGenerator::generateArithmeticOperation(const std::string& 
 }
 
 std::string ExpressionGenerator::generateComparisonOperation(const std::string& left, const std::string& right,
-                                                          Token opType, const std::string& resultType) {
+                                                          Token opType, const std::string& resultType, bool isUnsigned) {
     try {
         std::string resultReg = irBuilder->newRegister();
-        std::string condition = getComparisonCondition(opType);
+        
+        std::string condition = getComparisonCondition(opType, isUnsigned);
+        
         // 对于比较操作，操作数类型应该是操作数的实际类型，而不是结果类型
         // 比较操作的结果总是 i1，但操作数类型应该是 i32（整数比较）
         std::string operandType = "i32"; // 假设整数比较，实际应该从操作数类型推断
@@ -1297,6 +1321,18 @@ std::string ExpressionGenerator::getComparisonCondition(Token token) {
         case Token::kLe: return "sle";
         case Token::kGt: return "sgt";
         case Token::kGe: return "sge";
+        default: return "eq"; // 默认
+    }
+}
+
+std::string ExpressionGenerator::getComparisonCondition(Token token, bool isUnsigned) {
+    switch (token) {
+        case Token::kEqEq: return "eq";
+        case Token::kNe: return "ne";
+        case Token::kLt: return isUnsigned ? "ult" : "slt";
+        case Token::kLe: return isUnsigned ? "ule" : "sle";
+        case Token::kGt: return isUnsigned ? "ugt" : "sgt";
+        case Token::kGe: return isUnsigned ? "uge" : "sge";
         default: return "eq"; // 默认
     }
 }
@@ -1924,5 +1960,39 @@ std::string ExpressionGenerator::getNodeTypeLLVM(std::shared_ptr<ASTNode> node) 
     }
     
     return "i32"; // 默认类型
+}
+
+bool ExpressionGenerator::shouldUseUnsignedOperation(std::shared_ptr<BinaryExpression> binaryExpr) {
+    try {
+        if (!binaryExpr || !binaryExpr->leftexpression || !binaryExpr->rightexpression) {
+            return false;
+        }
+        
+        // 从 nodeTypeMap 获取左右操作数的语义类型
+        auto leftTypeIt = nodeTypeMap.find(binaryExpr->leftexpression.get());
+        auto rightTypeIt = nodeTypeMap.find(binaryExpr->rightexpression.get());
+        
+        if (leftTypeIt == nodeTypeMap.end() || rightTypeIt == nodeTypeMap.end()) {
+            return false; // 如果找不到类型信息，默认使用有符号运算
+        }
+        
+        std::shared_ptr<SemanticType> leftSemanticType = leftTypeIt->second;
+        std::shared_ptr<SemanticType> rightSemanticType = rightTypeIt->second;
+        
+        if (!leftSemanticType || !rightSemanticType) {
+            return false;
+        }
+        
+        // 使用 TypeMapper 检查是否为无符号整数类型
+        bool leftIsUnsigned = typeMapper->isUnsignedIntegerType(leftSemanticType);
+        bool rightIsUnsigned = typeMapper->isUnsignedIntegerType(rightSemanticType);
+        
+        // 如果任一操作数是无符号整数，则使用无符号运算
+        return leftIsUnsigned || rightIsUnsigned;
+    }
+    catch (const std::exception& e) {
+        reportError("Exception in shouldUseUnsignedOperation: " + std::string(e.what()));
+        return false; // 出错时默认使用有符号运算
+    }
 }
 

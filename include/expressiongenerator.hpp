@@ -311,10 +311,11 @@ public:
      * @param right 右操作数寄存器
      * @param opType 运算符类型
      * @param resultType 结果类型
+     * @param isUnsigned 是否为无符号运算
      * @return 运算结果寄存器名称
      */
-    std::string generateArithmeticOperation(const std::string& left, const std::string& right, 
-                                           Token opType, const std::string& resultType);
+    std::string generateArithmeticOperation(const std::string& left, const std::string& right,
+                                           Token opType, const std::string& resultType, bool isUnsigned);
     
     /**
      * 生成比较运算的 IR 代码
@@ -322,10 +323,11 @@ public:
      * @param right 右操作数寄存器
      * @param opType 运算符类型
      * @param resultType 结果类型
+     * @param isUnsigned 是否为无符号运算
      * @return 比较结果寄存器名称
      */
-    std::string generateComparisonOperation(const std::string& left, const std::string& right, 
-                                           Token opType, const std::string& resultType);
+    std::string generateComparisonOperation(const std::string& left, const std::string& right,
+                                           Token opType, const std::string& resultType, bool isUnsigned);
     
     /**
      * 生成逻辑运算的 IR 代码
@@ -550,4 +552,19 @@ private:
      * @return 字段类型的 LLVM 类型字符串
      */
     std::string getStructFieldType(const std::string& structName, const std::string& fieldName);
+    
+    /**
+     * 判断是否应该使用无符号运算
+     * @param binaryExpr 二元表达式节点
+     * @return 是否应该使用无符号运算
+     */
+    bool shouldUseUnsignedOperation(std::shared_ptr<BinaryExpression> binaryExpr);
+    
+    /**
+     * 获取比较条件的 LLVM 表示（支持无符号比较）
+     * @param token 比较运算符 Token
+     * @param isUnsigned 是否为无符号比较
+     * @return LLVM 比较条件字符串
+     */
+    std::string getComparisonCondition(Token token, bool isUnsigned);
 };

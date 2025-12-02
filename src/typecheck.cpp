@@ -4043,6 +4043,7 @@ std::shared_ptr<SemanticType> TypeChecker::InferBlockExpressionType(BlockExpress
 
 // 实现 TypeCastExpression 类型推断
 std::shared_ptr<SemanticType> TypeChecker::InferTypeCastExpressionType(TypeCastExpression& expr) {
+    auto expressiontype = InferExpressionType(*expr.expression);
     // TypeCastExpression 的类型为其转化后 as 对应的类型，对应其存储的 typenobounds
     if (expr.typenobounds) {
         return CheckType(*expr.typenobounds);

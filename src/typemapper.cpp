@@ -247,6 +247,28 @@ bool TypeMapper::isIntegerType(const std::string& type) {
     return type == "i1" || type == "i8" || type == "i32";  // 32位机器上没有i64
 }
 
+bool TypeMapper::isUnsignedIntegerType(const std::string& type) {
+    // 检查LLVM类型字符串是否对应无符号类型
+    // 注意：在LLVM中，无符号和有符号整数都使用相同的类型表示（如i32）
+    // 所以我们需要从原始Rx类型名称来判断
+    return type == "u32" || type == "u64" || type == "usize" || type == "UnsignedInt";
+}
+
+bool TypeMapper::isUnsignedIntegerType(std::shared_ptr<SemanticType> type) {
+    if (!type) {
+        return false;
+    }
+    
+    // 检查是否为无符号整数类型
+    if (dynamic_cast<UnsignedIntType*>(type.get())) {
+        return true;
+    }
+    
+    // 检查类型字符串
+    std::string typeStr = type->tostring();
+    return isUnsignedIntegerType(typeStr);
+}
+
 bool TypeMapper::isPointerType(const std::string& type) {
     return type.length() > 1 && type.back() == '*';
 }
