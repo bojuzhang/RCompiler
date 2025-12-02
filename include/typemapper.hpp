@@ -120,6 +120,13 @@ public:
     std::string getArraySize(const std::string& arrayType);
     
     /**
+     * 获取结构体类型的字节大小
+     * @param structType 结构体类型字符串
+     * @return 字节大小
+     */
+    int getStructSize(const std::string& structType);
+    
+    /**
      * 获取指针类型指向的类型
      * @param pointerType 指针类型字符串
      * @return 指向的类型字符串

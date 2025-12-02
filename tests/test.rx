@@ -1,6 +1,12 @@
+struct Node {
+    x : i32,
+    y : i32,
+    arr : [i32; 2]
+}
+
 fn main() {
-    let mut a : [i32; 6 - 2] = [1, 2, 3, 4];
-    let mut b : [i32; 4] = a;
-    printlnInt(b[1]);
+    let mut node : Node = Node {x : 1, y : 2, arr : [1, 2]};
+    printlnInt(node.y);
+    printlnInt(node.arr[1]);
     exit(0);
 }

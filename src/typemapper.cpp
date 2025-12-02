@@ -307,9 +307,9 @@ int TypeMapper::getTypeSize(const std::string& type) {
         }
     }
     
-    // 结构体类型默认大小为16字节
+    // 结构体类型需要递归计算每个字段的大小和
     if (isStructType(type)) {
-        return 16;
+        return getStructSize(type);
     }
     
     return 0;
@@ -559,4 +559,49 @@ std::string TypeMapper::getArraySize(const std::string& arrayType) {
         }
     }
     return "";
+}
+
+int TypeMapper::getStructSize(const std::string& structType) {
+    // 从结构体名称中提取结构体名
+    std::string structName;
+    if (structType.find("%struct_") == 0) {
+        structName = structType.substr(8); // 去掉 "%struct_" 前缀
+    } else {
+        structName = structType;
+    }
+    
+    // 从符号表查找结构体定义
+    auto structSymbol = lookupStructSymbol(structName);
+    if (!structSymbol) {
+        reportError("Unknown struct type for size calculation: " + structName);
+        return 16; // 默认大小
+    }
+    
+    auto structSym = std::dynamic_pointer_cast<StructSymbol>(structSymbol);
+    if (!structSym) {
+        return 16; // 默认大小
+    }
+    
+    int totalSize = 0;
+    int maxAlignment = 1;
+    
+    // 递归计算每个字段的大小
+    for (const auto& field : structSym->fields) {
+        if (field && field->type) {
+            std::string fieldLLVMType = mapSemanticTypeToLLVM(field->type);
+            int fieldSize = getTypeSize(fieldLLVMType);
+            int fieldAlignment = getTypeAlignment(fieldLLVMType);
+            
+            // 对齐到字段的对齐边界
+            totalSize = ((totalSize + fieldAlignment - 1) / fieldAlignment) * fieldAlignment;
+            totalSize += fieldSize;
+            
+            maxAlignment = std::max(maxAlignment, fieldAlignment);
+        }
+    }
+    
+    // 对齐整个结构体到最大字段对齐
+    totalSize = ((totalSize + maxAlignment - 1) / maxAlignment) * maxAlignment;
+    
+    return totalSize;
 }

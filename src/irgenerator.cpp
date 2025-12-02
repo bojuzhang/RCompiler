@@ -456,8 +456,36 @@ bool IRGenerator::generateStruct(std::shared_ptr<StructStruct> structDef) {
         // 生成调试注释
         emitDebugComment("Generating struct: " + structDef->identifier, structDef);
         
-        // TODO: 实现结构体定义生成
-        // 这里需要与 TypeMapper 协作生成结构体类型定义
+        // 生成结构体类型定义
+        std::string structName = structDef->identifier;
+        std::string structType = "%struct_" + structName;
+        
+        // 收集字段信息
+        std::vector<std::string> fieldTypes;
+        if (structDef->structfields) {
+            for (const auto& field : structDef->structfields->structfields) {
+                if (field && field->type) {
+                    std::string fieldType = typeMapper->mapSemanticTypeToLLVM(
+                        nodeTypeMap[field->type.get()]);
+                    if (!fieldType.empty()) {
+                        fieldTypes.push_back(fieldType);
+                    } else {
+                        fieldTypes.push_back("i32"); // 默认类型
+                    }
+                }
+            }
+        }
+        
+        // 生成结构体类型定义
+        std::string structDefStr = structType + " = type {";
+        for (size_t i = 0; i < fieldTypes.size(); ++i) {
+            if (i > 0) structDefStr += ", ";
+            structDefStr += fieldTypes[i];
+        }
+        structDefStr += "}";
+        
+        // 输出结构体定义
+        irBuilder->emitInstruction(structDefStr);
         
         if (outputFormat == OutputFormat::DEBUG) {
             irBuilder->emitComment("Struct definition: " + structDef->identifier);

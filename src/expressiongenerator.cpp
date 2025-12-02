@@ -581,18 +581,44 @@ std::string ExpressionGenerator::generateFieldExpression(std::shared_ptr<FieldEx
     }
     
     try {
-        // 生成接收者表达式
-        std::string receiverReg = generateExpression(fieldExpr->expression);
-        if (receiverReg.empty()) {
-            reportError("Failed to generate receiver expression for field access");
-            return "";
-        }
-        
         // 获取接收者类型
         std::string receiverType = getExpressionType(fieldExpr->expression);
         
+        // 对于字段访问，我们需要接收者的指针
+        std::string receiverPtrReg;
+        
+        // 检查接收者是否为路径表达式（变量访问）
+        if (auto pathExpr = std::dynamic_pointer_cast<PathExpression>(fieldExpr->expression)) {
+            // 对于变量访问，获取变量的指针寄存器
+            std::string variableName = pathExpr->simplepath->simplepathsegements.back()->identifier;
+            receiverPtrReg = irBuilder->getVariableRegister(variableName);
+        } else {
+            // 对于其他类型的表达式，生成表达式然后获取其地址
+            std::string receiverReg = generateExpression(fieldExpr->expression);
+            if (receiverReg.empty()) {
+                reportError("Failed to generate receiver expression for field access");
+                return "";
+            }
+            
+            // 如果接收者不是指针，需要分配内存并存储
+            std::string receiverRegType = irBuilder->getRegisterType(receiverReg);
+            if (!irBuilder->isPointerType(receiverRegType)) {
+                receiverPtrReg = irBuilder->emitAlloca(receiverType);
+                irBuilder->emitStore(receiverReg, receiverPtrReg);
+            } else {
+                receiverPtrReg = receiverReg;
+            }
+        }
+        
+        // 确保我们有指针
+        std::string receiverPtrRegType = irBuilder->getRegisterType(receiverPtrReg);
+        if (!irBuilder->isPointerType(receiverPtrRegType)) {
+            reportError("Receiver is not a pointer type: " + receiverPtrRegType);
+            return "";
+        }
+        
         // 计算字段地址
-        std::string fieldPtrReg = generateFieldAccessAddress(receiverReg, fieldExpr->identifier, receiverType);
+        std::string fieldPtrReg = generateFieldAccessAddress(receiverPtrReg, fieldExpr->identifier, receiverType);
         if (fieldPtrReg.empty()) {
             reportError("Failed to calculate field address: " + fieldExpr->identifier);
             return "";
@@ -1170,8 +1196,8 @@ std::string ExpressionGenerator::escapeString(const std::string& input) {
     return result;
 }
 
-std::string ExpressionGenerator::generateFieldAccessAddress(const std::string& basePtr, 
-                                                            const std::string& fieldName, 
+std::string ExpressionGenerator::generateFieldAccessAddress(const std::string& basePtr,
+                                                            const std::string& fieldName,
                                                             const std::string& structType) {
     try {
         // 获取字段索引
@@ -1181,9 +1207,20 @@ std::string ExpressionGenerator::generateFieldAccessAddress(const std::string& b
             return "";
         }
         
+        // 确保basePtr是指针类型
+        std::string basePtrType = irBuilder->getRegisterType(basePtr);
+        if (!irBuilder->isPointerType(basePtrType)) {
+            reportError("Base pointer is not a pointer type: " + basePtrType);
+            return "";
+        }
+        
         // 生成 getelementptr 指令
+        // 对于结构体字段访问，第一个索引是0（指向结构体本身），第二个索引是字段索引
         std::vector<std::string> indices = {"0", std::to_string(fieldIndex)};
-        std::string fieldPtrReg = irBuilder->emitGetElementPtr(basePtr, indices, structType);
+        
+        // 获取指向的元素类型（去掉*）
+        std::string pointedType = basePtrType.substr(0, basePtrType.length() - 1);
+        std::string fieldPtrReg = irBuilder->emitGetElementPtr(basePtr, indices, pointedType);
         
         return fieldPtrReg;
     }
@@ -1195,13 +1232,19 @@ std::string ExpressionGenerator::generateFieldAccessAddress(const std::string& b
 
 int ExpressionGenerator::getStructFieldIndex(const std::string& structName, const std::string& fieldName) {
     try {
+        // 从结构体类型名称中提取纯结构体名
+        std::string pureStructName = structName;
+        if (structName.find("%struct_") == 0) {
+            pureStructName = structName.substr(8); // 去掉 "%struct_" 前缀
+        }
+        
         // 从符号表查找结构体定义
         auto currentScope = scopeTree->GetCurrentScope();
         if (!currentScope) {
             return -1;
         }
         
-        auto symbol = currentScope->Lookup(structName);
+        auto symbol = currentScope->Lookup(pureStructName);
         if (!symbol || symbol->kind != SymbolKind::Struct) {
             return -1;
         }
@@ -2077,13 +2120,19 @@ std::string ExpressionGenerator::getFunctionReturnType(const std::string& functi
 
 std::string ExpressionGenerator::getStructFieldType(const std::string& structName, const std::string& fieldName) {
     try {
+        // 从结构体类型名称中提取纯结构体名
+        std::string pureStructName = structName;
+        if (structName.find("%struct_") == 0) {
+            pureStructName = structName.substr(8); // 去掉 "%struct_" 前缀
+        }
+        
         // 从符号表查找结构体定义
         auto currentScope = scopeTree->GetCurrentScope();
         if (!currentScope) {
             return "";
         }
         
-        auto symbol = currentScope->Lookup(structName);
+        auto symbol = currentScope->Lookup(pureStructName);
         if (!symbol || symbol->kind != SymbolKind::Struct) {
             return "";
         }
