@@ -1,5 +1,6 @@
 fn main() {
-    let mut a : u32 = 4294967295;
-    printlnInt((a / 4) as i32);
+    let mut a : [i32; 6 - 2] = [1, 2, 3, 4];
+    let mut b : [i32; 4] = a;
+    printlnInt(b[1]);
     exit(0);
 }

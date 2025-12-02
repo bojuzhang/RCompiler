@@ -323,7 +323,14 @@ void StatementGenerator::storeVariable(const std::string& variableName, const st
             return;
         }
         
-        irBuilder->emitStore(valueReg, variableReg);
+        // 检查是否为聚合类型（数组或结构体）
+        if (irBuilder->isAggregateType(type)) {
+            // 聚合类型：使用 builtin_memcpy 进行内存拷贝
+            irBuilder->emitAggregateCopy(variableReg, valueReg, type);
+        } else {
+            // 非聚合类型：直接存储
+            irBuilder->emitStore(valueReg, variableReg);
+        }
     }
     catch (const std::exception& e) {
         reportError("Failed to store variable " + variableName + ": " + std::string(e.what()));
@@ -678,9 +685,65 @@ std::string StatementGenerator::typeToStringHelper(std::shared_ptr<Type> type) {
             return typeMapper->mapRxTypeToLLVM(typeName);
         }
     } else if (auto arrayType = std::dynamic_pointer_cast<ArrayType>(type)) {
+        // 递归获取元素类型
         std::string elementType = typeToStringHelper(arrayType->type);
-        std::string sizeStr = "10"; // 默认大小，实际应该从表达式求值
-        return "[" + elementType + "; " + sizeStr + "]";
+        
+        // 尝试从大小表达式获取实际大小
+        std::string sizeStr = "0"; // 默认大小
+        if (arrayType->expression) {
+            if (auto literalExpr = std::dynamic_pointer_cast<LiteralExpression>(arrayType->expression)) {
+                if (literalExpr->tokentype == Token::kINTEGER_LITERAL) {
+                    sizeStr = literalExpr->literal;
+                }
+            } else {
+                // 对于复杂表达式，尝试使用 TypeChecker 的 EvaluateArraySize 方法
+                // 这里我们需要访问 TypeChecker 的实例，但当前架构下可能不可用
+                // 作为替代方案，我们尝试从 nodeTypeMap 获取已求值的大小信息
+                // 这个信息应该在类型检查阶段就已经计算好了
+                
+                // 查找 ArrayTypeWrapper 对象来获取已求值的大小
+                // 首先尝试从语义类型中获取大小信息
+                // 这里我们需要一个方法来获取 ArrayTypeWrapper，但当前架构下不可用
+                // 作为临时解决方案，我们实现一个简单的二元表达式求值
+                
+                if (auto binaryExpr = std::dynamic_pointer_cast<BinaryExpression>(arrayType->expression)) {
+                    // 处理简单的二元运算，如 6 - 2
+                    if (auto leftLiteral = std::dynamic_pointer_cast<LiteralExpression>(binaryExpr->leftexpression)) {
+                        if (auto rightLiteral = std::dynamic_pointer_cast<LiteralExpression>(binaryExpr->rightexpression)) {
+                            if (leftLiteral->tokentype == Token::kINTEGER_LITERAL &&
+                                rightLiteral->tokentype == Token::kINTEGER_LITERAL) {
+                                try {
+                                    int64_t left = std::stoll(leftLiteral->literal);
+                                    int64_t right = std::stoll(rightLiteral->literal);
+                                    int64_t result = 0;
+                                    
+                                    switch (binaryExpr->binarytype) {
+                                        case Token::kPlus: result = left + right; break;
+                                        case Token::kMinus: result = left - right; break;
+                                        case Token::kStar: result = left * right; break;
+                                        case Token::kSlash:
+                                            if (right != 0) result = left / right;
+                                            break;
+                                        default: break;
+                                    }
+                                    
+                                    sizeStr = std::to_string(result);
+                                } catch (const std::exception&) {
+                                    sizeStr = "0";
+                                }
+                            }
+                        }
+                    } else if (auto literalExpr = std::dynamic_pointer_cast<LiteralExpression>(arrayType->expression)) {
+                        if (literalExpr->tokentype == Token::kINTEGER_LITERAL) {
+                            sizeStr = literalExpr->literal;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // 生成正确的 LLVM 数组类型格式：[N x T]
+        return "[" + sizeStr + " x " + elementType + "]";
     } else if (auto refType = std::dynamic_pointer_cast<ReferenceType>(type)) {
         std::string targetType = typeToStringHelper(refType->type);
         return (refType->ismut ? "&mut " : "&") + targetType;

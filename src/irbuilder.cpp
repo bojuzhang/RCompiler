@@ -1,4 +1,5 @@
 #include "irbuilder.hpp"
+#include <iostream>
 #include <sstream>
 #include <algorithm>
 
@@ -545,7 +546,23 @@ std::string IRBuilder::emitGetElementPtr(const std::string& pointer, const std::
     std::string instruction = result + " = getelementptr " + resType + ", " + pointerType + " " + pointer + ", " + indicesStr;
     emitInstruction(instruction);
     
-    setRegisterType(result, resType);
+    // 对于数组索引，结果类型应该是指向元素类型的指针
+    std::string elementType;
+    if (resType.find('[') == 0 && resType.find(" x ") != std::string::npos) {
+        // 是数组类型，提取元素类型
+        size_t xPos = resType.find(" x ");
+        if (xPos != std::string::npos) {
+            elementType = resType.substr(xPos + 3, resType.length() - xPos - 4); // 去掉 [N x T] 中的 T
+        }
+    } else if (resType.back() == '*') {
+        // 已经是指针类型，去掉 *
+        elementType = resType.substr(0, resType.length() - 1);
+    } else {
+        // 其他情况，使用原类型
+        elementType = resType;
+    }
+    
+    setRegisterType(result, elementType + "*");
     return result;
 }
 
@@ -890,6 +907,41 @@ std::string IRBuilder::emitMemset(const std::string& dest, const std::string& va
     
     setRegisterType(result, "ptr");
     return result;
+}
+
+// ==================== 聚合类型操作接口 ====================
+
+bool IRBuilder::isAggregateType(const std::string& type) {
+    // 使用 TypeMapper 检查是否为数组或结构体类型
+    return typeMapper->isArrayType(type) || typeMapper->isStructType(type);
+}
+
+std::string IRBuilder::emitAggregateCopy(const std::string& dest, const std::string& src, const std::string& type) {
+    if (!validateRegister(dest) || !validateRegister(src)) {
+        reportError("Invalid registers for aggregate copy");
+        return "";
+    }
+    
+    if (!isAggregateType(type)) {
+        reportError("Type is not aggregate: " + type);
+        return "";
+    }
+    
+    // 计算类型大小
+    int typeSize = typeMapper->getTypeSize(type);
+    if (typeSize <= 0) {
+        reportError("Invalid type size for aggregate copy: " + std::to_string(typeSize));
+        return "";
+    }
+    
+    // 生成大小寄存器
+    std::string sizeReg = newRegister();
+    std::string sizeInstruction = sizeReg + " = add i32 0, " + std::to_string(typeSize);
+    emitInstruction(sizeInstruction);
+    setRegisterType(sizeReg, "i32");
+    
+    // 调用 builtin_memcpy
+    return emitMemcpy(dest, src, sizeReg);
 }
 
 // ==================== 类型转换指令 ====================

@@ -230,7 +230,7 @@ std::string ExpressionGenerator::generatePathExpression(std::shared_ptr<PathExpr
         
         // 根据符号类型处理
         if (symbol->kind == SymbolKind::Variable || symbol->kind == SymbolKind::Constant) {
-            // 变量或常量 - 加载值
+            // 变量或常量
             std::string variableReg = irBuilder->getVariableRegister(variableName);
             if (variableReg.empty()) {
                 reportError("Variable register not found: " + variableName);
@@ -238,8 +238,17 @@ std::string ExpressionGenerator::generatePathExpression(std::shared_ptr<PathExpr
             }
             
             std::string llvmType = typeMapper->mapSemanticTypeToLLVM(symbol->type);
-            std::string valueReg = irBuilder->emitLoad(variableReg, llvmType);
-            return valueReg;
+            
+            // 检查是否为聚合类型
+            if (irBuilder->isAggregateType(llvmType)) {
+                // 聚合类型：返回指针而不是加载值
+                // 这样在 let 语句初始化和赋值表达式中可以直接使用 memcpy
+                return variableReg;
+            } else {
+                // 非聚合类型：加载值
+                std::string valueReg = irBuilder->emitLoad(variableReg, llvmType);
+                return valueReg;
+            }
         }
         else if (symbol->kind == SymbolKind::Function) {
             // 函数 - 返回函数指针
@@ -290,12 +299,15 @@ std::string ExpressionGenerator::generateArrayExpression(std::shared_ptr<ArrayEx
             
             // 计算元素地址
             std::vector<std::string> indices = {"0", std::to_string(i)};
-            std::string elementPtrReg = irBuilder->emitGetElementPtr(arrayReg, indices, elementType + "*");
+            std::string elementPtrReg = irBuilder->emitGetElementPtr(arrayReg, indices, arrayType);
             
             // 存储元素值
             irBuilder->emitStore(elementReg, elementPtrReg);
         }
         
+        // 对于数组表达式，我们需要返回数组的值而不是指针
+        // 但是由于数组是聚合类型，我们需要在赋值时使用 memcpy
+        // 所以这里返回指针，让调用者处理
         return arrayReg;
     }
     catch (const std::exception& e) {
@@ -313,13 +325,6 @@ std::string ExpressionGenerator::generateIndexExpression(std::shared_ptr<IndexEx
     }
     
     try {
-        // 生成基础表达式（数组或指针）
-        std::string baseReg = generateExpression(indexExpr->expressionout);
-        if (baseReg.empty()) {
-            reportError("Failed to generate base expression for indexing");
-            return "";
-        }
-        
         // 生成索引表达式
         std::string indexReg = generateExpression(indexExpr->expressionin);
         if (indexReg.empty()) {
@@ -345,14 +350,44 @@ std::string ExpressionGenerator::generateIndexExpression(std::shared_ptr<IndexEx
         
         // 生成元素地址
         std::string elementPtrReg;
-        if (typeMapper->isPointerType(baseType)) {
-            // 指针索引：直接使用指针和索引
-            std::vector<std::string> indices = {indexReg};
-            elementPtrReg = irBuilder->emitGetElementPtr(baseReg, indices, elementType + "*");
-        } else {
-            // 数组索引：需要添加数组起始偏移
+        
+        // 检查基础表达式是否是路径表达式（变量访问）
+        if (auto pathExpr = std::dynamic_pointer_cast<PathExpression>(indexExpr->expressionout)) {
+            // 对于数组变量，直接从变量对应的指针读取元素
+            std::string variableName = pathExpr->simplepath->simplepathsegements.back()->identifier;
+            std::string varReg = irBuilder->getVariableRegister(variableName);
+            if (varReg.empty()) {
+                reportError("Variable register not found: " + variableName);
+                return "";
+            }
+            
+            // 使用变量指针进行索引
             std::vector<std::string> indices = {"0", indexReg};
-            elementPtrReg = irBuilder->emitGetElementPtr(baseReg, indices, elementType + "*");
+            // 对于数组索引，resultType 应该是数组类型，而不是元素指针类型
+            // 从 baseType 中提取数组大小和元素类型
+            std::string arraySize = typeMapper->getArraySize(baseType);
+            // 去除可能的空格
+            arraySize.erase(0, arraySize.find_first_not_of(" \t\n\r"));
+            arraySize.erase(arraySize.find_last_not_of(" \t\n\r") + 1);
+            std::string arrayType = "[" + arraySize + " x " + elementType + "]";
+            elementPtrReg = irBuilder->emitGetElementPtr(varReg, indices, arrayType);
+        } else {
+            // 生成基础表达式（数组或指针）
+            std::string baseReg = generateExpression(indexExpr->expressionout);
+            if (baseReg.empty()) {
+                reportError("Failed to generate base expression for indexing");
+                return "";
+            }
+            
+            if (typeMapper->isPointerType(baseType)) {
+                // 指针索引：直接使用指针和索引
+                std::vector<std::string> indices = {indexReg};
+                elementPtrReg = irBuilder->emitGetElementPtr(baseReg, indices, elementType + "*");
+            } else {
+                // 数组索引：需要添加数组起始偏移
+                std::vector<std::string> indices = {"0", indexReg};
+                elementPtrReg = irBuilder->emitGetElementPtr(baseReg, indices, elementType + "*");
+            }
         }
         
         // 加载元素值
@@ -434,6 +469,9 @@ std::string ExpressionGenerator::generateStructExpression(std::shared_ptr<Struct
             }
         }
         
+        // 对于结构体表达式，我们需要返回结构体的值而不是指针
+        // 但是由于结构体是聚合类型，我们需要在赋值时使用 memcpy
+        // 所以这里返回指针，让调用者处理
         return structReg;
     }
     catch (const std::exception& e) {
@@ -507,7 +545,19 @@ std::string ExpressionGenerator::generateMethodCallExpression(std::shared_ptr<Me
         
         // 生成参数表达式（包括接收者作为第一个参数）
         std::vector<std::string> args = generateCallArguments(methodCallExpr->callparams);
-        args.insert(args.begin(), receiverReg); // 接收者作为第一个参数
+        
+        // 检查接收者类型，如果是聚合类型需要特殊处理
+        if (irBuilder->isAggregateType(receiverType)) {
+            // 为聚合类型接收者分配临时空间
+            std::string tempReceiverReg = irBuilder->emitAlloca(receiverType);
+            
+            // 使用 memcpy 将接收者值复制到临时空间
+            irBuilder->emitAggregateCopy(tempReceiverReg, receiverReg, receiverType);
+            
+            args.insert(args.begin(), tempReceiverReg); // 传递接收者指针
+        } else {
+            args.insert(args.begin(), receiverReg); // 传递接收者值
+        }
         
         // 获取方法返回类型
         std::string returnType = "i32"; // 默认返回类型
@@ -746,15 +796,31 @@ std::string ExpressionGenerator::generateAssignmentExpression(std::shared_ptr<As
             return "";
         }
         
-        // 生成右值表达式
-        std::string rightReg = generateExpression(assignExpr->rightexpression);
+        // 检查右值类型
+        std::string rightType = getExpressionType(assignExpr->rightexpression);
+        std::string rightReg;
+        
+        // 对于聚合类型的特殊处理
+        if (irBuilder->isAggregateType(rightType)) {
+            // 如果右值是路径表达式（变量），直接获取其指针
+            if (auto pathExpr = std::dynamic_pointer_cast<PathExpression>(assignExpr->rightexpression)) {
+                std::string variableName = pathExpr->simplepath->simplepathsegements.back()->identifier;
+                rightReg = irBuilder->getVariableRegister(variableName);
+            } else {
+                // 其他情况，生成表达式
+                rightReg = generateExpression(assignExpr->rightexpression);
+            }
+        } else {
+            // 非聚合类型，正常生成表达式
+            rightReg = generateExpression(assignExpr->rightexpression);
+        }
+        
         if (rightReg.empty()) {
             reportError("Failed to generate right side of assignment");
             return "";
         }
         
         // 检查类型兼容性并进行必要的转换
-        std::string rightType = getExpressionType(assignExpr->rightexpression);
         if (!typeMapper->areTypesCompatible(leftType, rightType)) {
             // 尝试类型转换
             std::string convertedReg = generateTypeConversion(rightReg, rightType, leftType);
@@ -766,8 +832,12 @@ std::string ExpressionGenerator::generateAssignmentExpression(std::shared_ptr<As
             }
         }
         
-        // 存储值到左值
-        irBuilder->emitStore(rightReg, leftPtrReg);
+        // 检查是否为聚合类型，如果是则使用 memcpy
+        if (irBuilder->isAggregateType(leftType)) {
+            irBuilder->emitAggregateCopy(leftPtrReg, rightReg, leftType);
+        } else {
+            irBuilder->emitStore(rightReg, leftPtrReg);
+        }
         
         // 赋值表达式返回右值
         return rightReg;
@@ -880,8 +950,12 @@ std::string ExpressionGenerator::generateCompoundAssignmentExpression(std::share
                 return "";
         }
         
-        // 存储结果回左值
-        irBuilder->emitStore(resultReg, leftPtrReg);
+        // 检查是否为聚合类型，如果是则使用 memcpy
+        if (irBuilder->isAggregateType(leftType)) {
+            irBuilder->emitAggregateCopy(leftPtrReg, resultReg, leftType);
+        } else {
+            irBuilder->emitStore(resultReg, leftPtrReg);
+        }
         
         // 复合赋值表达式返回结果值
         return resultReg;
@@ -1003,20 +1077,46 @@ std::pair<std::string, std::string> ExpressionGenerator::analyzeLValue(std::shar
         }
         else if (auto indexExpr = std::dynamic_pointer_cast<IndexExpression>(expression)) {
             // 索引访问
-            std::string baseReg = generateExpression(indexExpr->expressionout);
             std::string baseType = getExpressionType(indexExpr->expressionout);
             std::string indexReg = generateExpression(indexExpr->expressionin);
             
             std::string elementType;
+            std::string elementPtrReg;
+            
             if (typeMapper->isPointerType(baseType)) {
                 elementType = typeMapper->getPointedType(baseType);
+                std::string baseReg = generateExpression(indexExpr->expressionout);
                 std::vector<std::string> indices = {indexReg};
-                std::string elementPtrReg = irBuilder->emitGetElementPtr(baseReg, indices, elementType + "*");
+                elementPtrReg = irBuilder->emitGetElementPtr(baseReg, indices, elementType + "*");
                 return {elementPtrReg, elementType};
             } else if (typeMapper->isArrayType(baseType)) {
                 elementType = typeMapper->getArrayElementType(baseType);
-                std::vector<std::string> indices = {"0", indexReg};
-                std::string elementPtrReg = irBuilder->emitGetElementPtr(baseReg, indices, elementType + "*");
+                
+                // 检查基础表达式是否是路径表达式（变量访问）
+                if (auto pathExpr = std::dynamic_pointer_cast<PathExpression>(indexExpr->expressionout)) {
+                    // 对于数组变量，直接从变量对应的指针读取元素
+                    std::string variableName = pathExpr->simplepath->simplepathsegements.back()->identifier;
+                    std::string varReg = irBuilder->getVariableRegister(variableName);
+                    if (varReg.empty()) {
+                        reportError("Variable register not found: " + variableName);
+                        return {"", ""};
+                    }
+                    
+                    // 使用变量指针进行索引
+                    std::vector<std::string> indices = {"0", indexReg};
+                    // 对于数组索引，resultType 应该是数组类型，而不是元素指针类型
+                    std::string arraySize = typeMapper->getArraySize(baseType);
+                    // 去除可能的空格
+                    arraySize.erase(0, arraySize.find_first_not_of(" \t\n\r"));
+                    arraySize.erase(arraySize.find_last_not_of(" \t\n\r") + 1);
+                    std::string arrayType = "[" + arraySize + " x " + elementType + "]";
+                    elementPtrReg = irBuilder->emitGetElementPtr(varReg, indices, arrayType);
+                } else {
+                    // 生成基础表达式
+                    std::string baseReg = generateExpression(indexExpr->expressionout);
+                    std::vector<std::string> indices = {"0", indexReg};
+                    elementPtrReg = irBuilder->emitGetElementPtr(baseReg, indices, elementType + "*");
+                }
                 return {elementPtrReg, elementType};
             }
         }
@@ -1135,7 +1235,25 @@ std::vector<std::string> ExpressionGenerator::generateCallArguments(std::shared_
     
     for (const auto& expr : callParams->expressions) {
         std::string argReg = generateExpression(expr);
-        if (!argReg.empty()) {
+        if (argReg.empty()) {
+            continue;
+        }
+        
+        // 检查参数类型
+        std::string argType = getExpressionType(expr);
+        
+        // 如果是聚合类型，需要特殊处理
+        if (irBuilder->isAggregateType(argType)) {
+            // 为聚合类型参数分配临时空间
+            std::string tempReg = irBuilder->emitAlloca(argType);
+            
+            // 使用 memcpy 将参数值复制到临时空间
+            irBuilder->emitAggregateCopy(tempReg, argReg, argType);
+            
+            // 传递指针而不是值
+            args.push_back(tempReg);
+        } else {
+            // 非聚合类型，直接传递值
             args.push_back(argReg);
         }
     }
@@ -1365,9 +1483,73 @@ std::string ExpressionGenerator::typeToStringHelper(std::shared_ptr<Type> type) 
             return typeMapper->mapRxTypeToLLVM(typeName);
         }
     } else if (auto arrayType = std::dynamic_pointer_cast<ArrayType>(type)) {
+        // 递归获取元素类型
         std::string elementType = typeToStringHelper(arrayType->type);
-        std::string sizeStr = "10"; // 默认大小，实际应该从表达式求值
-        return "[" + elementType + "; " + sizeStr + "]";
+        
+        // 尝试从大小表达式获取实际大小
+        std::string sizeStr = "0"; // 默认大小
+        if (arrayType->expression) {
+            if (auto literalExpr = std::dynamic_pointer_cast<LiteralExpression>(arrayType->expression)) {
+                if (literalExpr->tokentype == Token::kINTEGER_LITERAL) {
+                    sizeStr = literalExpr->literal;
+                }
+            } else {
+                // 对于复杂表达式，尝试使用 TypeChecker 的 EvaluateArraySize 方法
+                // 这里我们需要访问 TypeChecker 的实例，但当前架构下可能不可用
+                // 作为替代方案，我们尝试从 nodeTypeMap 获取已求值的大小信息
+                // 这个信息应该在类型检查阶段就已经计算好了
+                
+                // 查找 ArrayTypeWrapper 对象来获取已求值的大小
+                // 首先尝试从语义类型中获取大小信息
+                auto typeIt = nodeTypeMap.find(arrayType.get());
+                if (typeIt != nodeTypeMap.end()) {
+                    auto semanticType = typeIt->second;
+                    if (auto arrayTypeWrapper = std::dynamic_pointer_cast<ArrayTypeWrapper>(semanticType)) {
+                        auto sizeExpr = arrayTypeWrapper->GetSizeExpression();
+                        if (sizeExpr) {
+                            // 尝试求值大小表达式
+                            // 这里我们可以使用一个简化的求值方法
+                            if (auto binaryExpr = std::dynamic_pointer_cast<BinaryExpression>(sizeExpr)) {
+                                // 处理简单的二元运算，如 6 - 2
+                                if (auto leftLiteral = std::dynamic_pointer_cast<LiteralExpression>(binaryExpr->leftexpression)) {
+                                    if (auto rightLiteral = std::dynamic_pointer_cast<LiteralExpression>(binaryExpr->rightexpression)) {
+                                        if (leftLiteral->tokentype == Token::kINTEGER_LITERAL &&
+                                            rightLiteral->tokentype == Token::kINTEGER_LITERAL) {
+                                            try {
+                                                int64_t left = std::stoll(leftLiteral->literal);
+                                                int64_t right = std::stoll(rightLiteral->literal);
+                                                int64_t result = 0;
+                                                
+                                                switch (binaryExpr->binarytype) {
+                                                    case Token::kPlus: result = left + right; break;
+                                                    case Token::kMinus: result = left - right; break;
+                                                    case Token::kStar: result = left * right; break;
+                                                    case Token::kSlash:
+                                                        if (right != 0) result = left / right;
+                                                        break;
+                                                    default: break;
+                                                }
+                                                
+                                                sizeStr = std::to_string(result);
+                                            } catch (const std::exception&) {
+                                                sizeStr = "0";
+                                            }
+                                        }
+                                    }
+                                }
+                            } else if (auto literalExpr = std::dynamic_pointer_cast<LiteralExpression>(sizeExpr)) {
+                                if (literalExpr->tokentype == Token::kINTEGER_LITERAL) {
+                                    sizeStr = literalExpr->literal;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // 生成正确的 LLVM 数组类型格式：[N x T]
+        return "[" + sizeStr + " x " + elementType + "]";
     } else if (auto refType = std::dynamic_pointer_cast<ReferenceType>(type)) {
         std::string targetType = typeToStringHelper(refType->type);
         return (refType->ismut ? "&mut " : "&") + targetType;

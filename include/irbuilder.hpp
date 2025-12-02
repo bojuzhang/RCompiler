@@ -215,6 +215,24 @@ public:
     std::string emitMemcpy(const std::string& dest, const std::string& src, const std::string& size);
     std::string emitMemset(const std::string& dest, const std::string& value, const std::string& size);
     
+    // ==================== 聚合类型操作接口 ====================
+    
+    /**
+     * 判断类型是否为聚合类型（数组或结构体）
+     * @param type 类型字符串
+     * @return 是否为聚合类型
+     */
+    bool isAggregateType(const std::string& type);
+    
+    /**
+     * 为聚合类型生成内存拷贝操作
+     * @param dest 目标地址寄存器
+     * @param src 源地址寄存器
+     * @param type 类型字符串
+     * @return memcpy 调用的结果寄存器
+     */
+    std::string emitAggregateCopy(const std::string& dest, const std::string& src, const std::string& type);
+    
     // ==================== 类型转换指令 ====================
     
     std::string emitBitcast(const std::string& value, const std::string& fromType, const std::string& toType);
