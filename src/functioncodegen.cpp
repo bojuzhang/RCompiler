@@ -7,6 +7,10 @@
 #include "statementgenerator.hpp"
 #include "expressiongenerator.hpp"
 
+// 包含语义类型头文件
+#include "symbol.hpp"
+#include "typewrapper.hpp"
+
 // ==================== 构造函数和基本初始化方法 ====================
 
 FunctionCodegen::FunctionCodegen(std::shared_ptr<IRBuilder> irBuilder,
@@ -86,10 +90,7 @@ bool FunctionCodegen::generateFunction(std::shared_ptr<Function> function) {
         // 生成函数序言
         generatePrologue(function);
         
-        // 设置参数作用域
-        setupParameterScope(function);
-        
-        // 生成函数体
+        // 生成函数体（setupParameterScope 在 generateFunctionBody 内部调用）
         bool success = generateFunctionBody(function);
         
         // 生成函数尾声
@@ -145,6 +146,9 @@ bool FunctionCodegen::generateFunctionBody(std::shared_ptr<Function> function) {
     }
     
     try {
+        // 首先设置参数作用域（确保参数指针在其他变量之前生成）
+        setupParameterScope(function);
+        
         // 检查函数体是否为空
         if (!validateStatementGenerator()) {
             reportError("StatementGenerator not set for function body generation");
@@ -161,11 +165,21 @@ bool FunctionCodegen::generateFunctionBody(std::shared_ptr<Function> function) {
         }
         
         // 处理尾表达式（如果存在）
-        if (nodeTypeMap[function->blockexpression.get()]->tostring() != "()") {
+        if (function->blockexpression->expressionwithoutblock) {
             std::string tailValue = generateTailExpressionReturn(function->blockexpression->expressionwithoutblock);
             if (!tailValue.empty()) {
                 // 生成返回指令
                 irBuilder->emitRet(tailValue);
+            } else {
+                // 如果尾表达式生成失败，生成默认返回值
+                std::string defaultValue = generateDefaultReturn();
+                if (!defaultValue.empty()) {
+                    std::string returnType = getCurrentFunctionReturnType();
+                    std::string instruction = "ret " + returnType + " " + defaultValue;
+                    irBuilder->emitInstruction(instruction);
+                } else {
+                    irBuilder->emitRetVoid();
+                }
             }
         } else {
             // 没有尾表达式，生成默认返回值
@@ -481,11 +495,32 @@ std::string FunctionCodegen::generateTailExpressionReturn(std::shared_ptr<Expres
     }
     
     try {
-        // 生成尾表达式值
-        std::string valueReg = generateReturnValue(expression);
+        // 验证 ExpressionGenerator
+        if (!validateExpressionGenerator()) {
+            reportError("ExpressionGenerator not set for tail expression return");
+            return "";
+        }
+        
+        // 直接使用 ExpressionGenerator 生成表达式值
+        std::string valueReg = expressionGenerator->generateExpression(expression);
         if (valueReg.empty()) {
             reportError("Failed to generate tail expression value");
             return "";
+        }
+        
+        // 获取表达式类型
+        std::string valueType = getNodeLLVMType(expression);
+        std::string expectedType = getCurrentFunctionReturnType();
+        
+        // 进行类型转换（如果需要）
+        if (needsTypeConversion(valueType, expectedType)) {
+            std::string convertedReg = generateTypeConversion(valueReg, valueType, expectedType);
+            if (!convertedReg.empty()) {
+                valueReg = convertedReg;
+            } else {
+                reportError("Failed to convert tail expression type from " + valueType + " to " + expectedType);
+                return "";
+            }
         }
         
         return valueReg;
@@ -808,24 +843,70 @@ void FunctionCodegen::setupParameterScope(std::shared_ptr<Function> function) {
     try {
         irBuilder->emitComment("Setting up parameter scope");
         
-        // 为每个参数分配栈空间
+        // 为每个参数分配栈空间并存储传入的参数值
         if (function->functionparameters) {
             for (size_t i = 0; i < function->functionparameters->functionparams.size(); ++i) {
                 auto param = function->functionparameters->functionparams[i];
                 if (param) {
                     std::string paramType = getParameterLLVMType(param);
-                    std::string paramName = "param_" + std::to_string(i);
                     
-                    // 为参数分配栈空间
-                    std::string paramReg = irBuilder->emitAlloca(paramType);
+                    // 获取参数的实际名称
+                    std::string actualParamName = getParameterName(param);
+                    if (actualParamName.empty()) {
+                        actualParamName = "param_" + std::to_string(i);
+                    }
                     
-                    // 将参数寄存器映射到变量名
-                    irBuilder->newRegister(paramName);
+                    // 创建符合普通变量命名规则的指针变量名
+                    std::string paramPtrName = actualParamName + "_ptr";
+                    
+                    // 首先调用 newRegister 来注册变量名到 variableCounters
+                    std::string paramPtrReg = irBuilder->newRegister(actualParamName, "_ptr");
+                    
+                    // 手动生成正确的 alloca 指令，使用正确的寄存器名
+                    std::string allocaInstruction = paramPtrReg + " = alloca " + paramType + ", align 4";
+                    irBuilder->emitInstruction(allocaInstruction);
+                    irBuilder->setRegisterType(paramPtrReg, paramType + "*");
+                    
+                    // 将传入的参数值存储到分配的栈空间中
+                    // 传入的参数在函数签名中命名为 %param_i
+                    std::string incomingParamName = "%param_" + std::to_string(i);
+                    irBuilder->emitStore(incomingParamName, paramPtrReg);
+                    
+                    // 将参数添加到符号表中作为变量
+                    auto currentScope = scopeTree->GetCurrentScope();
+                    if (currentScope) {
+                        // 创建参数符号
+                        auto paramSymbol = std::make_shared<Symbol>(actualParamName, SymbolKind::Variable);
+                        
+                        // 从参数类型获取语义类型
+                        if (param->type) {
+                            // 这里需要根据参数的AST节点创建语义类型
+                            // 简化处理：假设参数类型是基本类型
+                            if (auto typePath = std::dynamic_pointer_cast<TypePath>(param->type)) {
+                                if (typePath->simplepathsegement) {
+                                    std::string typeName = typePath->simplepathsegement->identifier;
+                                    // 创建对应的语义类型
+                                    if (typeName == "i32") {
+                                        paramSymbol->type = std::make_shared<SignedIntType>();
+                                    } else if (typeName == "bool") {
+                                        paramSymbol->type = std::make_shared<SimpleType>("bool");
+                                    } else {
+                                        paramSymbol->type = std::make_shared<SignedIntType>(); // 默认类型
+                                    }
+                                }
+                            }
+                        }
+                        
+                        paramSymbol->ismutable = true; // 参数默认可变
+                        
+                        // 添加到当前作用域
+                        currentScope->Insert(actualParamName, paramSymbol);
+                    }
                     
                     // 存储参数信息到当前函数上下文
                     if (currentFunction) {
-                        currentFunction->parameters.push_back(paramName);
-                        currentFunction->parameterRegisters[paramName] = paramReg;
+                        currentFunction->parameters.push_back(actualParamName);
+                        currentFunction->parameterRegisters[actualParamName] = paramPtrReg;
                     }
                 }
             }
@@ -1050,4 +1131,24 @@ bool FunctionCodegen::validateFunctionSignature(std::shared_ptr<Function> functi
 std::string FunctionCodegen::handleParameterDefaultValue(std::shared_ptr<FunctionParam> param, int index) {
     // TODO: 实现参数默认值处理
     return "";
+}
+
+std::string FunctionCodegen::getParameterName(std::shared_ptr<FunctionParam> param) {
+    if (!param || !param->patternnotopalt) {
+        return "";
+    }
+    
+    try {
+        // 尝试将 pattern 转换为 IdentifierPattern
+        if (auto identifierPattern = std::dynamic_pointer_cast<IdentifierPattern>(param->patternnotopalt)) {
+            return identifierPattern->identifier;
+        }
+        
+        // 如果不是 IdentifierPattern，返回空字符串
+        return "";
+    }
+    catch (const std::exception& e) {
+        reportError("Exception in getParameterName: " + std::string(e.what()));
+        return "";
+    }
 }

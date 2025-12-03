@@ -440,7 +440,15 @@ void IRBuilder::emitStore(const std::string& value, const std::string& pointer, 
     std::string valueType = getRegisterType(value);
     std::string pointerType = getRegisterType(pointer);
     
-    if (!validateRegister(value)) {
+    // 对于函数参数，如果无法从寄存器映射中获取类型，使用默认类型
+    if (valueType.empty() && value.find("param_") == 0) {
+        valueType = "i32"; // 默认参数类型
+    }
+    
+    if (!validateRegister(value) && value.find("param_") != 0) {
+        // 如果是函数参数但不在寄存器映射中，允许继续
+        // 函数参数在函数签名中定义，不需要在寄存器映射中
+    } else if (!validateRegister(value)) {
         reportError("Invalid register for store value: " + value);
         return;
     }
@@ -461,6 +469,11 @@ void IRBuilder::emitStore(const std::string& value, const std::string& pointer, 
                 alignStr = ", align " + std::to_string(autoAlign);
             }
         }
+    }
+    
+    // 确保valueType不为空
+    if (valueType.empty()) {
+        valueType = "i32"; // 默认类型
     }
     
     std::string instruction = "store " + valueType + " " + value + ", " + pointerType + " " + pointer + alignStr;

@@ -494,4 +494,11 @@ private:
      * @return 默认值寄存器名称
      */
     std::string handleParameterDefaultValue(std::shared_ptr<FunctionParam> param, int index);
+    
+    /**
+     * 从函数参数的 pattern 中提取参数名称
+     * @param param 函数参数节点
+     * @return 参数名称字符串
+     */
+    std::string getParameterName(std::shared_ptr<FunctionParam> param);
 };
