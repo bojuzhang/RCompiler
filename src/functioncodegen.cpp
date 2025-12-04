@@ -73,6 +73,15 @@ bool FunctionCodegen::generateFunction(std::shared_ptr<Function> function) {
             return false;
         }
         
+        // 预处理：收集所有内部函数
+        std::vector<std::shared_ptr<Function>> nestedFunctions = preprocessNestedFunctions(function);
+        
+        // 先生成所有内部函数（在全局定义域）
+        if (!generateNestedFunctions(nestedFunctions)) {
+            reportError("Failed to generate nested functions");
+            return false;
+        }
+        
         // 获取函数信息
         std::string functionName = getFunctionName(function);
         std::string returnType = getFunctionReturnLLVMType(function);
@@ -200,6 +209,112 @@ bool FunctionCodegen::generateFunctionBody(std::shared_ptr<Function> function) {
         reportError("Exception in generateFunctionBody: " + std::string(e.what()));
         return false;
     }
+}
+
+// ==================== 内部函数预处理 ====================
+
+std::vector<std::shared_ptr<Function>> FunctionCodegen::preprocessNestedFunctions(std::shared_ptr<Function> function) {
+    std::vector<std::shared_ptr<Function>> nestedFunctions;
+    
+    if (!function || !function->blockexpression) {
+        return nestedFunctions;
+    }
+    
+    try {
+        // 递归遍历函数体中的所有语句，查找内部函数定义
+        for (const auto& stmt : function->blockexpression->statements) {
+            collectNestedFunctions(stmt, nestedFunctions);
+        }
+        
+        return nestedFunctions;
+    }
+    catch (const std::exception& e) {
+        reportError("Exception in preprocessNestedFunctions: " + std::string(e.what()));
+        return nestedFunctions;
+    }
+}
+
+void FunctionCodegen::collectNestedFunctions(std::shared_ptr<Statement> statement,
+                                         std::vector<std::shared_ptr<Function>>& nestedFunctions) {
+    if (!statement || !statement->astnode) {
+        return;
+    }
+    
+    try {
+        // 检查是否为项语句
+        if (auto item = std::dynamic_pointer_cast<Item>(statement->astnode)) {
+            // 检查是否为函数定义
+            if (auto function = std::dynamic_pointer_cast<Function>(item->item)) {
+                nestedFunctions.push_back(function);
+                
+                // 递归处理这个内部函数中的嵌套函数
+                auto innerNested = preprocessNestedFunctions(function);
+                nestedFunctions.insert(nestedFunctions.end(), innerNested.begin(), innerNested.end());
+            }
+        }
+        // 注意：我们不需要递归处理表达式语句中的函数定义，
+        // 因为在 Rx 语言中，函数定义只能作为语句出现
+    }
+    catch (const std::exception& e) {
+        reportError("Exception in collectNestedFunctions: " + std::string(e.what()));
+    }
+}
+
+bool FunctionCodegen::generateNestedFunctions(const std::vector<std::shared_ptr<Function>>& nestedFunctions) {
+    bool success = true;
+    
+    for (const auto& nestedFunc : nestedFunctions) {
+        if (!nestedFunc) {
+            success = false;
+            continue;
+        }
+        
+        try {
+            irBuilder->emitComment("Generating nested function: " + nestedFunc->identifier_name);
+            
+            // 验证函数签名
+            if (!validateFunctionSignature(nestedFunc)) {
+                success = false;
+                continue;
+            }
+            
+            // 获取函数信息
+            std::string functionName = getFunctionName(nestedFunc);
+            std::string returnType = getFunctionReturnLLVMType(nestedFunc);
+            std::vector<std::string> parameters = generateParameters(nestedFunc);
+            
+            // 生成函数定义开始（在全局定义域）
+            irBuilder->emitFunctionDef(functionName, returnType, parameters);
+            
+            // 临时进入函数上下文以生成函数体
+            enterFunction(functionName, returnType);
+            
+            // 生成函数序言
+            generatePrologue(nestedFunc);
+            
+            // 生成函数体
+            bool bodySuccess = generateFunctionBody(nestedFunc);
+            
+            // 生成函数尾声
+            generateEpilogue(nestedFunc);
+            
+            // 结束函数定义
+            irBuilder->emitFunctionEnd();
+            
+            // 退出函数上下文
+            exitFunction();
+            
+            if (!bodySuccess) {
+                success = false;
+            }
+        }
+        catch (const std::exception& e) {
+            reportError("Exception in generateNestedFunctions: " + std::string(e.what()));
+            success = false;
+        }
+    }
+    
+    return success;
 }
 
 // ==================== 内置函数调用生成 ====================

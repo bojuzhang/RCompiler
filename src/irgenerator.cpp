@@ -336,6 +336,9 @@ bool IRGenerator::setupComponentDependencies() {
         functionCodegen->setExpressionGenerator(expressionGenerator.get());
         functionCodegen->setStatementGenerator(statementGenerator.get());
         
+        // 设置 StatementGenerator 的 FunctionCodegen 引用
+        statementGenerator->setFunctionCodegen(functionCodegen.get());
+        
         return true;
     }
     catch (const std::exception& e) {

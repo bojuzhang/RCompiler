@@ -148,6 +148,28 @@ public:
      */
     bool generateFunctionBody(std::shared_ptr<Function> function);
     
+    /**
+     * 预处理函数，收集所有内部函数
+     * @param function 函数节点
+     * @return 收集的内部函数列表
+     */
+    std::vector<std::shared_ptr<Function>> preprocessNestedFunctions(std::shared_ptr<Function> function);
+    
+    /**
+     * 生成内部函数列表
+     * @param nestedFunctions 内部函数列表
+     * @return 是否成功生成
+     */
+    bool generateNestedFunctions(const std::vector<std::shared_ptr<Function>>& nestedFunctions);
+    
+    /**
+     * 递归收集语句中的内部函数
+     * @param statement 语句节点
+     * @param nestedFunctions 收集的内部函数列表
+     */
+    void collectNestedFunctions(std::shared_ptr<Statement> statement,
+                             std::vector<std::shared_ptr<Function>>& nestedFunctions);
+    
     // ==================== 内置函数调用生成 ====================
     
     /**

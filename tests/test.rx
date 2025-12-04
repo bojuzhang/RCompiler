@@ -1,9 +1,16 @@
-fn foo(x : i32) -> i32 {
-    x
+struct Node {
+    x : i32,
+    y : i32
+}
+
+impl Node {
+    fn get_val(self) -> i32 {
+        self.x * 2 + self.y * 2
+    }
 }
 
 fn main() {
-    let mut a : i32 = 1;
-    printlnInt(foo(a));
+    let mut node : Node = Node {x : 1, y : 2};
+    printlnInt(node.get_val());
     exit(0);
 }

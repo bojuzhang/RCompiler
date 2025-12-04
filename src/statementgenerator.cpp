@@ -4,8 +4,9 @@
 #include <vector>
 #include <memory>
 
-// 包含 ExpressionGenerator 头文件以解决前向声明问题
+// 包含 ExpressionGenerator 和 FunctionCodegen 头文件以解决前向声明问题
 #include "expressiongenerator.hpp"
+#include "functioncodegen.hpp"
 
 // 构造函数
 StatementGenerator::StatementGenerator(std::shared_ptr<IRBuilder> irBuilder,
@@ -15,6 +16,7 @@ StatementGenerator::StatementGenerator(std::shared_ptr<IRBuilder> irBuilder,
     , typeMapper(typeMapper)
     , scopeTree(scopeTree)
     , expressionGenerator(nullptr)
+    , functionCodegen(nullptr)
     , hasErrors(false)
     , isUnreachable(false)
 {
@@ -38,6 +40,14 @@ void StatementGenerator::setExpressionGenerator(ExpressionGenerator* exprGen) {
 
 ExpressionGenerator* StatementGenerator::getExpressionGenerator() const {
     return expressionGenerator;
+}
+
+void StatementGenerator::setFunctionCodegen(FunctionCodegen* funcGen) {
+    functionCodegen = funcGen;
+}
+
+FunctionCodegen* StatementGenerator::getFunctionCodegen() const {
+    return functionCodegen;
 }
 
 // ==================== 主要生成接口 ====================
@@ -477,14 +487,10 @@ bool StatementGenerator::generateFunctionItem(std::shared_ptr<Function> function
     }
     
     try {
-        irBuilder->emitComment("Function definition: " + function->identifier_name);
+        irBuilder->emitComment("Found nested function: " + function->identifier_name);
         
-        // 这里应该与 FunctionCodegen 组件协作
-        // 由于 StatementGenerator 主要处理语句，函数定义应该委托给专门的组件
-        // 暂时只生成注释，实际实现需要调用 FunctionCodegen
-        
-        // 注意：在实际的编译器架构中，函数定义通常在顶层处理
-        // StatementGenerator 主要处理函数体内的语句
+        // 注意：内部函数现在由 FunctionCodegen 的预处理机制处理
+        // 这里我们只需要记录注释，实际的函数生成已经在预处理阶段完成
         
         return true;
     }

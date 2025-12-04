@@ -13,6 +13,7 @@
 
 // 前向声明以解决循环依赖
 class ExpressionGenerator;
+class FunctionCodegen;
 
 /**
  * StatementGenerator 类 - 负责将 Rx 语言的语句转换为 LLVM IR 文本
@@ -34,8 +35,9 @@ private:
     std::shared_ptr<TypeMapper> typeMapper;
     std::shared_ptr<ScopeTree> scopeTree;
     
-    // ExpressionGenerator 引用（延迟初始化以解决循环依赖）
+    // ExpressionGenerator 和 FunctionCodegen 引用（延迟初始化以解决循环依赖）
     ExpressionGenerator* expressionGenerator;
+    FunctionCodegen* functionCodegen;
     
     // 控制流上下文管理
     struct ControlFlowContext {
@@ -85,6 +87,18 @@ public:
      * @return ExpressionGenerator 实例指针
      */
     ExpressionGenerator* getExpressionGenerator() const;
+    
+    /**
+     * 设置 FunctionCodegen 引用（延迟初始化）
+     * @param funcGen FunctionCodegen 实例指针
+     */
+    void setFunctionCodegen(FunctionCodegen* funcGen);
+    
+    /**
+     * 获取 FunctionCodegen 引用
+     * @return FunctionCodegen 实例指针
+     */
+    FunctionCodegen* getFunctionCodegen() const;
     
     // ==================== 主要生成接口 ====================
     
