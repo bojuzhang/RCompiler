@@ -21,7 +21,7 @@ fn test_nested_struct(p : Point) -> i32 {
 
 // 测试聚合类型的引用操作
 fn test_struct_ref(node : Node) -> i32 {
-    let ptr = &node;
+    let ptr : &Node = &node;
     (*ptr).x + (*ptr).y
 }
 

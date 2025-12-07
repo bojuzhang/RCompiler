@@ -166,7 +166,7 @@ bool StatementGenerator::generateLetStatement(std::shared_ptr<LetStatement> letS
         }
         
         // 5. 注册变量到符号表
-        registerVariable(variableName, llvmType, variableReg);
+        // registerVariable(variableName, llvmType, variableReg);
         
         return true;
     }

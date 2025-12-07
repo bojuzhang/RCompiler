@@ -57,7 +57,7 @@ public:
     ScopeTree();
     
     void EnterScope(Scope::ScopeType type, ASTNode* node = nullptr);
-    void EnterExistingScope(ASTNode* node);
+    void EnterExistingScope(ASTNode* node, bool fromtypecheck = true);
     void ExitScope();
     void GoToNode(ASTNode* node);
     

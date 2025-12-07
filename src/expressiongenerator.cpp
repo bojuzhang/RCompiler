@@ -1793,7 +1793,7 @@ std::string ExpressionGenerator::generateBlockExpression(std::shared_ptr<BlockEx
     
     try {
         // 创建新的作用域
-        scopeTree->EnterScope(Scope::ScopeType::Block, blockExpr.get());
+        scopeTree->EnterExistingScope(blockExpr.get(), 0);
         
         // 生成块中的所有语句
         if (!generateBlockStatements(blockExpr->statements)) {

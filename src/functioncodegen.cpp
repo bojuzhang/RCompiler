@@ -1,4 +1,5 @@
 #include "functioncodegen.hpp"
+#include <iostream>
 #include <stdexcept>
 #include <sstream>
 #include <vector>
@@ -75,12 +76,17 @@ bool FunctionCodegen::generateFunction(std::shared_ptr<Function> function) {
         
         // 预处理：收集所有内部函数
         std::vector<std::shared_ptr<Function>> nestedFunctions = preprocessNestedFunctions(function);
+
+        scopeTree->EnterExistingScope(function.get(), 0);
+        scopeTree->EnterExistingScope(function->blockexpression.get(), 0);
         
         // 先生成所有内部函数（在全局定义域）
         if (!generateNestedFunctions(nestedFunctions)) {
             reportError("Failed to generate nested functions");
             return false;
         }
+
+        scopeTree->ExitScope();
         
         // 获取函数信息
         std::string functionName = getFunctionName(function);
@@ -110,6 +116,8 @@ bool FunctionCodegen::generateFunction(std::shared_ptr<Function> function) {
         
         // 退出函数上下文
         exitFunction();
+
+        scopeTree->ExitScope();
         
         return success;
     }
@@ -163,6 +171,8 @@ bool FunctionCodegen::generateFunctionBody(std::shared_ptr<Function> function) {
             reportError("StatementGenerator not set for function body generation");
             return false;
         }
+
+        scopeTree->EnterExistingScope(function->blockexpression.get(), 0);
         
         // 生成函数体语句
         std::vector<std::shared_ptr<Statement>> statements = function->blockexpression->statements;
@@ -202,6 +212,8 @@ bool FunctionCodegen::generateFunctionBody(std::shared_ptr<Function> function) {
                 irBuilder->emitRetVoid();
             }
         }
+
+        scopeTree->ExitScope();
         
         return true;
     }
@@ -1012,41 +1024,41 @@ void FunctionCodegen::setupParameterScope(std::shared_ptr<Function> function) {
                         irBuilder->emitStore(incomingParamName, paramPtrReg);
                     }
                     
-                    // 将参数添加到符号表中作为变量
-                    auto currentScope = scopeTree->GetCurrentScope();
-                    if (currentScope) {
-                        // 创建参数符号
-                        auto paramSymbol = std::make_shared<Symbol>(actualParamName, SymbolKind::Variable);
+                    // // 将参数添加到符号表中作为变量
+                    // auto currentScope = scopeTree->GetCurrentScope();
+                    // if (currentScope) {
+                    //     // 创建参数符号
+                    //     auto paramSymbol = std::make_shared<Symbol>(actualParamName, SymbolKind::Variable);
                         
-                        // 从参数类型获取语义类型
-                        if (param->type) {
-                            // 从 nodeTypeMap 获取参数的语义类型
-                            auto it = nodeTypeMap.find(param.get());
-                            if (it != nodeTypeMap.end()) {
-                                paramSymbol->type = it->second;
-                            } else {
-                                // 回退到字符串解析
-                                if (auto typePath = std::dynamic_pointer_cast<TypePath>(param->type)) {
-                                    if (typePath->simplepathsegement) {
-                                        std::string typeName = typePath->simplepathsegement->identifier;
-                                        // 创建对应的语义类型
-                                        if (typeName == "i32") {
-                                            paramSymbol->type = std::make_shared<SignedIntType>();
-                                        } else if (typeName == "bool") {
-                                            paramSymbol->type = std::make_shared<SimpleType>("bool");
-                                        } else {
-                                            paramSymbol->type = std::make_shared<SignedIntType>(); // 默认类型
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                    //     // 从参数类型获取语义类型
+                    //     if (param->type) {
+                    //         // 从 nodeTypeMap 获取参数的语义类型
+                    //         auto it = nodeTypeMap.find(param.get());
+                    //         if (it != nodeTypeMap.end()) {
+                    //             paramSymbol->type = it->second;
+                    //         } else {
+                    //             // 回退到字符串解析
+                    //             if (auto typePath = std::dynamic_pointer_cast<TypePath>(param->type)) {
+                    //                 if (typePath->simplepathsegement) {
+                    //                     std::string typeName = typePath->simplepathsegement->identifier;
+                    //                     // 创建对应的语义类型
+                    //                     if (typeName == "i32") {
+                    //                         paramSymbol->type = std::make_shared<SignedIntType>();
+                    //                     } else if (typeName == "bool") {
+                    //                         paramSymbol->type = std::make_shared<SimpleType>("bool");
+                    //                     } else {
+                    //                         paramSymbol->type = std::make_shared<SignedIntType>(); // 默认类型
+                    //                     }
+                    //                 }
+                    //             }
+                    //         }
+                    //     }
                         
-                        paramSymbol->ismutable = true; // 参数默认可变
+                    //     paramSymbol->ismutable = true; // 参数默认可变
                         
-                        // 添加到当前作用域
-                        currentScope->Insert(actualParamName, paramSymbol);
-                    }
+                    //     // 添加到当前作用域
+                    //     currentScope->Insert(actualParamName, paramSymbol);
+                    // }
                     
                     // 存储参数信息到当前函数上下文
                     if (currentFunction) {

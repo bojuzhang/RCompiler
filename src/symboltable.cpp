@@ -100,7 +100,7 @@ void ScopeTree::EnterScope(Scope::ScopeType type, ASTNode* node) {
     }
 }
 
-void ScopeTree::EnterExistingScope(ASTNode* node) {
+void ScopeTree::EnterExistingScope(ASTNode* node, bool fromtypecheck) {
     if (!node) {
         return;
     }
@@ -110,7 +110,9 @@ void ScopeTree::EnterExistingScope(ASTNode* node) {
     if (it != nodeToScopeMap.end()) {
         // 在进入作用域时，清理之前可能添加的符号
         // 这样可以防止多次访问同一个作用域时的符号污染
-        it->second->ClearTypecheckAddedSymbols();
+        if (fromtypecheck) {
+            it->second->ClearTypecheckAddedSymbols();
+        }
         currentNode = it->second;
     }
 }
