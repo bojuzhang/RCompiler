@@ -1,6 +1,15 @@
+struct Node {
+    x : i32,
+    y : i32,
+}
+
+fn foo(node : Node) -> i32 {
+    node.x + node.y
+}
+
 fn main() {
-    let mut test : i32 = 1;
-    let ptr : &i32 = &test;
-    printlnInt(*ptr);
+    let mut node : Node = Node{x : 1, y : 2};
+    let ans : i32 = foo(node);
+    printlnInt(ans);
     exit(0);
 }

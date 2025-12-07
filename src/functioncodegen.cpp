@@ -977,15 +977,40 @@ void FunctionCodegen::setupParameterScope(std::shared_ptr<Function> function) {
                     // 首先调用 newRegister 来注册变量名到 variableCounters
                     std::string paramPtrReg = irBuilder->newRegister(actualParamName, "_ptr");
                     
+                    // 确定原始类型（去掉指针）
+                    std::string originalType = paramType;
+                    if (typeMapper->isPointerType(paramType)) {
+                        originalType = typeMapper->getPointedType(paramType);
+                    }
+                    
                     // 手动生成正确的 alloca 指令，使用正确的寄存器名
-                    std::string allocaInstruction = paramPtrReg + " = alloca " + paramType + ", align 4";
+                    std::string allocaInstruction = paramPtrReg + " = alloca " + originalType + ", align 4";
                     irBuilder->emitInstruction(allocaInstruction);
-                    irBuilder->setRegisterType(paramPtrReg, paramType + "*");
+                    irBuilder->setRegisterType(paramPtrReg, originalType + "*");
                     
                     // 将传入的参数值存储到分配的栈空间中
                     // 传入的参数在函数签名中命名为 %param_i
                     std::string incomingParamName = "%param_" + std::to_string(i);
-                    irBuilder->emitStore(incomingParamName, paramPtrReg);
+                    
+                    // 检查是否为聚合类型参数（指针类型）
+                    if (typeMapper->isPointerType(paramType)) {
+                        // 聚合类型参数：传入的是指针，需要使用 memcpy 复制内容
+                        irBuilder->emitComment("Copying aggregate parameter using memcpy");
+                        
+                        // 计算类型大小
+                        int typeSize = typeMapper->getTypeSize(originalType);
+                        std::string sizeReg = irBuilder->newRegister();
+                        std::string sizeInstruction = sizeReg + " = add i32 0, " + std::to_string(typeSize);
+                        irBuilder->emitInstruction(sizeInstruction);
+                        irBuilder->setRegisterType(sizeReg, "i32");
+                        
+                        // 调用 builtin_memcpy 复制数据
+                        // 直接使用函数参数名，emitMemcpy会处理格式
+                        irBuilder->emitMemcpy(paramPtrReg, incomingParamName, sizeReg);
+                    } else {
+                        // 基本类型参数：直接存储
+                        irBuilder->emitStore(incomingParamName, paramPtrReg);
+                    }
                     
                     // 将参数添加到符号表中作为变量
                     auto currentScope = scopeTree->GetCurrentScope();
@@ -995,18 +1020,23 @@ void FunctionCodegen::setupParameterScope(std::shared_ptr<Function> function) {
                         
                         // 从参数类型获取语义类型
                         if (param->type) {
-                            // 这里需要根据参数的AST节点创建语义类型
-                            // 简化处理：假设参数类型是基本类型
-                            if (auto typePath = std::dynamic_pointer_cast<TypePath>(param->type)) {
-                                if (typePath->simplepathsegement) {
-                                    std::string typeName = typePath->simplepathsegement->identifier;
-                                    // 创建对应的语义类型
-                                    if (typeName == "i32") {
-                                        paramSymbol->type = std::make_shared<SignedIntType>();
-                                    } else if (typeName == "bool") {
-                                        paramSymbol->type = std::make_shared<SimpleType>("bool");
-                                    } else {
-                                        paramSymbol->type = std::make_shared<SignedIntType>(); // 默认类型
+                            // 从 nodeTypeMap 获取参数的语义类型
+                            auto it = nodeTypeMap.find(param.get());
+                            if (it != nodeTypeMap.end()) {
+                                paramSymbol->type = it->second;
+                            } else {
+                                // 回退到字符串解析
+                                if (auto typePath = std::dynamic_pointer_cast<TypePath>(param->type)) {
+                                    if (typePath->simplepathsegement) {
+                                        std::string typeName = typePath->simplepathsegement->identifier;
+                                        // 创建对应的语义类型
+                                        if (typeName == "i32") {
+                                            paramSymbol->type = std::make_shared<SignedIntType>();
+                                        } else if (typeName == "bool") {
+                                            paramSymbol->type = std::make_shared<SimpleType>("bool");
+                                        } else {
+                                            paramSymbol->type = std::make_shared<SignedIntType>(); // 默认类型
+                                        }
                                     }
                                 }
                             }
@@ -1067,7 +1097,14 @@ std::string FunctionCodegen::getParameterLLVMType(std::shared_ptr<FunctionParam>
         }
         
         // 使用 TypeMapper 映射到 LLVM 类型
-        return typeMapper->mapRxTypeToLLVM(typeStr);
+        std::string llvmType = typeMapper->mapRxTypeToLLVM(typeStr);
+        
+        // 检查是否为聚合类型，如果是则改为指针类型
+        if (typeMapper->isStructType(llvmType) || typeMapper->isArrayType(llvmType)) {
+            return llvmType + "*";
+        }
+        
+        return llvmType;
     }
     catch (const std::exception& e) {
         reportError("Exception in getParameterLLVMType: " + std::string(e.what()));

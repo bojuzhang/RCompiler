@@ -896,8 +896,20 @@ std::string IRBuilder::emitCall(const std::string& functionName, const std::vect
 std::string IRBuilder::emitMemcpy(const std::string& dest, const std::string& src, const std::string& size) {
     std::string result = newRegister();
     
-    if (!validateRegister(dest) || !validateRegister(src) || !validateRegister(size)) {
-        reportError("Invalid registers for memcpy");
+    // 对于函数参数，允许不在寄存器映射中的情况
+    if (!validateRegister(dest)) {
+        reportError("Invalid destination register for memcpy: " + dest);
+        return result;
+    }
+    
+    // src可能是函数参数（如%param_0），允许不在寄存器映射中
+    if (!validateRegister(src) && src.find("param_") == std::string::npos) {
+        reportError("Invalid source register for memcpy: " + src);
+        return result;
+    }
+    
+    if (!validateRegister(size)) {
+        reportError("Invalid size register for memcpy: " + size);
         return result;
     }
     
