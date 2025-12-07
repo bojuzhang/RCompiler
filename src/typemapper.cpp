@@ -422,7 +422,11 @@ std::string TypeMapper::processReferenceTypeString(const std::string& refTypeStr
         return "i8*";
     }
     
+    // 递归处理目标类型，以支持多层引用如 &&T
     std::string targetLLVMType = mapRxTypeToLLVM(targetType);
+    
+    // 对于引用类型，总是返回指针类型
+    // &T -> T*, &&T -> T**, &mut T -> T*
     return targetLLVMType + "*";
 }
 
@@ -454,26 +458,37 @@ bool TypeMapper::parseArrayTypeString(const std::string& arrayTypeStr, std::stri
 }
 
 bool TypeMapper::parseReferenceTypeString(const std::string& refTypeStr, std::string& targetType, bool& isMutable) {
-    // 解析格式: &T 或 &mut T
+    // 解析格式: &T, &mut T, &&T, &&mut T
     if (refTypeStr.empty() || refTypeStr[0] != '&') {
         return false;
     }
     
     isMutable = false;
-    size_t targetStart = 1;
+    size_t pos = 1;  // 从第一个&之后开始
+    
+    // 跳过额外的&符号（用于多层引用）
+    while (pos < refTypeStr.length() && refTypeStr[pos] == '&') {
+        pos++;
+    }
+    
+    // 跳过空格
+    while (pos < refTypeStr.length() && std::isspace(refTypeStr[pos])) {
+        pos++;
+    }
     
     // 检查是否为可变引用
-    if (refTypeStr.length() > 4 && refTypeStr.substr(1, 3) == "mut") {
+    if (pos < refTypeStr.length() && refTypeStr.substr(pos, 3) == "mut") {
         isMutable = true;
-        targetStart = 4;
+        pos += 3;
         
         // 跳过空格
-        while (targetStart < refTypeStr.length() && std::isspace(refTypeStr[targetStart])) {
-            targetStart++;
+        while (pos < refTypeStr.length() && std::isspace(refTypeStr[pos])) {
+            pos++;
         }
     }
     
-    targetType = refTypeStr.substr(targetStart);
+    // 提取目标类型
+    targetType = refTypeStr.substr(pos);
     
     // 去除空格
     targetType.erase(std::remove_if(targetType.begin(), targetType.end(), ::isspace), targetType.end());

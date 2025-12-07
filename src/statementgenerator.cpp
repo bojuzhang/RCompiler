@@ -304,17 +304,25 @@ std::string StatementGenerator::allocateVariable(const std::string& variableName
         // 为变量设置特定的寄存器名
         std::string variableReg = irBuilder->newRegister(variableName, "_ptr");
         
+        // 对于引用类型，需要使用 TypeMapper 来正确映射
+        // 例如：&i32 应该映射为 i32*，而不是 &i32
+        std::string actualType = type;
+        if (type.find('&') == 0) {
+            // 这是一个引用类型，使用 TypeMapper 映射
+            actualType = typeMapper->mapRxTypeToLLVM(type);
+        }
+        
         // 手动设置寄存器类型
-        irBuilder->setRegisterType(variableReg, type + "*");
+        irBuilder->setRegisterType(variableReg, actualType + "*");
         
         // 生成 alloca 指令，但使用变量寄存器作为结果
         std::string alignStr = "";
-        int autoAlign = 4; // 默认对齐
+        int autoAlign = typeMapper->getTypeAlignment(actualType); // 使用 TypeMapper 获取对齐
         if (autoAlign > 0) {
             alignStr = ", align " + std::to_string(autoAlign);
         }
         
-        std::string instruction = variableReg + " = alloca " + type + alignStr;
+        std::string instruction = variableReg + " = alloca " + actualType + alignStr;
         irBuilder->emitInstruction(instruction);
         
         return variableReg;
@@ -752,7 +760,9 @@ std::string StatementGenerator::typeToStringHelper(std::shared_ptr<Type> type) {
         return "[" + sizeStr + " x " + elementType + "]";
     } else if (auto refType = std::dynamic_pointer_cast<ReferenceType>(type)) {
         std::string targetType = typeToStringHelper(refType->type);
-        return (refType->ismut ? "&mut " : "&") + targetType;
+        // 对于引用类型，使用 TypeMapper 来正确映射
+        std::string refTypeStr = (refType->ismut ? "&mut " : "&") + targetType;
+        return typeMapper->mapRxTypeToLLVM(refTypeStr);
     } else if (auto unitType = std::dynamic_pointer_cast<UnitType>(type)) {
         return "()";
     }

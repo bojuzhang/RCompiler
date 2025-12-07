@@ -79,6 +79,12 @@ std::string ExpressionGenerator::generateExpression(std::shared_ptr<Expression> 
         else if (auto fieldExpr = std::dynamic_pointer_cast<FieldExpression>(expression)) {
             return generateFieldExpression(fieldExpr);
         }
+        else if (auto borrowExpr = std::dynamic_pointer_cast<BorrowExpression>(expression)) {
+            return generateBorrowExpression(borrowExpr);
+        }
+        else if (auto derefExpr = std::dynamic_pointer_cast<DereferenceExpression>(expression)) {
+            return generateDereferenceExpression(derefExpr);
+        }
         else if (auto unaryExpr = std::dynamic_pointer_cast<UnaryExpression>(expression)) {
             return generateUnaryExpression(unaryExpr);
         }
@@ -732,28 +738,6 @@ std::string ExpressionGenerator::generateUnaryExpression(std::shared_ptr<UnaryEx
                 irBuilder->setRegisterType(resultReg, operandType);
                 break;
             }
-            case Token::kStar: { // 解引用操作符 *
-                // 解引用
-                if (!typeMapper->isPointerType(operandType)) {
-                    reportError("Cannot dereference non-pointer type: " + operandType);
-                    return "";
-                }
-                std::string elementType = typeMapper->getPointedType(operandType);
-                resultReg = irBuilder->emitLoad(operandReg, elementType);
-                break;
-            }
-            case Token::kAnd: { // 取引用操作符 &
-                // 取引用
-                if (typeMapper->isPointerType(operandType)) {
-                    // 已经是指针，直接返回
-                    return operandReg;
-                } else {
-                    // 需要创建临时变量并返回其地址
-                    std::string tempReg = irBuilder->emitAlloca(operandType);
-                    irBuilder->emitStore(operandReg, tempReg);
-                    return tempReg;
-                }
-            }
             default: {
                 reportError("Unsupported unary operator: " + std::to_string(static_cast<int>(unaryExpr->unarytype)));
                 return "";
@@ -764,6 +748,118 @@ std::string ExpressionGenerator::generateUnaryExpression(std::shared_ptr<UnaryEx
     }
     catch (const std::exception& e) {
         reportError("Exception in generateUnaryExpression: " + std::string(e.what()));
+        return "";
+    }
+}
+
+// ==================== 借用表达式生成方法 ====================
+
+std::string ExpressionGenerator::generateBorrowExpression(std::shared_ptr<BorrowExpression> borrowExpr) {
+    if (!borrowExpr || !borrowExpr->expression) {
+        reportError("BorrowExpression or its expression is null");
+        return "";
+    }
+    
+    try {
+        // 获取操作数的类型
+        std::string operandType = getExpressionType(borrowExpr->expression);
+        
+        // 对于 &T 表达式，结果类型应该是 T*
+        std::string pointerType = operandType + "*";
+        
+        // 创建临时变量来存储指针（分配 T** 空间）
+        std::string tempPtrPtr = irBuilder->emitAlloca(pointerType);
+        irBuilder->setRegisterType(tempPtrPtr, pointerType + "*");
+        
+        // 如果操作数是左值（变量、字段访问等），获取其地址
+        if (isLValue(borrowExpr->expression)) {
+            auto [lvaluePtr, lvalueType] = analyzeLValue(borrowExpr->expression);
+            if (!lvaluePtr.empty()) {
+                // 直接存储左值的地址到 T** 中
+                irBuilder->emitStore(lvaluePtr, tempPtrPtr);
+            } else {
+                reportError("Failed to get lvalue address for borrow expression");
+                return "";
+            }
+        } else {
+            // 对于右值，需要先存储到临时位置，然后取地址
+            std::string operandReg = generateExpression(borrowExpr->expression);
+            if (operandReg.empty()) {
+                reportError("Failed to generate operand for borrow expression");
+                return "";
+            }
+            
+            // 分配空间存储右值
+            std::string tempStorage = irBuilder->emitAlloca(operandType);
+            irBuilder->emitStore(operandReg, tempStorage);
+            
+            // 将右值的地址存储到 T** 中
+            irBuilder->emitStore(tempStorage, tempPtrPtr);
+        }
+        
+        // 加载指针值（从 T** 加载 T*）
+        std::string resultReg = irBuilder->emitLoad(tempPtrPtr, pointerType);
+        irBuilder->setRegisterType(resultReg, pointerType);
+        
+        return resultReg;
+    }
+    catch (const std::exception& e) {
+        reportError("Exception in generateBorrowExpression: " + std::string(e.what()));
+        return "";
+    }
+}
+
+// ==================== 解引用表达式生成方法 ====================
+
+std::string ExpressionGenerator::generateDereferenceExpression(std::shared_ptr<DereferenceExpression> derefExpr) {
+    if (!derefExpr || !derefExpr->expression) {
+        reportError("DereferenceExpression or its expression is null");
+        return "";
+    }
+    
+    try {
+        // 生成指针表达式
+        std::string pointerReg = generateExpression(derefExpr->expression);
+        if (pointerReg.empty()) {
+            reportError("Failed to generate pointer for dereference expression");
+            return "";
+        }
+        
+        // 获取指针类型
+        std::string pointerType = getExpressionType(derefExpr->expression);
+        
+        // 确保是指针类型
+        if (!typeMapper->isPointerType(pointerType)) {
+            reportError("Cannot dereference non-pointer type: " + pointerType);
+            return "";
+        }
+        
+        // 获取指向的类型
+        std::string elementType = typeMapper->getPointedType(pointerType);
+        
+        // 对于解引用表达式，我们需要连续加载：
+        // 如果是指向指针的指针（T**），先加载得到 T*，再加载得到 T
+        // 如果是普通指针（T*），直接加载得到 T
+        std::string resultReg;
+        
+        if (typeMapper->isPointerType(pointerType) && typeMapper->isPointerType(elementType)) {
+            // 这是一个指向指针的指针（T**），需要两次加载
+            // 第一次加载：从 T** 加载 T*
+            std::string firstLoad = irBuilder->emitLoad(pointerReg, elementType);
+            // 第二次加载：从 T* 加载 T
+            std::string finalElementType = typeMapper->getPointedType(elementType);
+            resultReg = irBuilder->emitLoad(firstLoad, finalElementType);
+            irBuilder->setRegisterType(resultReg, finalElementType);
+        } else {
+            // 普通指针（T*），直接加载
+            resultReg = irBuilder->emitLoad(pointerReg, elementType);
+            irBuilder->setRegisterType(resultReg, elementType);
+        }
+        
+        return resultReg;
+    }
+    catch (const std::exception& e) {
+        reportError("Exception in generateDereferenceExpression: " + std::string(e.what()));
         return "";
     }
 }

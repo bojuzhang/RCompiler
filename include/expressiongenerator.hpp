@@ -167,7 +167,21 @@ public:
     std::string generateFieldExpression(std::shared_ptr<FieldExpression> fieldExpr);
     
     /**
-     * 处理一元表达式（取负、逻辑非、解引用、取引用等）
+     * 处理借用表达式（取引用）
+     * @param borrowExpr 借用表达式节点
+     * @return 生成的结果寄存器名称
+     */
+    std::string generateBorrowExpression(std::shared_ptr<BorrowExpression> borrowExpr);
+    
+    /**
+     * 处理解引用表达式（*操作符）
+     * @param derefExpr 解引用表达式节点
+     * @return 生成的结果寄存器名称
+     */
+    std::string generateDereferenceExpression(std::shared_ptr<DereferenceExpression> derefExpr);
+    
+    /**
+     * 处理一元表达式（取负、逻辑非等）
      * @param unaryExpr 一元表达式节点
      * @return 生成的结果寄存器名称
      */
