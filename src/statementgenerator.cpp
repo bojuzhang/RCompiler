@@ -1,4 +1,5 @@
 #include "statementgenerator.hpp"
+#include <iostream>
 #include <sstream>
 #include <stdexcept>
 #include <vector>
@@ -760,9 +761,10 @@ std::string StatementGenerator::typeToStringHelper(std::shared_ptr<Type> type) {
         return "[" + sizeStr + " x " + elementType + "]";
     } else if (auto refType = std::dynamic_pointer_cast<ReferenceType>(type)) {
         std::string targetType = typeToStringHelper(refType->type);
-        // 对于引用类型，使用 TypeMapper 来正确映射
-        std::string refTypeStr = (refType->ismut ? "&mut " : "&") + targetType;
-        return typeMapper->mapRxTypeToLLVM(refTypeStr);
+        return targetType + "*";
+        // // 对于引用类型，使用 TypeMapper 来正确映射
+        // std::string refTypeStr = (refType->ismut ? "&mut " : "&") + targetType;
+        // return typeMapper->mapRxTypeToLLVM(refTypeStr);
     } else if (auto unitType = std::dynamic_pointer_cast<UnitType>(type)) {
         return "()";
     }

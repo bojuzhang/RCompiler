@@ -1206,6 +1206,8 @@ std::shared_ptr<SemanticType> TypeChecker::InferExpressionType(Expression& expr)
         // DereferenceExpression 类型推断：首先判断其类型能否解引用
         // 然后分析其解引用后的类型
         type = InferDereferenceExpressionType(*derefExpr);
+    } else if (auto borrowExpr = dynamic_cast<BorrowExpression*>(&expr)) {
+        type = InferBorrowExpressionType(*borrowExpr);
     } else {
         // 未知表达式类型
         type = nullptr;
@@ -2123,6 +2125,13 @@ std::shared_ptr<SemanticType> TypeChecker::InferConstantExpressionType(Expressio
         nodeTypeMap.erase(&expr);
     }
     
+    return result;
+}
+
+std::shared_ptr<SemanticType> TypeChecker::InferBorrowExpressionType(BorrowExpression& expr) {
+    auto exprType = InferExpressionType(*expr.expression);
+    auto result = std::make_shared<SimpleType>((expr.ismut ? "&mut " : "&") + exprType->tostring());
+    nodeTypeMap[&expr] = result;
     return result;
 }
 

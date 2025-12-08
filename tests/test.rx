@@ -3,13 +3,10 @@ struct Node {
     y : i32,
 }
 
-fn foo(node : Node) -> i32 {
-    node.x + node.y
-}
-
 fn main() {
     let mut node : Node = Node{x : 1, y : 2};
-    let ans : i32 = foo(node);
-    printlnInt(ans);
+    let ptr : &Node = &node;
+    let test : i32 = (*ptr).x;
+    printlnInt(test);
     exit(0);
 }

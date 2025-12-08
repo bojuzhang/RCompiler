@@ -186,7 +186,7 @@ private:
     std::shared_ptr<SemanticType> InferPredicateLoopExpressionType(PredicateLoopExpression& expr);
     std::shared_ptr<SemanticType> InferBlockExpressionType(BlockExpression& expr);
     std::shared_ptr<SemanticType> InferTypeCastExpressionType(TypeCastExpression& expr);
-    std::shared_ptr<SemanticType> InferDereferenceExpressionType(DereferenceExpression& expr);
+    std::shared_ptr<SemanticType> InferDereferenceExpressionType(DereferenceExpression& expr);std::shared_ptr<SemanticType> InferBorrowExpressionType(BorrowExpression& expr);
     
     void ReportError(const std::string& message);
     void ReportUndefinedType(const std::string& typeName, ASTNode* context);
