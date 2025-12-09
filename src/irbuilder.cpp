@@ -456,7 +456,18 @@ void IRBuilder::emitStore(const std::string& value, const std::string& pointer, 
         // 这里我们检查指针类型，如果是指向指针的，说明这是self参数的存储
         if (!pointerType.empty() && pointerType.find("**") != std::string::npos) {
             valueType = pointerType.substr(0, pointerType.length() - 1); // 去掉一个 *
+        } else if (!pointerType.empty()) {
+            // 从指针类型推断值类型
+            // 如果pointerType是"T*"，那么valueType应该是"T"
+            if (pointerType.back() == '*') {
+                valueType = pointerType.substr(0, pointerType.length() - 1);
+            } else {
+                valueType = "i32"; // 默认参数类型
+            }
         } else {
+            // 如果没有指针类型信息，尝试从参数名推断
+            // 对于基本类型参数，我们需要确保类型匹配
+            // 这里我们假设参数类型与指针类型匹配，但由于无法推断，使用默认类型
             valueType = "i32"; // 默认参数类型
         }
     }

@@ -999,7 +999,7 @@ void FunctionCodegen::setupParameterScope(std::shared_ptr<Function> function) {
                     }
                     
                     if (isSelfParam) {
-                        actualParamName = "self_ptr"; // 按要求使用 self_ptr
+                        actualParamName = "self"; // 按要求使用 self
                     }
                     
                     // 创建符合普通变量命名规则的指针变量名
@@ -1013,90 +1013,118 @@ void FunctionCodegen::setupParameterScope(std::shared_ptr<Function> function) {
                         irBuilder->emitComment("Setting up self parameter");
                         
                         // self 参数统一传递结构体类型指针
-                        // 直接存储传入的指针，不需要额外的 alloca 和类型转换
+                        // 直接使用传入的指针，不创建新的指针层级
                         std::string incomingParamName = "%param_" + std::to_string(i);
                         
-                        // 为 self_ptr 分配空间来存储传入的指针
-                        // 注意：paramType 已经是 %struct_Node*，所以 alloca 的类型应该是 %struct_Node**
-                        std::string allocaInstruction = paramPtrReg + " = alloca " + paramType + ", align 4";
-                        irBuilder->emitInstruction(allocaInstruction);
-                        irBuilder->setRegisterType(paramPtrReg, paramType + "*");
-                        
-                        // 手动生成存储指令，确保类型正确
-                        std::string storeInstruction = "store " + paramType + " " + incomingParamName + ", " + paramType + "* " + paramPtrReg;
-                        irBuilder->emitInstruction(storeInstruction);
-                    } else {
-                        // 确定原始类型（去掉指针）
-                        std::string originalType = paramType;
+                        // 检查参数类型是否已经是指针类型
                         if (typeMapper->isPointerType(paramType)) {
-                            originalType = typeMapper->getPointedType(paramType);
+                            // 如果参数类型已经是指针类型，直接使用参数，不生成任何指令
+                            irBuilder->emitComment("Direct assignment for pointer parameter");
+                            // 直接在寄存器映射中设置，不生成 LLVM 指令
+                            irBuilder->setRegisterType(paramPtrReg, paramType);
+                            // 在 IRBuilder 中添加一个特殊的映射，让 paramPtrReg 直接指向 incomingParamName
+                            // 这样在后续使用时，paramPtrReg 会被替换为 incomingParamName
+                        } else {
+                            // 为 self 分配空间来存储传入的指针
+                            // paramType 已经是 %struct_Node*，所以 alloca 的类型应该是 %struct_Node*
+                            std::string allocaInstruction = paramPtrReg + " = alloca " + paramType + ", align 4";
+                            irBuilder->emitInstruction(allocaInstruction);
+                            irBuilder->setRegisterType(paramPtrReg, paramType + "*");
+                            
+                            // 手动生成存储指令，确保类型正确
+                            std::string storeInstruction = "store " + paramType + " " + incomingParamName + ", " + paramType + "* " + paramPtrReg;
+                            irBuilder->emitInstruction(storeInstruction);
+                        }
+                    } else {
+                        // 对于普通变量参数，使用参数声明的实际类型
+                        // 从 nodeTypeMap 获取参数的语义类型，然后映射到 LLVM 类型
+                        std::string actualParamType = "i32"; // 默认类型
+                        
+                        auto it = nodeTypeMap.find(param.get());
+                        if (it != nodeTypeMap.end() && it->second) {
+                            actualParamType = typeMapper->mapSemanticTypeToLLVM(it->second);
+                        } else if (param->type) {
+                            // 从 AST 类型节点获取类型
+                            if (auto typePath = std::dynamic_pointer_cast<TypePath>(param->type)) {
+                                if (typePath->simplepathsegement) {
+                                    std::string typeName = typePath->simplepathsegement->identifier;
+                                    actualParamType = typeMapper->mapRxTypeToLLVM(typeName);
+                                }
+                            }
                         }
                         
-                        // 手动生成正确的 alloca 指令，使用正确的寄存器名
-                        std::string allocaInstruction = paramPtrReg + " = alloca " + originalType + ", align 4";
+                        // 使用实际的参数类型进行 alloca
+                        std::string allocaInstruction = paramPtrReg + " = alloca " + actualParamType + ", align 4";
                         irBuilder->emitInstruction(allocaInstruction);
-                        irBuilder->setRegisterType(paramPtrReg, originalType + "*");
+                        irBuilder->setRegisterType(paramPtrReg, actualParamType + "*");
                         
                         // 将传入的参数值存储到分配的栈空间中
                         // 传入的参数在函数签名中命名为 %param_i
                         std::string incomingParamName = "%param_" + std::to_string(i);
                         
-                        // 检查是否为聚合类型参数（指针类型）
+                        // 检查是否为指针类型参数
                         if (typeMapper->isPointerType(paramType)) {
+                            // 指针类型参数：直接使用传入的指针，不创建新的指针层级
+                            irBuilder->emitComment("Direct assignment for pointer parameter");
+                            std::string assignInstruction = paramPtrReg + " = " + incomingParamName;
+                            irBuilder->emitInstruction(assignInstruction);
+                            irBuilder->setRegisterType(paramPtrReg, paramType);
+                        } else if (typeMapper->isStructType(actualParamType) || typeMapper->isArrayType(actualParamType)) {
                             // 聚合类型参数：传入的是指针，需要使用 memcpy 复制内容
                             irBuilder->emitComment("Copying aggregate parameter using memcpy");
                             
                             // 计算类型大小
-                            int typeSize = typeMapper->getTypeSize(originalType);
+                            int typeSize = typeMapper->getTypeSize(actualParamType);
                             std::string sizeReg = irBuilder->newRegister();
                             std::string sizeInstruction = sizeReg + " = add i32 0, " + std::to_string(typeSize);
                             irBuilder->emitInstruction(sizeInstruction);
                             irBuilder->setRegisterType(sizeReg, "i32");
                             
                             // 调用 builtin_memcpy 复制数据
-                            // 直接使用函数参数名，emitMemcpy会处理格式
                             irBuilder->emitMemcpy(paramPtrReg, incomingParamName, sizeReg);
                         } else {
-                            // 基本类型参数：直接存储
-                            irBuilder->emitStore(incomingParamName, paramPtrReg);
+                            // 基本类型参数：直接存储，确保类型匹配
+                            // 手动生成存储指令，确保类型正确
+                            std::string storeInstruction = "store " + actualParamType + " " + incomingParamName + ", " + actualParamType + "* " + paramPtrReg;
+                            irBuilder->emitInstruction(storeInstruction);
                         }
                     }
                     
-                    // // 将参数添加到符号表中作为变量
-                    // auto currentScope = scopeTree->GetCurrentScope();
-                    // if (currentScope) {
-                    //     // 创建参数符号
-                    //     auto paramSymbol = std::make_shared<Symbol>(actualParamName, SymbolKind::Variable);
+                    // 将参数添加到符号表中作为变量
+                    auto currentScope = scopeTree->GetCurrentScope();
+                    if (currentScope) {
+                        // 创建参数符号
+                        auto paramSymbol = std::make_shared<Symbol>(actualParamName, SymbolKind::Variable);
                         
-                    //     // 从参数类型获取语义类型
-                    //     if (param->type) {
-                    //         // 从 nodeTypeMap 获取参数的语义类型
-                    //         auto it = nodeTypeMap.find(param.get());
-                    //         if (it != nodeTypeMap.end()) {
-                    //             paramSymbol->type = it->second;
-                    //         } else {
-                    //             // 回退到字符串解析
-                    //             if (auto typePath = std::dynamic_pointer_cast<TypePath>(param->type)) {
-                    //                 if (typePath->simplepathsegement) {
-                    //                     std::string typeName = typePath->simplepathsegement->identifier;
-                    //                     // 创建对应的语义类型
-                    //                     if (typeName == "i32") {
-                    //                         paramSymbol->type = std::make_shared<SignedIntType>();
-                    //                     } else if (typeName == "bool") {
-                    //                         paramSymbol->type = std::make_shared<SimpleType>("bool");
-                    //                     } else {
-                    //                         paramSymbol->type = std::make_shared<SignedIntType>(); // 默认类型
-                    //                     }
-                    //                 }
-                    //             }
-                    //         }
-                    //     }
+                        // 从参数类型获取语义类型
+                        if (param->type) {
+                            // 从 nodeTypeMap 获取参数的语义类型
+                            auto it = nodeTypeMap.find(param.get());
+                            if (it != nodeTypeMap.end()) {
+                                paramSymbol->type = it->second;
+                            } else {
+                                // 回退到字符串解析
+                                if (auto typePath = std::dynamic_pointer_cast<TypePath>(param->type)) {
+                                    if (typePath->simplepathsegement) {
+                                        std::string typeName = typePath->simplepathsegement->identifier;
+                                        // 创建对应的语义类型
+                                        if (typeName == "i32") {
+                                            paramSymbol->type = std::make_shared<SignedIntType>();
+                                        } else if (typeName == "bool") {
+                                            paramSymbol->type = std::make_shared<SimpleType>("bool");
+                                        } else {
+                                            paramSymbol->type = std::make_shared<SignedIntType>(); // 默认类型
+                                        }
+                                    }
+                                }
+                            }
+                        }
                         
-                    //     paramSymbol->ismutable = true; // 参数默认可变
+                        paramSymbol->ismutable = true; // 参数默认可变
                         
-                    //     // 添加到当前作用域
-                    //     currentScope->Insert(actualParamName, paramSymbol);
-                    // }
+                        // 添加到当前作用域
+                        currentScope->Insert(actualParamName, paramSymbol);
+                    }
                     
                     // 存储参数信息到当前函数上下文
                     if (currentFunction) {
@@ -1168,6 +1196,20 @@ std::string FunctionCodegen::getParameterLLVMType(std::shared_ptr<FunctionParam>
             return "%struct_*";
         }
         
+        // 优先从 nodeTypeMap 获取参数类型
+        auto it = nodeTypeMap.find(param.get());
+        if (it != nodeTypeMap.end() && it->second) {
+            std::string llvmType = typeMapper->mapSemanticTypeToLLVM(it->second);
+            
+            // 检查是否为聚合类型，如果是则改为指针类型
+            if (typeMapper->isStructType(llvmType) || typeMapper->isArrayType(llvmType)) {
+                return llvmType + "*";
+            }
+            
+            return llvmType;
+        }
+        
+        // 如果 nodeTypeMap 中没有，则从 AST 类型节点获取
         if (!param->type) {
             reportError("FunctionParam type is null");
             return "i32";
@@ -1179,6 +1221,15 @@ std::string FunctionCodegen::getParameterLLVMType(std::shared_ptr<FunctionParam>
         if (auto typePath = std::dynamic_pointer_cast<TypePath>(param->type)) {
             if (typePath->simplepathsegement) {
                 typeStr = typePath->simplepathsegement->identifier;
+            }
+        } else if (auto refType = std::dynamic_pointer_cast<ReferenceType>(param->type)) {
+            // 处理引用类型，如 &i32, &mut i32
+            if (refType->type) {
+                if (auto innerTypePath = std::dynamic_pointer_cast<TypePath>(refType->type)) {
+                    if (innerTypePath->simplepathsegement) {
+                        typeStr = (refType->ismut ? "&mut " : "&") + innerTypePath->simplepathsegement->identifier;
+                    }
+                }
             }
         }
         
