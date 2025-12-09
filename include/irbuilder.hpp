@@ -276,4 +276,7 @@ private:
     bool validateRegister(const std::string& registerName);
     bool validateBasicBlock(const std::string& basicBlockName);
     bool validateType(const std::string& type);
+    
+    // 变量计数器解析辅助方法
+    int extractCounterFromRegisterName(const std::string& regName, const std::string& variableName);
 };

@@ -3,10 +3,16 @@ struct Node {
     y : i32,
 }
 
+impl Node {
+    fn mulsum(self, t : i32) -> i32 {
+        (self.x + self.y) * t
+    }
+}
+
 fn main() {
-    let mut node : Node = Node{x : 1, y : 2};
-    let ptr : &Node = &node;
-    let test : i32 = (*ptr).x;
-    printlnInt(test);
+    // 测试基本结构体
+    let mut node : Node = Node{x : 10, y : 20};
+    let result1 : i32 = node.mulsum(5);
+    printlnInt(result1);  // 应该输出 150 = 5 * 30
     exit(0);
 }

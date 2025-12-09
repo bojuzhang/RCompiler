@@ -96,31 +96,40 @@ std::string IRBuilder::getVariableRegister(const std::string& variableName) {
             int counter = it->variableCounters[variableName];
             
             // 构建期望的变量寄存器名模式
-            std::string expectedPattern = "%" + variableName + "_ptr";
-            
-            // 在该作用域的寄存器中查找
-            for (const auto& regName : it->registers) {
-                // 首先检查是否完全匹配
-                if (regName == expectedPattern) {
-                    return regName;
-                }
-                
-                // 如果不完全匹配，检查是否以期望的模式开头（可能有后缀）
-                if (regName.find(expectedPattern) == 0) {
-                    return regName;
-                }
+            std::string expectedPattern;
+            if (counter == 1) {
+                expectedPattern = "%" + variableName + "_ptr";
+            } else {
+                expectedPattern = "%" + variableName + "_ptr_" + std::to_string(counter);
             }
             
-            // 如果没找到带_ptr后缀的，尝试查找以变量名开头的
-            std::string basePattern = "%" + variableName;
+            // 首先尝试精确匹配
+            if (it->registers.find(expectedPattern) != it->registers.end()) {
+                return expectedPattern;
+            }
+            
+            // 如果精确匹配失败，尝试查找以变量名开头的寄存器
+            std::string basePattern = "%" + variableName + "_ptr";
+            std::string bestMatch;
+            int bestCounter = -1;
+            
             for (const auto& regName : it->registers) {
                 if (regName.find(basePattern) == 0) {
                     // 检查它是否是指针类型
                     auto regIt = registers.find(regName);
                     if (regIt != registers.end() && regIt->second->llvmType.find('*') != std::string::npos) {
-                        return regName;
+                        // 解析寄存器名中的计数器
+                        int regCounter = extractCounterFromRegisterName(regName, variableName);
+                        if (regCounter > bestCounter) {
+                            bestCounter = regCounter;
+                            bestMatch = regName;
+                        }
                     }
                 }
+            }
+            
+            if (!bestMatch.empty()) {
+                return bestMatch;
             }
         }
     }
@@ -1030,4 +1039,23 @@ std::string IRBuilder::emitSExt(const std::string& value, const std::string& fro
     
     setRegisterType(result, toType);
     return result;
+}
+
+int IRBuilder::extractCounterFromRegisterName(const std::string& regName, const std::string& variableName) {
+    std::string basePattern = "%" + variableName + "_ptr";
+    
+    if (regName == basePattern) {
+        return 1; // 第一个变量没有后缀
+    }
+    
+    if (regName.find(basePattern + "_") == 0) {
+        std::string counterStr = regName.substr(basePattern.length() + 1);
+        try {
+            return std::stoi(counterStr);
+        } catch (const std::exception&) {
+            return -1;
+        }
+    }
+    
+    return -1;
 }
