@@ -537,11 +537,51 @@ bool IRGenerator::generateImpl(std::shared_ptr<InherentImpl> impl) {
         // 生成调试注释
         emitDebugComment("Generating impl block", impl);
         
-        // TODO: 实现 impl 块生成
-        // 这里需要处理 impl 块中的所有关联项
+        // 获取 impl 的目标类型
+        std::string targetType;
+        if (impl->type) {
+            // 将 Type 转换为字符串表示
+            if (auto typePath = std::dynamic_pointer_cast<TypePath>(impl->type)) {
+                if (typePath->simplepathsegement) {
+                    targetType = typePath->simplepathsegement->identifier;
+                }
+            }
+        }
         
         if (outputFormat == OutputFormat::DEBUG) {
-            irBuilder->emitComment("Impl block");
+            irBuilder->emitComment("Impl for type: " + targetType);
+        }
+        
+        // 生成 impl 块中的所有关联项
+        for (const auto& item : impl->associateditems) {
+            if (item && item->consttantitem_or_function) {
+                if (auto function = std::dynamic_pointer_cast<Function>(item->consttantitem_or_function)) {
+                    // 为 impl 中的函数生成特殊的方法名
+                    std::string originalName = function->identifier_name;
+                    function->identifier_name = targetType + "_" + originalName;
+                    
+                    if (outputFormat == OutputFormat::DEBUG) {
+                        irBuilder->emitComment("Generating method: " + originalName + " -> " + function->identifier_name);
+                    }
+                    
+                    // 委托给 FunctionCodegen 生成函数
+                    bool success = functionCodegen->generateFunction(function);
+                    
+                    // 恢复原始函数名（虽然在这个上下文中可能不需要）
+                    function->identifier_name = originalName;
+                    
+                    if (!success) {
+                        reportError("Failed to generate method: " + originalName);
+                        return false;
+                    }
+                }
+                else if (auto constant = std::dynamic_pointer_cast<ConstantItem>(item->consttantitem_or_function)) {
+                    if (outputFormat == OutputFormat::DEBUG) {
+                        irBuilder->emitComment("Associated constant: " + constant->identifier);
+                    }
+                    // TODO: 实现关联常量生成
+                }
+            }
         }
         
         return true;

@@ -421,9 +421,10 @@ private:
     /**
      * 获取参数的 LLVM 类型
      * @param param 参数节点
+     * @param paramIndex 参数索引（用于识别 self 参数）
      * @return LLVM 类型字符串
      */
-    std::string getParameterLLVMType(std::shared_ptr<FunctionParam> param);
+    std::string getParameterLLVMType(std::shared_ptr<FunctionParam> param, size_t paramIndex = 0);
     
     /**
      * 获取函数返回类型的 LLVM 表示

@@ -597,24 +597,51 @@ std::string ExpressionGenerator::generateMethodCallExpression(std::shared_ptr<Me
             return "";
         }
         
-        // 构建方法名（简化处理：receiver_type_method_name）
+        // 获取接收者类型
         std::string receiverType = getExpressionType(methodCallExpr->receiver);
-        std::string methodName = receiverType + "_" + methodCallExpr->method_name;
+        
+        // 构建方法名（简化处理：receiver_type_method_name）
+        std::string methodName;
+        if (typeMapper->isStructType(receiverType)) {
+            // 对于结构体类型，去掉 %struct_ 前缀
+            std::string structName = receiverType;
+            if (structName.find("%struct_") == 0) {
+                structName = structName.substr(8); // 去掉 "%struct_" 前缀
+            }
+            methodName = structName + "_" + methodCallExpr->method_name;
+        } else {
+            methodName = receiverType + "_" + methodCallExpr->method_name;
+        }
         
         // 生成参数表达式（包括接收者作为第一个参数）
         std::vector<std::string> args = generateCallArguments(methodCallExpr->callparams);
         
         // 检查接收者类型，如果是聚合类型需要特殊处理
         if (irBuilder->isAggregateType(receiverType)) {
-            // 为聚合类型接收者分配临时空间
-            std::string tempReceiverReg = irBuilder->emitAlloca(receiverType);
+            // 对于方法调用，接收者需要作为 self 参数传递
+            // 获取接收者的地址（指针）
+            std::string receiverPtrReg;
             
-            // 使用 memcpy 将接收者值复制到临时空间
-            irBuilder->emitAggregateCopy(tempReceiverReg, receiverReg, receiverType);
+            // 检查接收者是否为左值（变量、字段访问等）
+            if (isLValue(methodCallExpr->receiver)) {
+                auto [lvaluePtr, lvalueType] = analyzeLValue(methodCallExpr->receiver);
+                if (!lvaluePtr.empty()) {
+                    receiverPtrReg = lvaluePtr;
+                } else {
+                    reportError("Failed to get receiver address for method call");
+                    return "";
+                }
+            } else {
+                // 对于右值，需要分配临时空间并存储
+                receiverPtrReg = irBuilder->emitAlloca(receiverType);
+                irBuilder->emitStore(receiverReg, receiverPtrReg);
+            }
             
-            args.insert(args.begin(), tempReceiverReg); // 传递接收者指针
+            // 将接收者指针作为第一个参数传递（self 参数）
+            args.insert(args.begin(), receiverPtrReg);
         } else {
-            args.insert(args.begin(), receiverReg); // 传递接收者值
+            // 非聚合类型，直接传递值
+            args.insert(args.begin(), receiverReg);
         }
         
         // 获取方法返回类型

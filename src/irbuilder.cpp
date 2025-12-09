@@ -449,9 +449,16 @@ void IRBuilder::emitStore(const std::string& value, const std::string& pointer, 
     std::string valueType = getRegisterType(value);
     std::string pointerType = getRegisterType(pointer);
     
-    // 对于函数参数，如果无法从寄存器映射中获取类型，使用默认类型
+    // 对于函数参数，如果无法从寄存器映射中获取类型，尝试从函数签名推断
     if (valueType.empty() && value.find("param_") == 0) {
-        valueType = "i32"; // 默认参数类型
+        // 检查当前是否在函数上下文中，并且这是self参数
+        // 对于self参数，我们需要特殊处理类型推断
+        // 这里我们检查指针类型，如果是指向指针的，说明这是self参数的存储
+        if (!pointerType.empty() && pointerType.find("**") != std::string::npos) {
+            valueType = pointerType.substr(0, pointerType.length() - 1); // 去掉一个 *
+        } else {
+            valueType = "i32"; // 默认参数类型
+        }
     }
     
     if (!validateRegister(value) && value.find("param_") != 0) {

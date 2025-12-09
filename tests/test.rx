@@ -1,18 +1,23 @@
+fn foo(flag : bool) -> bool {
+    flag
+}
+
 struct Node {
     x : i32,
-    y : i32,
+    y : i32
 }
 
 impl Node {
-    fn mulsum(self, t : i32) -> i32 {
-        (self.x + self.y) * t
+    fn goo(self) -> i32 {
+        self.x
     }
 }
 
+
 fn main() {
-    // 测试基本结构体
-    let mut node : Node = Node{x : 10, y : 20};
-    let result1 : i32 = node.mulsum(5);
-    printlnInt(result1);  // 应该输出 150 = 5 * 30
+    let flag : bool = true;
+    let node : Node = Node {x : 10, y : 20};
+    foo(flag);
+    node.goo();
     exit(0);
 }
