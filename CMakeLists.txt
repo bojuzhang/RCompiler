@@ -19,6 +19,7 @@ add_library(compiler_lib src/lexer.cpp
                          src/symboltable.cpp
                          src/symbolcollection.cpp
                          src/typecheck.cpp
+                         src/typewrapper.cpp
                          src/constevaluator.cpp
                          src/controlflow.cpp
                          src/typeinference.cpp

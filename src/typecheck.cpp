@@ -704,6 +704,8 @@ bool TypeChecker::IsTypeVisible(const std::string& typeName) {
 
 bool TypeChecker::AreTypesCompatible(std::shared_ptr<SemanticType> expected, std::shared_ptr<SemanticType> actual) {
     if (!expected || !actual) return false;
+    expected->typeChecker = std::make_shared<TypeChecker>(*this);
+    actual->typeChecker = std::make_shared<TypeChecker>(*this);
     
     std::string expectedStr = expected->tostring();
     std::string actualStr = actual->tostring();
@@ -2135,7 +2137,7 @@ std::shared_ptr<SemanticType> TypeChecker::InferBorrowExpressionType(BorrowExpre
     auto exprType = InferExpressionType(*expr.expression);
     auto result = std::make_shared<SimpleType>((expr.ismut ? "&mut " : "&") + exprType->tostring());
     nodeTypeMap[&expr] = result;
-    return result;
+    return nullptr;
 }
 
 std::shared_ptr<SemanticType> TypeChecker::InferArrayExpressionTypeWithExpected(ArrayExpression& expr, std::shared_ptr<SemanticType> expectedType) {
