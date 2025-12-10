@@ -1343,9 +1343,27 @@ std::pair<std::string, std::string> ExpressionGenerator::analyzeLValue(std::shar
             return {varReg, varType};
         }
         else if (auto fieldExpr = std::dynamic_pointer_cast<FieldExpression>(expression)) {
-            // 字段访问
-            std::string receiverReg = generateExpression(fieldExpr->expression);
             std::string receiverType = getExpressionType(fieldExpr->expression);
+            std::string receiverReg;
+            if (auto pathExpr = std::dynamic_pointer_cast<PathExpression>(fieldExpr->expression)) {
+                // 对于变量访问，获取变量的指针寄存器
+                auto lastSegment = pathExpr->simplepath->simplepathsegements.back();
+                std::string variableName;
+                
+                // 特殊处理 self 和 Self
+                if (lastSegment->isself) {
+                    variableName = "self";
+                } else if (lastSegment->isSelf) {
+                    variableName = "Self";
+                } else {
+                    variableName = lastSegment->identifier;
+                }
+                
+                receiverReg = irBuilder->getVariableRegister(variableName);
+            } else {
+                receiverReg = generateExpression(fieldExpr->expression);
+            }
+            
             std::string fieldPtrReg = generateFieldAccessAddress(receiverReg, fieldExpr->identifier, receiverType);
             std::string fieldType = getStructFieldType(receiverType, fieldExpr->identifier);
             if (fieldType.empty()) {

@@ -4,10 +4,7 @@ struct Node {
 }
 
 impl Node {
-    fn sum(self) -> i32 {
-        self.x + self.y
-    }
-    fn modify_x(&self, x : i32) {
+    fn modify_x(&mut self, x : i32) {
         self.x = x;
     }
 }
@@ -15,10 +12,10 @@ impl Node {
 
 fn main() {
     let mut node : Node = Node {x : 10, y : 20};
-    printlnInt(node.sum());
-    node.modify_x(114514);
-    printlnInt(node.sum());
-    node.x = 114514;
-    printlnInt(node.sum());
+    printlnInt(node.x);
+    node.modify_x(114154);
+    printlnInt(node.x);
+    node.x = 1;
+    printlnInt(node.x);
     exit(0);
 }
