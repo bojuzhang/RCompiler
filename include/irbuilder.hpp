@@ -132,6 +132,9 @@ public:
     // 作用域检查方法
     bool isVariableInCurrentScope(const std::string& variableName);
     
+    // 手动注册变量到当前作用域
+    void registerVariableToCurrentScope(const std::string& variableName, const std::string& registerName, const std::string& type);
+    
     // ==================== 基本块管理接口 ====================
     
     // 基本块创建方法

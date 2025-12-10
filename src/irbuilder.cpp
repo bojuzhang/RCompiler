@@ -177,6 +177,27 @@ bool IRBuilder::isVariableInCurrentScope(const std::string& variableName) {
     return currentScopeInfo.variableCounters.find(variableName) != currentScopeInfo.variableCounters.end();
 }
 
+void IRBuilder::registerVariableToCurrentScope(const std::string& variableName, const std::string& registerName, const std::string& type) {
+    if (scopeStack.empty()) {
+        return;
+    }
+    
+    auto& currentScopeInfo = scopeStack.back();
+    
+    // 将变量名添加到作用域的变量计数器中（如果不存在）
+    if (currentScopeInfo.variableCounters.find(variableName) == currentScopeInfo.variableCounters.end()) {
+        currentScopeInfo.variableCounters[variableName] = 1;
+    }
+    
+    // 将寄存器名添加到作用域的寄存器集合中
+    currentScopeInfo.registers.insert(registerName);
+    
+    // 注册寄存器信息
+    auto currentScope = getCurrentScope();
+    auto regInfo = std::make_shared<RegisterInfo>(registerName, type, currentScope, type.find('*') != std::string::npos, false);
+    registers[registerName] = regInfo;
+}
+
 // ==================== 基本块管理接口 ====================
 
 std::string IRBuilder::newBasicBlock(const std::string& prefix) {

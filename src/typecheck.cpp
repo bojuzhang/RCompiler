@@ -1712,6 +1712,9 @@ std::shared_ptr<SemanticType> TypeChecker::InferFieldExpressionType(FieldExpress
                 }
                 
                 if (inFunctionWithSelf && selfType) {
+                    // 修复：设置 self 的类型以便后续 ir 阶段查找
+                    nodeTypeMap[expr.expression.get()] = selfType;
+
                     // 使用 self 的类型来查找字段
                     std::string selfTypeName = selfType->tostring();
                     auto structSymbol = FindStruct(selfTypeName);

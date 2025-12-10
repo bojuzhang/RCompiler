@@ -219,7 +219,16 @@ std::string ExpressionGenerator::generatePathExpression(std::shared_ptr<PathExpr
         }
         
         auto lastSegment = pathExpr->simplepath->simplepathsegements.back();
-        std::string variableName = lastSegment->identifier;
+        std::string variableName;
+        
+        // 特殊处理 self 和 Self
+        if (lastSegment->isself) {
+            variableName = "self";
+        } else if (lastSegment->isSelf) {
+            variableName = "Self";
+        } else {
+            variableName = lastSegment->identifier;
+        }
         
         // 从符号表查找变量
         auto currentScope = scopeTree->GetCurrentScope();
@@ -230,6 +239,21 @@ std::string ExpressionGenerator::generatePathExpression(std::shared_ptr<PathExpr
         
         auto symbol = currentScope->Lookup(variableName);
         if (!symbol) {
+            // 特殊处理self：如果找不到self，尝试从参数寄存器中获取
+            if (variableName == "self") {
+                // 尝试获取self_ptr寄存器
+                std::string selfPtrReg = irBuilder->getVariableRegister("self_ptr");
+                if (!selfPtrReg.empty()) {
+                    // 找到self_ptr，返回它
+                    std::string llvmType = "%struct_*"; // 默认结构体指针类型
+                    return selfPtrReg;
+                }
+                
+                // 如果还是找不到，尝试直接使用参数寄存器
+                // 在impl方法中，self通常是第一个参数
+                return "%param_0";
+            }
+            
             reportError("Undefined variable: " + variableName);
             return "";
         }
@@ -360,7 +384,18 @@ std::string ExpressionGenerator::generateIndexExpression(std::shared_ptr<IndexEx
         // 检查基础表达式是否是路径表达式（变量访问）
         if (auto pathExpr = std::dynamic_pointer_cast<PathExpression>(indexExpr->expressionout)) {
             // 对于数组变量，直接从变量对应的指针读取元素
-            std::string variableName = pathExpr->simplepath->simplepathsegements.back()->identifier;
+            auto lastSegment = pathExpr->simplepath->simplepathsegements.back();
+            std::string variableName;
+            
+            // 特殊处理 self 和 Self
+            if (lastSegment->isself) {
+                variableName = "self";
+            } else if (lastSegment->isSelf) {
+                variableName = "Self";
+            } else {
+                variableName = lastSegment->identifier;
+            }
+            
             std::string varReg = irBuilder->getVariableRegister(variableName);
             if (varReg.empty()) {
                 reportError("Variable register not found: " + variableName);
@@ -550,7 +585,16 @@ std::string ExpressionGenerator::generateCallExpression(std::shared_ptr<CallExpr
         // 获取函数名
         std::string functionName;
         if (auto pathExpr = std::dynamic_pointer_cast<PathExpression>(callExpr->expression)) {
-            functionName = pathExpr->simplepath->simplepathsegements.back()->identifier;
+            auto lastSegment = pathExpr->simplepath->simplepathsegements.back();
+            
+            // 特殊处理 self 和 Self
+            if (lastSegment->isself) {
+                functionName = "self";
+            } else if (lastSegment->isSelf) {
+                functionName = "Self";
+            } else {
+                functionName = lastSegment->identifier;
+            }
         } else {
             reportError("Unsupported function expression type");
             return "";
@@ -675,7 +719,18 @@ std::string ExpressionGenerator::generateFieldExpression(std::shared_ptr<FieldEx
         // 检查接收者是否为路径表达式（变量访问）
         if (auto pathExpr = std::dynamic_pointer_cast<PathExpression>(fieldExpr->expression)) {
             // 对于变量访问，获取变量的指针寄存器
-            std::string variableName = pathExpr->simplepath->simplepathsegements.back()->identifier;
+            auto lastSegment = pathExpr->simplepath->simplepathsegements.back();
+            std::string variableName;
+            
+            // 特殊处理 self 和 Self
+            if (lastSegment->isself) {
+                variableName = "self";
+            } else if (lastSegment->isSelf) {
+                variableName = "Self";
+            } else {
+                variableName = lastSegment->identifier;
+            }
+            
             receiverPtrReg = irBuilder->getVariableRegister(variableName);
         } else {
             // 对于其他类型的表达式，生成表达式然后获取其地址
@@ -1005,7 +1060,18 @@ std::string ExpressionGenerator::generateAssignmentExpression(std::shared_ptr<As
         if (irBuilder->isAggregateType(rightType)) {
             // 如果右值是路径表达式（变量），直接获取其指针
             if (auto pathExpr = std::dynamic_pointer_cast<PathExpression>(assignExpr->rightexpression)) {
-                std::string variableName = pathExpr->simplepath->simplepathsegements.back()->identifier;
+                auto lastSegment = pathExpr->simplepath->simplepathsegements.back();
+                std::string variableName;
+                
+                // 特殊处理 self 和 Self
+                if (lastSegment->isself) {
+                    variableName = "self";
+                } else if (lastSegment->isSelf) {
+                    variableName = "Self";
+                } else {
+                    variableName = lastSegment->identifier;
+                }
+                
                 rightReg = irBuilder->getVariableRegister(variableName);
             } else {
                 // 其他情况，生成表达式
@@ -1260,7 +1326,18 @@ std::pair<std::string, std::string> ExpressionGenerator::analyzeLValue(std::shar
     try {
         if (auto pathExpr = std::dynamic_pointer_cast<PathExpression>(expression)) {
             // 变量访问
-            std::string variableName = pathExpr->simplepath->simplepathsegements.back()->identifier;
+            auto lastSegment = pathExpr->simplepath->simplepathsegements.back();
+            std::string variableName;
+            
+            // 特殊处理 self 和 Self
+            if (lastSegment->isself) {
+                variableName = "self";
+            } else if (lastSegment->isSelf) {
+                variableName = "Self";
+            } else {
+                variableName = lastSegment->identifier;
+            }
+            
             std::string varReg = irBuilder->getVariableRegister(variableName);
             std::string varType = getExpressionType(expression);
             return {varReg, varType};
@@ -1296,7 +1373,18 @@ std::pair<std::string, std::string> ExpressionGenerator::analyzeLValue(std::shar
                 // 检查基础表达式是否是路径表达式（变量访问）
                 if (auto pathExpr = std::dynamic_pointer_cast<PathExpression>(indexExpr->expressionout)) {
                     // 对于数组变量，直接从变量对应的指针读取元素
-                    std::string variableName = pathExpr->simplepath->simplepathsegements.back()->identifier;
+                    auto lastSegment = pathExpr->simplepath->simplepathsegements.back();
+                    std::string variableName;
+                    
+                    // 特殊处理 self 和 Self
+                    if (lastSegment->isself) {
+                        variableName = "self";
+                    } else if (lastSegment->isSelf) {
+                        variableName = "Self";
+                    } else {
+                        variableName = lastSegment->identifier;
+                    }
+                    
                     std::string varReg = irBuilder->getVariableRegister(variableName);
                     if (varReg.empty()) {
                         reportError("Variable register not found: " + variableName);

@@ -1013,28 +1013,13 @@ void FunctionCodegen::setupParameterScope(std::shared_ptr<Function> function) {
                         irBuilder->emitComment("Setting up self parameter");
                         
                         // self 参数统一传递结构体类型指针
-                        // 直接使用传入的指针，不创建新的指针层级
+                        // 根据用户要求，使用 bitcast 原类型到原类型实现显式的指针赋值
                         std::string incomingParamName = "%param_" + std::to_string(i);
                         
-                        // 检查参数类型是否已经是指针类型
-                        if (typeMapper->isPointerType(paramType)) {
-                            // 如果参数类型已经是指针类型，直接使用参数，不生成任何指令
-                            irBuilder->emitComment("Direct assignment for pointer parameter");
-                            // 直接在寄存器映射中设置，不生成 LLVM 指令
-                            irBuilder->setRegisterType(paramPtrReg, paramType);
-                            // 在 IRBuilder 中添加一个特殊的映射，让 paramPtrReg 直接指向 incomingParamName
-                            // 这样在后续使用时，paramPtrReg 会被替换为 incomingParamName
-                        } else {
-                            // 为 self 分配空间来存储传入的指针
-                            // paramType 已经是 %struct_Node*，所以 alloca 的类型应该是 %struct_Node*
-                            std::string allocaInstruction = paramPtrReg + " = alloca " + paramType + ", align 4";
-                            irBuilder->emitInstruction(allocaInstruction);
-                            irBuilder->setRegisterType(paramPtrReg, paramType + "*");
-                            
-                            // 手动生成存储指令，确保类型正确
-                            std::string storeInstruction = "store " + paramType + " " + incomingParamName + ", " + paramType + "* " + paramPtrReg;
-                            irBuilder->emitInstruction(storeInstruction);
-                        }
+                        // 生成 bitcast 指令：%self_ptr = bitcast %struct_Node* %param_0 to %struct_Node*
+                        std::string bitcastInstruction = paramPtrReg + " = bitcast " + paramType + " " + incomingParamName + " to " + paramType;
+                        irBuilder->emitInstruction(bitcastInstruction);
+                        irBuilder->setRegisterType(paramPtrReg, paramType);
                     } else {
                         // 对于普通变量参数，使用参数声明的实际类型
                         // 从 nodeTypeMap 获取参数的语义类型，然后映射到 LLVM 类型
@@ -1069,6 +1054,9 @@ void FunctionCodegen::setupParameterScope(std::shared_ptr<Function> function) {
                             std::string assignInstruction = paramPtrReg + " = " + incomingParamName;
                             irBuilder->emitInstruction(assignInstruction);
                             irBuilder->setRegisterType(paramPtrReg, paramType);
+                            
+                            // 手动注册这个变量到 IRBuilder 的寄存器映射中，确保 getVariableRegister 能找到它
+                            irBuilder->registerVariableToCurrentScope(actualParamName, paramPtrReg, paramType);
                         } else if (typeMapper->isStructType(actualParamType) || typeMapper->isArrayType(actualParamType)) {
                             // 聚合类型参数：传入的是指针，需要使用 memcpy 复制内容
                             irBuilder->emitComment("Copying aggregate parameter using memcpy");
