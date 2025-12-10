@@ -21,7 +21,7 @@ public:
     TypeMapperTest() {
         // 创建测试用的作用域树
         scopeTree = std::make_shared<ScopeTree>();
-        typeMapper = std::make_shared<TypeMapper>(scopeTree);
+        typeMapper = std::make_shared<TypeMapper>(scopeTree, nullptr);
     }
 
     void runTest(const std::string& testName, bool condition) {

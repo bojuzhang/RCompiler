@@ -25,10 +25,10 @@ protected:
         scopeTree->EnterScope(Scope::ScopeType::Global); // 创建全局作用域
         
         // 创建 IRBuilder
-        irBuilder = std::make_shared<IRBuilder>(static_cast<std::ostream&>(*outputStream), scopeTree);
+        irBuilder = std::make_shared<IRBuilder>(static_cast<std::ostream&>(*outputStream), scopeTree, nullptr);
         
         // 创建 TypeMapper
-        typeMapper = std::make_shared<TypeMapper>(scopeTree);
+        typeMapper = std::make_shared<TypeMapper>(scopeTree, nullptr);
         
         // 创建 FunctionCodegen
         functionCodegen = std::make_shared<FunctionCodegen>(

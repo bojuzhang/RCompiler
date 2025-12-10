@@ -18,16 +18,16 @@ protected:
         scopeTree = std::make_shared<ScopeTree>();
         
         // 创建类型映射器
-        typeMapper = std::make_shared<TypeMapper>(scopeTree);
+        typeMapper = std::make_shared<TypeMapper>(scopeTree, nullptr);
         
         // 创建 IRBuilder
-        irBuilder = std::make_shared<IRBuilder>(*outputStream, scopeTree);
+        irBuilder = std::make_shared<IRBuilder>(*outputStream, scopeTree, nullptr);
         
         // 创建空的节点类型映射
         std::unordered_map<ASTNode*, std::shared_ptr<SemanticType>> nodeTypeMap;
         
         // 创建 ExpressionGenerator
-        exprGen = std::make_unique<ExpressionGenerator>(irBuilder, typeMapper, scopeTree, nodeTypeMap);
+        exprGen = std::make_unique<ExpressionGenerator>(irBuilder, typeMapper, scopeTree, nodeTypeMap, nullptr);
     }
     
     void TearDown() override {
@@ -54,7 +54,7 @@ TEST_F(ExpressionGeneratorTest, LiteralExpression_Integer) {
     nodeTypeMap[literalExpr.get()] = std::make_shared<SimpleType>("i32");
     
     // 重新创建 ExpressionGenerator 以包含类型映射
-    exprGen = std::make_unique<ExpressionGenerator>(irBuilder, typeMapper, scopeTree, nodeTypeMap);
+    exprGen = std::make_unique<ExpressionGenerator>(irBuilder, typeMapper, scopeTree, nodeTypeMap, nullptr);
     
     // 生成表达式
     std::string result = exprGen->generateExpression(literalExpr);
@@ -83,7 +83,7 @@ TEST_F(ExpressionGeneratorTest, LiteralExpression_Boolean) {
     nodeTypeMap[literalExpr.get()] = std::make_shared<SimpleType>("i1");
     
     // 重新创建 ExpressionGenerator
-    exprGen = std::make_unique<ExpressionGenerator>(irBuilder, typeMapper, scopeTree, nodeTypeMap);
+    exprGen = std::make_unique<ExpressionGenerator>(irBuilder, typeMapper, scopeTree, nodeTypeMap, nullptr);
     
     // 生成表达式
     std::string result = exprGen->generateExpression(literalExpr);
@@ -125,7 +125,7 @@ TEST_F(ExpressionGeneratorTest, PathExpression_Variable) {
     nodeTypeMap[pathExpr.get()] = std::make_shared<SimpleType>("i32");
     
     // 重新创建 ExpressionGenerator
-    exprGen = std::make_unique<ExpressionGenerator>(irBuilder, typeMapper, scopeTree, nodeTypeMap);
+    exprGen = std::make_unique<ExpressionGenerator>(irBuilder, typeMapper, scopeTree, nodeTypeMap, nullptr);
     
     // 生成表达式
     std::string result = exprGen->generateExpression(pathExpr);
@@ -158,7 +158,7 @@ TEST_F(ExpressionGeneratorTest, BinaryExpression_Addition) {
     nodeTypeMap[binaryExpr.get()] = std::make_shared<SimpleType>("i32");
     
     // 重新创建 ExpressionGenerator
-    exprGen = std::make_unique<ExpressionGenerator>(irBuilder, typeMapper, scopeTree, nodeTypeMap);
+    exprGen = std::make_unique<ExpressionGenerator>(irBuilder, typeMapper, scopeTree, nodeTypeMap, nullptr);
     
     // 生成表达式
     std::string result = exprGen->generateExpression(binaryExpr);
@@ -190,7 +190,7 @@ TEST_F(ExpressionGeneratorTest, TypeCastExpression) {
     nodeTypeMap[typeCastExpr.get()] = std::make_shared<SimpleType>("i32");
     
     // 重新创建 ExpressionGenerator
-    exprGen = std::make_unique<ExpressionGenerator>(irBuilder, typeMapper, scopeTree, nodeTypeMap);
+    exprGen = std::make_unique<ExpressionGenerator>(irBuilder, typeMapper, scopeTree, nodeTypeMap, nullptr);
     
     // 生成表达式
     std::string result = exprGen->generateExpression(typeCastExpr);
@@ -234,7 +234,7 @@ TEST_F(ExpressionGeneratorTest, ErrorHandling_UnsupportedExpression) {
     std::unordered_map<ASTNode*, std::shared_ptr<SemanticType>> nodeTypeMap;
     
     // 重新创建 ExpressionGenerator
-    exprGen = std::make_unique<ExpressionGenerator>(irBuilder, typeMapper, scopeTree, nodeTypeMap);
+    exprGen = std::make_unique<ExpressionGenerator>(irBuilder, typeMapper, scopeTree, nodeTypeMap, nullptr);
     
     // 生成表达式
     std::string result = exprGen->generateExpression(unsupportedExpr);

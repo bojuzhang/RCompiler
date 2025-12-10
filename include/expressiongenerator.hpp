@@ -7,6 +7,7 @@
 #include <unordered_map>
 #include "astnodes.hpp"
 #include "irbuilder.hpp"
+#include "typecheck.hpp"
 #include "typemapper.hpp"
 #include "scope.hpp"
 #include "symbol.hpp"
@@ -40,6 +41,9 @@ private:
     
     // 语义分析阶段的类型信息映射
     std::unordered_map<ASTNode*, std::shared_ptr<SemanticType>> nodeTypeMap;
+public:
+    std::shared_ptr<TypeChecker> typeChecker;
+private:
     
     // 循环上下文管理
     struct LoopContext {
@@ -70,10 +74,11 @@ private:
 
 public:
     // 构造函数
-    ExpressionGenerator(std::shared_ptr<IRBuilder> irBuilder,
+    explicit ExpressionGenerator(std::shared_ptr<IRBuilder> irBuilder,
                         std::shared_ptr<TypeMapper> typeMapper,
                         std::shared_ptr<ScopeTree> scopeTree,
-                        const std::unordered_map<ASTNode*, std::shared_ptr<SemanticType>>& nodeTypeMap);
+                        const std::unordered_map<ASTNode*, std::shared_ptr<SemanticType>>& nodeTypeMap,
+                        std::shared_ptr<TypeChecker> typeChecker);
     
     // 析构函数
     ~ExpressionGenerator() = default;

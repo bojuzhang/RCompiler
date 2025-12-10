@@ -268,7 +268,7 @@ void IRGenerator::reportWarning(const std::string& message, std::shared_ptr<ASTN
 bool IRGenerator::initializeComponents() {
     try {
         // 创建 IRBuilder
-        irBuilder = std::make_shared<IRBuilder>(outputStream, scopeTree);
+        irBuilder = std::make_shared<IRBuilder>(outputStream, scopeTree, typeChecker);
         if (!irBuilder) {
             reportError("Failed to create IRBuilder");
             return false;
@@ -283,7 +283,7 @@ bool IRGenerator::initializeComponents() {
         
         // 创建 ExpressionGenerator
         expressionGenerator = std::make_unique<ExpressionGenerator>(
-            irBuilder, typeMapper, scopeTree, nodeTypeMap);
+            irBuilder, typeMapper, scopeTree, nodeTypeMap, typeChecker);
         if (!expressionGenerator) {
             reportError("Failed to create ExpressionGenerator");
             return false;

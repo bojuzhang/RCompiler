@@ -9,6 +9,7 @@
 #include <memory>
 #include "scope.hpp"
 #include "symbol.hpp"
+#include "typecheck.hpp"
 #include "typemapper.hpp"
 
 // 前向声明
@@ -75,6 +76,7 @@ private:
     std::shared_ptr<ScopeTree> scopeTree;
     
     // 类型映射器
+    std::shared_ptr<TypeChecker> typeChecker;
     std::shared_ptr<TypeMapper> typeMapper;
     
     // 寄存器管理
@@ -98,7 +100,8 @@ private:
 
 public:
     // 构造函数
-    explicit IRBuilder(std::ostream& output, std::shared_ptr<ScopeTree> scopeTree);
+    explicit IRBuilder(std::ostream& output, std::shared_ptr<ScopeTree> scopeTree,
+              std::shared_ptr<TypeChecker> typeChecker);
     
     // 析构函数
     ~IRBuilder() = default;

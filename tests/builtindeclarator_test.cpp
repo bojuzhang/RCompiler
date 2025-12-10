@@ -75,7 +75,7 @@ std::shared_ptr<ScopeTree> createTestScopeTree() {
 void testConstructor() {
     std::ostringstream output;
     auto scopeTree = createTestScopeTree();
-    auto irBuilder = std::make_shared<IRBuilder>(output, scopeTree);
+    auto irBuilder = std::make_shared<IRBuilder>(output, scopeTree, nullptr);
     
     BuiltinDeclarator declarator(irBuilder);
     
@@ -89,7 +89,7 @@ void testConstructor() {
 void testStandardBuiltinRegistration() {
     std::ostringstream output;
     auto scopeTree = createTestScopeTree();
-    auto irBuilder = std::make_shared<IRBuilder>(output, scopeTree);
+    auto irBuilder = std::make_shared<IRBuilder>(output, scopeTree, nullptr);
     
     BuiltinDeclarator declarator(irBuilder);
     
@@ -113,7 +113,7 @@ void testStandardBuiltinRegistration() {
 void testBatchDeclaration() {
     std::ostringstream output;
     auto scopeTree = createTestScopeTree();
-    auto irBuilder = std::make_shared<IRBuilder>(output, scopeTree);
+    auto irBuilder = std::make_shared<IRBuilder>(output, scopeTree, nullptr);
     
     BuiltinDeclarator declarator(irBuilder);
     
@@ -133,7 +133,7 @@ void testBatchDeclaration() {
 void testSingleFunctionDeclaration() {
     std::ostringstream output;
     auto scopeTree = createTestScopeTree();
-    auto irBuilder = std::make_shared<IRBuilder>(output, scopeTree);
+    auto irBuilder = std::make_shared<IRBuilder>(output, scopeTree, nullptr);
     
     BuiltinDeclarator declarator(irBuilder);
     
@@ -151,7 +151,7 @@ void testSingleFunctionDeclaration() {
 void testFunctionTypeQuery() {
     std::ostringstream output;
     auto scopeTree = createTestScopeTree();
-    auto irBuilder = std::make_shared<IRBuilder>(output, scopeTree);
+    auto irBuilder = std::make_shared<IRBuilder>(output, scopeTree, nullptr);
     
     BuiltinDeclarator declarator(irBuilder);
     
@@ -176,7 +176,7 @@ void testFunctionTypeQuery() {
 void testTypeChecking() {
     std::ostringstream output;
     auto scopeTree = createTestScopeTree();
-    auto irBuilder = std::make_shared<IRBuilder>(output, scopeTree);
+    auto irBuilder = std::make_shared<IRBuilder>(output, scopeTree, nullptr);
     
     BuiltinDeclarator declarator(irBuilder);
     
@@ -201,7 +201,7 @@ void testTypeChecking() {
 void testErrorMessages() {
     std::ostringstream output;
     auto scopeTree = createTestScopeTree();
-    auto irBuilder = std::make_shared<IRBuilder>(output, scopeTree);
+    auto irBuilder = std::make_shared<IRBuilder>(output, scopeTree, nullptr);
     
     BuiltinDeclarator declarator(irBuilder);
     
@@ -222,7 +222,7 @@ void testErrorMessages() {
 void testStructFunctionDeclaration() {
     std::ostringstream output;
     auto scopeTree = createTestScopeTree();
-    auto irBuilder = std::make_shared<IRBuilder>(output, scopeTree);
+    auto irBuilder = std::make_shared<IRBuilder>(output, scopeTree, nullptr);
     
     BuiltinDeclarator declarator(irBuilder);
     
@@ -246,7 +246,7 @@ void testStructFunctionDeclaration() {
 void testCustomFunctionRegistration() {
     std::ostringstream output;
     auto scopeTree = createTestScopeTree();
-    auto irBuilder = std::make_shared<IRBuilder>(output, scopeTree);
+    auto irBuilder = std::make_shared<IRBuilder>(output, scopeTree, nullptr);
     
     BuiltinDeclarator declarator(irBuilder);
     
@@ -272,7 +272,7 @@ void testCustomFunctionRegistration() {
 void testDeclarationStateManagement() {
     std::ostringstream output;
     auto scopeTree = createTestScopeTree();
-    auto irBuilder = std::make_shared<IRBuilder>(output, scopeTree);
+    auto irBuilder = std::make_shared<IRBuilder>(output, scopeTree, nullptr);
     
     BuiltinDeclarator declarator(irBuilder);
     
@@ -293,7 +293,7 @@ void testDeclarationStateManagement() {
 void testErrorHandling() {
     std::ostringstream output;
     auto scopeTree = createTestScopeTree();
-    auto irBuilder = std::make_shared<IRBuilder>(output, scopeTree);
+    auto irBuilder = std::make_shared<IRBuilder>(output, scopeTree, nullptr);
     
     BuiltinDeclarator declarator(irBuilder);
     
@@ -316,7 +316,7 @@ void testErrorHandling() {
 void testDuplicateDeclarationWarning() {
     std::ostringstream output;
     auto scopeTree = createTestScopeTree();
-    auto irBuilder = std::make_shared<IRBuilder>(output, scopeTree);
+    auto irBuilder = std::make_shared<IRBuilder>(output, scopeTree, nullptr);
     
     BuiltinDeclarator declarator(irBuilder);
     

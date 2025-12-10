@@ -1,22 +1,27 @@
 #include "expressiongenerator.hpp"
+#include <cstddef>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
 #include <cctype>
 
 // 包含 StatementGenerator 头文件以解决前向声明问题
 #include "statementgenerator.hpp"
+#include "typecheck.hpp"
 
 // ==================== 构造函数和基本初始化方法 ====================
 
 ExpressionGenerator::ExpressionGenerator(std::shared_ptr<IRBuilder> irBuilder,
                                          std::shared_ptr<TypeMapper> typeMapper,
                                          std::shared_ptr<ScopeTree> scopeTree,
-                                         const std::unordered_map<ASTNode*, std::shared_ptr<SemanticType>>& nodeTypeMap)
+                                         const std::unordered_map<ASTNode*, std::shared_ptr<SemanticType>>& nodeTypeMap,
+                                         std::shared_ptr<TypeChecker> typeChecker)
     : irBuilder(irBuilder)
     , typeMapper(typeMapper)
     , scopeTree(scopeTree)
     , statementGenerator(nullptr)
     , nodeTypeMap(nodeTypeMap)
+    , typeChecker(typeChecker)
     , hasErrors(false)
     , stringCounter(0)
 {
@@ -313,32 +318,61 @@ std::string ExpressionGenerator::generateArrayExpression(std::shared_ptr<ArrayEx
         
         // 确定元素类型（从第一个元素推断）
         std::string elementType = getExpressionType(elements[0]);
-        
-        // 分配数组空间
-        std::string arrayType = "[" + std::to_string(elements.size()) + " x " + elementType + "]";
-        std::string arrayReg = irBuilder->emitAlloca(arrayType);
-        
-        // 初始化数组元素
-        for (size_t i = 0; i < elements.size(); ++i) {
-            // 生成元素表达式
-            std::string elementReg = generateExpression(elements[i]);
-            if (elementReg.empty()) {
-                reportError("Failed to generate array element at index " + std::to_string(i));
-                continue;
+
+        if (arrayExpr.get()->arrayelements->istwo) {
+            size_t arraySize = typeChecker->EvaluateArraySize(*elements[1].get());
+            // 分配数组空间
+            std::string arrayType = "[" + std::to_string(arraySize) + " x " + elementType + "]";
+            std::string arrayReg = irBuilder->emitAlloca(arrayType);
+            
+            // 初始化数组元素
+            for (size_t i = 0; i < arraySize; ++i) {
+                // 生成元素表达式
+                std::string elementReg = generateExpression(elements[0]);
+                if (elementReg.empty()) {
+                    reportError("Failed to generate array element at index " + std::to_string(i));
+                    continue;
+                }
+                
+                // 计算元素地址
+                std::vector<std::string> indices = {"0", std::to_string(i)};
+                std::string elementPtrReg = irBuilder->emitGetElementPtr(arrayReg, indices, arrayType);
+                
+                // 存储元素值
+                irBuilder->emitStore(elementReg, elementPtrReg);
             }
             
-            // 计算元素地址
-            std::vector<std::string> indices = {"0", std::to_string(i)};
-            std::string elementPtrReg = irBuilder->emitGetElementPtr(arrayReg, indices, arrayType);
+            // 对于数组表达式，我们需要返回数组的值而不是指针
+            // 但是由于数组是聚合类型，我们需要在赋值时使用 memcpy
+            // 所以这里返回指针，让调用者处理
+            return arrayReg;
+        } else {
+            // 分配数组空间
+            std::string arrayType = "[" + std::to_string(elements.size()) + " x " + elementType + "]";
+            std::string arrayReg = irBuilder->emitAlloca(arrayType);
             
-            // 存储元素值
-            irBuilder->emitStore(elementReg, elementPtrReg);
+            // 初始化数组元素
+            for (size_t i = 0; i < elements.size(); ++i) {
+                // 生成元素表达式
+                std::string elementReg = generateExpression(elements[i]);
+                if (elementReg.empty()) {
+                    reportError("Failed to generate array element at index " + std::to_string(i));
+                    continue;
+                }
+                
+                // 计算元素地址
+                std::vector<std::string> indices = {"0", std::to_string(i)};
+                std::string elementPtrReg = irBuilder->emitGetElementPtr(arrayReg, indices, arrayType);
+                
+                // 存储元素值
+                irBuilder->emitStore(elementReg, elementPtrReg);
+            }
+            
+            // 对于数组表达式，我们需要返回数组的值而不是指针
+            // 但是由于数组是聚合类型，我们需要在赋值时使用 memcpy
+            // 所以这里返回指针，让调用者处理
+            return arrayReg;
         }
-        
-        // 对于数组表达式，我们需要返回数组的值而不是指针
-        // 但是由于数组是聚合类型，我们需要在赋值时使用 memcpy
-        // 所以这里返回指针，让调用者处理
-        return arrayReg;
     }
     catch (const std::exception& e) {
         reportError("Exception in generateArrayExpression: " + std::string(e.what()));
@@ -1826,63 +1860,7 @@ std::string ExpressionGenerator::typeToStringHelper(std::shared_ptr<Type> type) 
         // 尝试从大小表达式获取实际大小
         std::string sizeStr = "0"; // 默认大小
         if (arrayType->expression) {
-            if (auto literalExpr = std::dynamic_pointer_cast<LiteralExpression>(arrayType->expression)) {
-                if (literalExpr->tokentype == Token::kINTEGER_LITERAL) {
-                    sizeStr = literalExpr->literal;
-                }
-            } else {
-                // 对于复杂表达式，尝试使用 TypeChecker 的 EvaluateArraySize 方法
-                // 这里我们需要访问 TypeChecker 的实例，但当前架构下可能不可用
-                // 作为替代方案，我们尝试从 nodeTypeMap 获取已求值的大小信息
-                // 这个信息应该在类型检查阶段就已经计算好了
-                
-                // 查找 ArrayTypeWrapper 对象来获取已求值的大小
-                // 首先尝试从语义类型中获取大小信息
-                auto typeIt = nodeTypeMap.find(arrayType.get());
-                if (typeIt != nodeTypeMap.end()) {
-                    auto semanticType = typeIt->second;
-                    if (auto arrayTypeWrapper = std::dynamic_pointer_cast<ArrayTypeWrapper>(semanticType)) {
-                        auto sizeExpr = arrayTypeWrapper->GetSizeExpression();
-                        if (sizeExpr) {
-                            // 尝试求值大小表达式
-                            // 这里我们可以使用一个简化的求值方法
-                            if (auto binaryExpr = std::dynamic_pointer_cast<BinaryExpression>(sizeExpr)) {
-                                // 处理简单的二元运算，如 6 - 2
-                                if (auto leftLiteral = std::dynamic_pointer_cast<LiteralExpression>(binaryExpr->leftexpression)) {
-                                    if (auto rightLiteral = std::dynamic_pointer_cast<LiteralExpression>(binaryExpr->rightexpression)) {
-                                        if (leftLiteral->tokentype == Token::kINTEGER_LITERAL &&
-                                            rightLiteral->tokentype == Token::kINTEGER_LITERAL) {
-                                            try {
-                                                int64_t left = std::stoll(leftLiteral->literal);
-                                                int64_t right = std::stoll(rightLiteral->literal);
-                                                int64_t result = 0;
-                                                
-                                                switch (binaryExpr->binarytype) {
-                                                    case Token::kPlus: result = left + right; break;
-                                                    case Token::kMinus: result = left - right; break;
-                                                    case Token::kStar: result = left * right; break;
-                                                    case Token::kSlash:
-                                                        if (right != 0) result = left / right;
-                                                        break;
-                                                    default: break;
-                                                }
-                                                
-                                                sizeStr = std::to_string(result);
-                                            } catch (const std::exception&) {
-                                                sizeStr = "0";
-                                            }
-                                        }
-                                    }
-                                }
-                            } else if (auto literalExpr = std::dynamic_pointer_cast<LiteralExpression>(sizeExpr)) {
-                                if (literalExpr->tokentype == Token::kINTEGER_LITERAL) {
-                                    sizeStr = literalExpr->literal;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            sizeStr = std::to_string(typeChecker->EvaluateArraySize(*(arrayType->expression.get())));
         }
         
         // 生成正确的 LLVM 数组类型格式：[N x T]

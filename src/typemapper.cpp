@@ -1,7 +1,9 @@
 #include "typemapper.hpp"
+#include "typecheck.hpp"
 #include <sstream>
 #include <algorithm>
 #include <cctype>
+#include <string>
 #include <unordered_map>
 #include <vector>
 #include <memory>
@@ -56,8 +58,10 @@ const std::unordered_map<std::string, int> TypeMapper::TYPE_ALIGNMENT_MAPPING = 
 
 // ==================== 构造函数和析构函数 ====================
 
-TypeMapper::TypeMapper(std::shared_ptr<ScopeTree> scopeTree)
+TypeMapper::TypeMapper(std::shared_ptr<ScopeTree> scopeTree,
+                       std::shared_ptr<TypeChecker> typeChecker)
     : scopeTree(scopeTree)
+    , typeChecker(typeChecker)
     , hasErrors(false)
 {
     // 无缓存系统，避免状态污染问题
@@ -104,20 +108,7 @@ std::string TypeMapper::mapArrayTypeToLLVM(std::shared_ptr<SemanticType> element
     }
     
     std::string elementLLVMType = mapSemanticTypeToLLVM(elementType);
-    std::string arraySize = "0"; // 默认大小
-    
-    // 尝试获取数组大小
-    if (sizeExpression) {
-        if (auto literal = dynamic_cast<LiteralExpression*>(sizeExpression.get())) {
-            arraySize = literal->literal;
-        } else {
-            // 对于复杂表达式，使用默认大小
-            arraySize = "0";
-        }
-    } else {
-        // 没有大小表达式时，使用0作为默认大小
-        arraySize = "0";
-    }
+    std::string arraySize = std::to_string(typeChecker->EvaluateArraySize(*sizeExpression.get()));
     
     // 生成LLVM数组类型
     return "[" + arraySize + " x " + elementLLVMType + "]";

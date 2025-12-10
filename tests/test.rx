@@ -1,21 +1,11 @@
-struct Node {
-    x : i32,
-    y : i32
-}
-
-impl Node {
-    fn modify_x(&mut self, x : i32) {
-        self.x = x;
-    }
-}
+const MAXN : i32 = 10;
 
 
 fn main() {
-    let mut node : Node = Node {x : 10, y : 20};
-    printlnInt(node.x);
-    node.modify_x(114154);
-    printlnInt(node.x);
-    node.x = 1;
-    printlnInt(node.x);
+    let val : i32 = 1;
+    let mut arr : [i32; MAXN] = [val; MAXN];
+    printlnInt(arr[0]);
+    arr[0] = 114514;
+    printlnInt(arr[0]);
     exit(0);
 }

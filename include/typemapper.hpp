@@ -6,6 +6,7 @@
 #include <vector>
 #include "scope.hpp"
 #include "symbol.hpp"
+#include "typecheck.hpp"
 #include "typewrapper.hpp"
 
 /**
@@ -21,6 +22,8 @@ class TypeMapper {
 private:
     // 作用域树引用
     std::shared_ptr<ScopeTree> scopeTree;
+
+    std::shared_ptr<TypeChecker> typeChecker;
     
     // ==================== 基础类型映射表 ====================
     
@@ -40,7 +43,8 @@ private:
 
 public:
     // 构造函数
-    explicit TypeMapper(std::shared_ptr<ScopeTree> scopeTree);
+    explicit TypeMapper(std::shared_ptr<ScopeTree> scopeTree,
+                        std::shared_ptr<TypeChecker> typeChecker);
     
     // 析构函数
     ~TypeMapper() = default;

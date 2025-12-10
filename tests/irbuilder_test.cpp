@@ -62,7 +62,7 @@ std::shared_ptr<ScopeTree> createTestScopeTree() {
 void testRegisterManagement() {
     std::ostringstream output;
     auto scopeTree = createTestScopeTree();
-    IRBuilder builder(output, scopeTree);
+    IRBuilder builder(output, scopeTree, nullptr);
     
     // 测试临时寄存器生成
     std::string reg1 = builder.newRegister();
@@ -86,7 +86,7 @@ void testRegisterManagement() {
 void testBasicBlockManagement() {
     std::ostringstream output;
     auto scopeTree = createTestScopeTree();
-    IRBuilder builder(output, scopeTree);
+    IRBuilder builder(output, scopeTree, nullptr);
     
     // 测试基本块生成
     std::string bb1 = builder.newBasicBlock("test");
@@ -104,7 +104,7 @@ void testBasicBlockManagement() {
 void testInstructionGeneration() {
     std::ostringstream output;
     auto scopeTree = createTestScopeTree();
-    IRBuilder builder(output, scopeTree);
+    IRBuilder builder(output, scopeTree, nullptr);
     
     // 测试目标三元组输出
     builder.emitTargetTriple();
@@ -126,7 +126,7 @@ void testInstructionGeneration() {
 void testTypeMapping() {
     std::ostringstream output;
     auto scopeTree = createTestScopeTree();
-    IRBuilder builder(output, scopeTree);
+    IRBuilder builder(output, scopeTree, nullptr);
     
     // 测试基本类型映射
     auto intType = std::make_shared<SimpleType>("i32");
@@ -151,7 +151,7 @@ void testTypeMapping() {
 void testArithmeticInstructions() {
     std::ostringstream output;
     auto scopeTree = createTestScopeTree();
-    IRBuilder builder(output, scopeTree);
+    IRBuilder builder(output, scopeTree, nullptr);
     
     // 创建操作数寄存器
     std::string reg1 = builder.newRegister();
@@ -176,7 +176,7 @@ void testArithmeticInstructions() {
 void testComparisonInstructions() {
     std::ostringstream output;
     auto scopeTree = createTestScopeTree();
-    IRBuilder builder(output, scopeTree);
+    IRBuilder builder(output, scopeTree, nullptr);
     
     // 创建操作数寄存器
     std::string reg1 = builder.newRegister();
@@ -199,7 +199,7 @@ void testComparisonInstructions() {
 void testMemoryInstructions() {
     std::ostringstream output;
     auto scopeTree = createTestScopeTree();
-    IRBuilder builder(output, scopeTree);
+    IRBuilder builder(output, scopeTree, nullptr);
     
     // 测试alloca指令
     std::string ptr = builder.emitAlloca("i32", 4);
@@ -226,7 +226,7 @@ void testMemoryInstructions() {
 void testControlFlowInstructions() {
     std::ostringstream output;
     auto scopeTree = createTestScopeTree();
-    IRBuilder builder(output, scopeTree);
+    IRBuilder builder(output, scopeTree, nullptr);
     
     // 创建基本块
     std::string bb1 = builder.newBasicBlock("test");
@@ -260,7 +260,7 @@ void testControlFlowInstructions() {
 void testFunctionInstructions() {
     std::ostringstream output;
     auto scopeTree = createTestScopeTree();
-    IRBuilder builder(output, scopeTree);
+    IRBuilder builder(output, scopeTree, nullptr);
     
     // 测试函数声明
     std::vector<std::string> params = {"i32 %a", "i32 %b"};
@@ -283,7 +283,7 @@ void testFunctionInstructions() {
 void testErrorHandling() {
     std::ostringstream output;
     auto scopeTree = createTestScopeTree();
-    IRBuilder builder(output, scopeTree);
+    IRBuilder builder(output, scopeTree, nullptr);
     
     // 测试初始状态
     assert(!builder.hasError());
@@ -305,7 +305,7 @@ void testErrorHandling() {
 void testScopeManagement() {
     std::ostringstream output;
     auto scopeTree = createTestScopeTree();
-    IRBuilder builder(output, scopeTree);
+    IRBuilder builder(output, scopeTree, nullptr);
     
     // 测试初始作用域
     auto currentScope = builder.getCurrentScope();

@@ -1,13 +1,17 @@
 #include "irbuilder.hpp"
+#include "typecheck.hpp"
 #include <iostream>
+#include <memory>
 #include <sstream>
 #include <algorithm>
 
 // 构造函数
-IRBuilder::IRBuilder(std::ostream& output, std::shared_ptr<ScopeTree> scopeTree)
+IRBuilder::IRBuilder(std::ostream& output, std::shared_ptr<ScopeTree> scopeTree,
+                     std::shared_ptr<TypeChecker> typeChecker)
     : outputStream(output)
     , scopeTree(scopeTree)
-    , typeMapper(std::make_shared<TypeMapper>(scopeTree))
+    , typeChecker(typeChecker)
+    , typeMapper(std::make_shared<TypeMapper>(scopeTree, typeChecker))
     , registerCounter(0)
     , basicBlockCounter(0)
     , indentLevel(0)

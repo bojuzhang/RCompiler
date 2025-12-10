@@ -80,7 +80,7 @@ std::shared_ptr<ScopeTree> createTestScopeTree() {
 // 创建测试用的 StatementGenerator
 std::shared_ptr<StatementGenerator> createTestStatementGenerator(std::ostringstream& output) {
     auto scopeTree = createTestScopeTree();
-    auto irBuilder = std::make_shared<IRBuilder>(output, scopeTree);
+    auto irBuilder = std::make_shared<IRBuilder>(output, scopeTree, nullptr);
     auto typeMapper = irBuilder->getTypeMapper();
     return std::make_shared<StatementGenerator>(irBuilder, typeMapper, scopeTree);
 }
