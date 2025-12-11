@@ -37,7 +37,9 @@ public:
         if (isMutable) {
             result += "mut ";
         }
-        if (typeChecker) targetType->typeChecker = typeChecker;
+        // if (typeChecker && targetType) {
+        //     targetType->typeChecker = typeChecker;
+        // }
         result += targetType->tostring();
         return result;
     }

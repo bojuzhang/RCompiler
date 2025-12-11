@@ -1,7 +1,7 @@
 # RCompiler Semantic-1 测试评测报告
 
-**生成时间**: 2025-11-22 21:34:17
-**执行时间**: 19.10 秒
+**生成时间**: 2025-12-11 15:30:21
+**执行时间**: 21.00 秒
 
 ## 总体统计
 
@@ -18,19 +18,19 @@
 
 | 实际结果 | 数量 | 占比 |
 |----------|------|------|
-| 0 (正确) | 113 | 100.0% |
+| 0 (正确) | 115 | 100.0% |
 | -1 (错误) | 0 | 0.0% |
 | -2 (异常) | 0 | 0.0% |
-| **总计** | 113 | 100.0% |
+| **总计** | 115 | 100.0% |
 
 ### 期望结果为 -1 的测试用例
 
 | 实际结果 | 数量 | 占比 |
 |----------|------|------|
 | 0 (错误) | 0 | 0.0% |
-| -1 (正确) | 109 | 100.0% |
+| -1 (正确) | 107 | 100.0% |
 | -2 (异常) | 0 | 0.0% |
-| **总计** | 109 | 100.0% |
+| **总计** | 107 | 100.0% |
 
 ## 按测试模块分组统计
 
@@ -281,7 +281,7 @@
 | autoref8 | -1 | -1 | ✅ PASS | ../RCompiler-Testcases/semantic-1/src/autoref8/autoref8.rx |
 | autoref9 | 0 | 0 | ✅ PASS | ../RCompiler-Testcases/semantic-1/src/autoref9/autoref9.rx |
 | basic1 | 0 | 0 | ✅ PASS | ../RCompiler-Testcases/semantic-1/src/basic1/basic1.rx |
-| basic10 | -1 | -1 | ✅ PASS | ../RCompiler-Testcases/semantic-1/src/basic10/basic10.rx |
+| basic10 | 0 | 0 | ✅ PASS | ../RCompiler-Testcases/semantic-1/src/basic10/basic10.rx |
 | basic11 | 0 | 0 | ✅ PASS | ../RCompiler-Testcases/semantic-1/src/basic11/basic11.rx |
 | basic12 | -1 | -1 | ✅ PASS | ../RCompiler-Testcases/semantic-1/src/basic12/basic12.rx |
 | basic13 | -1 | -1 | ✅ PASS | ../RCompiler-Testcases/semantic-1/src/basic13/basic13.rx |
@@ -315,7 +315,7 @@
 | basic39 | 0 | 0 | ✅ PASS | ../RCompiler-Testcases/semantic-1/src/basic39/basic39.rx |
 | basic4 | 0 | 0 | ✅ PASS | ../RCompiler-Testcases/semantic-1/src/basic4/basic4.rx |
 | basic40 | 0 | 0 | ✅ PASS | ../RCompiler-Testcases/semantic-1/src/basic40/basic40.rx |
-| basic5 | -1 | -1 | ✅ PASS | ../RCompiler-Testcases/semantic-1/src/basic5/basic5.rx |
+| basic5 | 0 | 0 | ✅ PASS | ../RCompiler-Testcases/semantic-1/src/basic5/basic5.rx |
 | basic6 | -1 | -1 | ✅ PASS | ../RCompiler-Testcases/semantic-1/src/basic6/basic6.rx |
 | basic7 | -1 | -1 | ✅ PASS | ../RCompiler-Testcases/semantic-1/src/basic7/basic7.rx |
 | basic8 | -1 | -1 | ✅ PASS | ../RCompiler-Testcases/semantic-1/src/basic8/basic8.rx |

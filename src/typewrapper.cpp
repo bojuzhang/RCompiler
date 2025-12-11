@@ -12,9 +12,11 @@ std::string ArrayTypeWrapper::tostring() const {
         // 尝试获取大小值
         if (auto literal = dynamic_cast<LiteralExpression*>(sizeExpression.get())) {
             result += literal->literal;
-        } else if (typeChecker) {
-            result += std::to_string(typeChecker->EvaluateArraySize(*sizeExpression.get()));
-        } else if (constantEvaluator) {
+        } 
+        // else if (typeChecker) {
+        //     result += std::to_string(typeChecker->EvaluateArraySize(*sizeExpression.get()));
+        // } 
+        else if (constantEvaluator) {
             // 尝试使用常量求值器获取大小
             if (auto pathExpr = dynamic_cast<PathExpression*>(sizeExpression.get())) {
                 if (pathExpr->simplepath && !pathExpr->simplepath->simplepathsegements.empty()) {

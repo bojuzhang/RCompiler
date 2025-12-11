@@ -540,6 +540,14 @@ void SymbolCollector::CollectAssociatedItem(AssociatedItem& item,
     std::shared_ptr<SemanticType> returnType;
     if (function.functionreturntype && function.functionreturntype->type) {
         returnType = ResolveTypeFromNode(*function.functionreturntype->type);
+        
+        // 修复：如果返回类型是 Self，需要解析为 impl 的目标类型
+        if (returnType && returnType->tostring() == "Self") {
+            auto implTargetType = GetImplTargetType(*static_cast<InherentImpl*>(GetCurrentNode()));
+            if (implTargetType) {
+                returnType = implTargetType;
+            }
+        }
     } else {
         returnType = CreateSimpleType("unit");
     }
@@ -754,6 +762,12 @@ std::shared_ptr<SemanticType> SymbolCollector::ResolveTypeFromNode(Type& node) {
     if (auto typePath = dynamic_cast<TypePath*>(&node)) {
         if (typePath->simplepathsegement) {
             std::string typeName = typePath->simplepathsegement->identifier;
+            
+            // 修复：处理 Self 关键字，当 identifier 为空但 isSelf 为 true 时
+            if (typeName.empty() && typePath->simplepathsegement->isSelf) {
+                typeName = "Self";
+            }
+            
             if (!typeName.empty()) {
                 // 修复：在符号收集阶段，不要检查类型是否存在，因为可能正在收集中
                 return CreateSimpleType(typeName);

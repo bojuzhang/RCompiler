@@ -273,6 +273,24 @@ void TypeChecker::CheckStructInitialization(StructExpression& node) {
                 continue;
             }
             
+            // 新增：检查初始化值的类型是否与字段类型匹配
+            if (fieldExpr->expression) {
+                auto fieldSymbol = fieldMap[fieldName];
+                if (fieldSymbol && fieldSymbol->type) {
+                    // 推断初始化表达式的类型
+                    auto initExprType = InferExpressionType(*fieldExpr->expression);
+                    
+                    if (initExprType) {
+                        // 检查类型是否兼容
+                        if (!AreTypesCompatible(fieldSymbol->type, initExprType)) {
+                            ReportError("Type mismatch in struct initialization: field '" + fieldName +
+                                       "' expects type '" + fieldSymbol->type->tostring() +
+                                       "', but found type '" + initExprType->tostring() + "'");
+                        }
+                    }
+                }
+            }
+            
             providedFields.insert(fieldName);
         }
         
@@ -572,6 +590,12 @@ std::shared_ptr<SemanticType> TypeChecker::CheckType(TypePath& typePath) {
         return nullptr;
     }
     std::string typeName = typePath.simplepathsegement->identifier;
+    
+    // 修复：处理 Self 关键字，当 identifier 为空但 isSelf 为 true 时
+    if (typeName.empty() && typePath.simplepathsegement->isSelf) {
+        typeName = "Self";
+    }
+    
     auto result = ResolveType(typeName);
     return result;
 }
@@ -638,13 +662,23 @@ std::shared_ptr<SemanticType> TypeChecker::CheckType(ReferenceType& refType) {
 std::shared_ptr<SemanticType> TypeChecker::ResolveType(const std::string& typeName) {
     // 修复：处理 Self 类型
     if (typeName == "Self") {
-        // 在当前 impl 作用域中查找 Self 的定义
-        auto selfSymbol = FindSymbol("Self");
+        // 首先在当前作用域中查找 Self 的定义
+        auto selfSymbol = scopeTree->LookupSymbol("Self");
         if (selfSymbol && selfSymbol->kind == SymbolKind::TypeAlias) {
             return selfSymbol->type;
         }
         
-        // 如果找不到 Self 符号，尝试从当前 impl 上下文获取目标类型
+        // 如果在当前作用域找不到，尝试从父作用域查找
+        auto currentScope = scopeTree->GetCurrentScope();
+        while (currentScope) {
+            auto symbol = currentScope->Lookup("Self", false);
+            if (symbol && symbol->kind == SymbolKind::TypeAlias) {
+                return symbol->type;
+            }
+            currentScope = currentScope->GetParent();
+        }
+        
+        // 如果仍然找不到 Self 符号，尝试从当前 impl 上下文获取目标类型
         if (!currentImpl.empty()) {
             std::stack<ASTNode*> implStack = nodeStack;
             while (!implStack.empty()) {
@@ -660,6 +694,14 @@ std::shared_ptr<SemanticType> TypeChecker::ResolveType(const std::string& typeNa
                 }
             }
         }
+        
+        // 最后的备选方案：直接从根作用域查找 Self 符号
+        auto rootScope = scopeTree->GetRootScope();
+        auto rootSelfSymbol = rootScope->Lookup("Self", false);
+        if (rootSelfSymbol && rootSelfSymbol->kind == SymbolKind::TypeAlias) {
+            return rootSelfSymbol->type;
+        }
+        
     }
     
     // 特殊处理 unit 类型 ()，确保它总是被认为是有效的
@@ -704,8 +746,8 @@ bool TypeChecker::IsTypeVisible(const std::string& typeName) {
 
 bool TypeChecker::AreTypesCompatible(std::shared_ptr<SemanticType> expected, std::shared_ptr<SemanticType> actual) {
     if (!expected || !actual) return false;
-    expected->typeChecker = std::make_shared<TypeChecker>(*this);
-    actual->typeChecker = std::make_shared<TypeChecker>(*this);
+    // expected->typeChecker = std::make_shared<TypeChecker>(*this);
+    // actual->typeChecker = std::make_shared<TypeChecker>(*this);
     
     std::string expectedStr = expected->tostring();
     std::string actualStr = actual->tostring();
@@ -2135,8 +2177,10 @@ std::shared_ptr<SemanticType> TypeChecker::InferConstantExpressionType(Expressio
 
 std::shared_ptr<SemanticType> TypeChecker::InferBorrowExpressionType(BorrowExpression& expr) {
     auto exprType = InferExpressionType(*expr.expression);
-    auto result = std::make_shared<SimpleType>((expr.ismut ? "&mut " : "&") + exprType->tostring());
-    nodeTypeMap[&expr] = result;
+    if (exprType) {
+        auto result = std::make_shared<SimpleType>((expr.ismut ? "&mut " : "&") + exprType->tostring());
+        nodeTypeMap[&expr] = result;
+    }
     return nullptr;
 }
 

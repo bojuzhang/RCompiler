@@ -5,14 +5,10 @@
 #include <vector>
 #include "astnodes.hpp"
 
-// 前向声明以避免循环依赖
-class TypeChecker;
-
 class SemanticType {
 public:
     virtual ~SemanticType() = default;
     virtual std::string tostring() const = 0;
-    std::shared_ptr<TypeChecker> typeChecker;
 };
 
 class SimpleType : public SemanticType {
