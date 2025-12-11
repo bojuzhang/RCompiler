@@ -1409,6 +1409,9 @@ std::pair<std::string, std::string> ExpressionGenerator::analyzeLValue(std::shar
             // 索引访问
             std::string baseType = getExpressionType(indexExpr->expressionout);
             std::string indexReg = generateExpression(indexExpr->expressionin);
+            if (baseType.size() && baseType.back() == '*') {
+                baseType.pop_back();
+            } 
             
             std::string elementType;
             std::string elementPtrReg;

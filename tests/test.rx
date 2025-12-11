@@ -4,21 +4,6 @@ fn modify(arr : &mut [i32; MAXN]) {
     arr[1] = 114514;
 }
 
-struct Node {
-    x : i32,
-    y : i32
-}
-
-impl Node {
-    fn sum(self) -> i32 {
-        self.x + self.y
-    }
-}
-
-fn test_not_impl_parameter_true(x : &i32) -> i32 {
-    *x
-}
-
 fn main() {
     let val : i32 = 1;
     let mut arr : [i32; MAXN] = [val; MAXN];
