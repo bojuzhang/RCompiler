@@ -1091,9 +1091,6 @@ void FunctionCodegen::setupParameterScope(std::shared_ptr<Function> function) {
                     actualParamName = "param_" + std::to_string(paramIndex);
                 }
                 
-                // 创建符合普通变量命名规则的指针变量名
-                std::string paramPtrReg = irBuilder->newRegister(actualParamName, "_ptr");
-                
                 // 对于普通变量参数，使用参数声明的实际类型
                 // 从 nodeTypeMap 获取参数的语义类型，然后映射到 LLVM 类型
                 std::string actualParamType = "i32"; // 默认类型
@@ -1111,11 +1108,6 @@ void FunctionCodegen::setupParameterScope(std::shared_ptr<Function> function) {
                     }
                 }
                 
-                // 使用实际的参数类型进行 alloca
-                std::string allocaInstruction = paramPtrReg + " = alloca " + actualParamType + ", align 4";
-                irBuilder->emitInstruction(allocaInstruction);
-                irBuilder->setRegisterType(paramPtrReg, actualParamType + "*");
-                
                 // 将传入的参数值存储到分配的栈空间中
                 // 传入的参数在函数签名中的命名与 generateParameters 保持一致
                 std::string incomingParamName;
@@ -1127,16 +1119,32 @@ void FunctionCodegen::setupParameterScope(std::shared_ptr<Function> function) {
                     incomingParamName = "%param_" + std::to_string(i);
                 }
                 
+                // 创建符合普通变量命名规则的指针变量名
+                std::string paramPtrReg = irBuilder->newRegister(actualParamName, "_ptr");
+                
                 // 检查是否为指针类型参数
                 if (typeMapper->isPointerType(paramType)) {
-                    // 指针类型参数：直接使用传入的指针，不创建新的指针层级
-                    irBuilder->emitComment("Direct assignment for pointer parameter");
-                    std::string assignInstruction = paramPtrReg + " = " + incomingParamName;
-                    irBuilder->emitInstruction(assignInstruction);
+                    // 指针类型参数：不再新 alloca 一个变量出来，直接通过 bitcast 实现指针间的 SSA 赋值
+                    irBuilder->emitComment("Direct bitcast for pointer parameter");
+                    
+                    // 根据用户要求，使用 bitcast 原类型到原类型实现显式的指针赋值
+                    // 生成 bitcast 指令：%param_ptr = bitcast T* %param_X to T*
+                    std::string bitcastInstruction = paramPtrReg + " = bitcast " + paramType + " " + incomingParamName + " to " + paramType;
+                    irBuilder->emitInstruction(bitcastInstruction);
                     irBuilder->setRegisterType(paramPtrReg, paramType);
                     
                     // 手动注册这个变量到 IRBuilder 的寄存器映射中，确保 getVariableRegister 能找到它
                     irBuilder->registerVariableToCurrentScope(actualParamName, paramPtrReg, paramType);
+                } else {
+                    // 非指针类型参数：使用实际的参数类型进行 alloca
+                    std::string allocaInstruction = paramPtrReg + " = alloca " + actualParamType + ", align 4";
+                    irBuilder->emitInstruction(allocaInstruction);
+                    irBuilder->setRegisterType(paramPtrReg, actualParamType + "*");
+                }
+                
+                // 对于指针类型参数，跳过后续的存储处理，因为已经通过 bitcast 处理了
+                if (typeMapper->isPointerType(paramType)) {
+                    // 指针类型参数已经通过 bitcast 处理，不需要额外的存储操作
                 } else if (typeMapper->isStructType(actualParamType) || typeMapper->isArrayType(actualParamType)) {
                     // 聚合类型参数：传入的是指针，需要使用 memcpy 复制内容
                     irBuilder->emitComment("Copying aggregate parameter using memcpy");

@@ -1,0 +1,51 @@
+const MAXN : i32 = 10;
+
+fn modify(arr : &mut [i32; MAXN]) {
+    arr[1] = 114514;
+}
+
+fn test_not_impl_parameter_true(x : &i32) -> i32 {
+    *x
+}
+
+fn test_multiple_pointer_params(a : &i32, b : &mut i32) -> i32 {
+    *a + *b
+}
+
+struct Node {
+    x : i32,
+    y : i32
+}
+
+impl Node {
+    fn sum(&mut self) -> i32 {
+        self.x + self.y
+    }
+}
+
+fn main() {
+    let val : i32 = 1;
+    let mut arr : [i32; MAXN] = [val; MAXN];
+    printlnInt(arr[0]);
+    arr[0] = 114514;
+    printlnInt(arr[0]);
+    modify(&mut arr);
+    printlnInt(arr[1]);
+    
+    let x : i32 = 42;
+    let y : i32 = 24;
+    let result = test_not_impl_parameter_true(&x);
+    printlnInt(result);
+    
+    let mut z : i32 = 100;
+    let result2 = test_multiple_pointer_params(&y, &mut z);
+    printlnInt(result2);
+    printlnInt(z);
+    
+    let node = Node { x: 10, y: 20 };
+    let mut node_ref = node;
+    let sum_result = node_ref.sum();
+    printlnInt(sum_result);
+    
+    exit(0);
+}

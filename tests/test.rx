@@ -15,8 +15,8 @@ impl Node {
     }
 }
 
-fn test_not_impl_parameter_true(x : i32) -> i32 {
-    x
+fn test_not_impl_parameter_true(x : &i32) -> i32 {
+    *x
 }
 
 fn main() {
