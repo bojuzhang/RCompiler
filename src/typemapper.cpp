@@ -98,6 +98,93 @@ std::string TypeMapper::mapSemanticTypeToLLVM(std::shared_ptr<SemanticType> type
     return mapped;
 }
 
+// 新增：直接从 AST Type 节点映射到 LLVM 类型
+std::string TypeMapper::mapASTTypeToLLVM(std::shared_ptr<Type> astType) {
+    if (!astType) {
+        reportError("Null AST type pointer");
+        return "i32"; // 默认类型
+    }
+    
+    // 根据具体的 Type 子类进行处理
+    if (auto typePath = std::dynamic_pointer_cast<TypePath>(astType)) {
+        return mapTypePathToLLVM(typePath);
+    } else if (auto arrayType = std::dynamic_pointer_cast<ArrayType>(astType)) {
+        return mapArrayTypeToLLVM(arrayType);
+    } else if (auto refType = std::dynamic_pointer_cast<ReferenceType>(astType)) {
+        return mapReferenceTypeToLLVM(refType);
+    } else if (auto unitType = std::dynamic_pointer_cast<UnitType>(astType)) {
+        return mapUnitTypeToLLVM(unitType);
+    }
+    
+    reportError("Unknown AST type type");
+    return "i32"; // 默认类型
+}
+
+// 处理 TypePath 类型
+std::string TypeMapper::mapTypePathToLLVM(std::shared_ptr<TypePath> typePath) {
+    if (!typePath || !typePath->simplepathsegement) {
+        reportError("Invalid TypePath");
+        return "i32";
+    }
+    
+    std::string typeName = typePath->simplepathsegement->identifier;
+    
+    // 检查是否为 Self 类型
+    if (typeName.empty() && typePath->simplepathsegement->isSelf) {
+        typeName = "Self";
+    }
+    
+    // 使用基础类型映射
+    auto basicIt = BASIC_TYPE_MAPPING.find(typeName);
+    if (basicIt != BASIC_TYPE_MAPPING.end()) {
+        return basicIt->second;
+    }
+    
+    // 如果不是基础类型，可能是结构体类型
+    return mapStructTypeToLLVM(typeName);
+}
+
+// 处理 ArrayType 类型
+std::string TypeMapper::mapArrayTypeToLLVM(std::shared_ptr<ArrayType> arrayType) {
+    if (!arrayType || !arrayType->type) {
+        reportError("Invalid ArrayType");
+        return "i32";
+    }
+    
+    // 递归处理元素类型
+    std::string elementLLVMType = mapASTTypeToLLVM(arrayType->type);
+    
+    // 计算数组大小
+    std::string arraySize = "0";
+    if (arrayType->expression && typeChecker) {
+        int64_t size = typeChecker->EvaluateArraySize(*arrayType->expression);
+        arraySize = std::to_string(size);
+    }
+    
+    // 生成LLVM数组类型
+    return "[" + arraySize + " x " + elementLLVMType + "]";
+}
+
+// 处理 ReferenceType 类型
+std::string TypeMapper::mapReferenceTypeToLLVM(std::shared_ptr<ReferenceType> refType) {
+    if (!refType || !refType->type) {
+        reportError("Invalid ReferenceType");
+        return "i8*";
+    }
+    
+    // 递归处理目标类型
+    std::string targetLLVMType = mapASTTypeToLLVM(refType->type);
+    
+    // 对于引用类型，总是返回指针类型
+    // &T -> T*, &&T -> T**, &mut T -> T*
+    return targetLLVMType + "*";
+}
+
+// 处理 UnitType 类型
+std::string TypeMapper::mapUnitTypeToLLVM(std::shared_ptr<UnitType> unitType) {
+    return "void";
+}
+
 // ==================== 复合类型映射接口 ====================
 
 std::string TypeMapper::mapArrayTypeToLLVM(std::shared_ptr<SemanticType> elementType,

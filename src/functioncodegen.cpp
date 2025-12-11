@@ -386,12 +386,37 @@ std::vector<std::string> FunctionCodegen::generateParameters(std::shared_ptr<Fun
     
     try {
         const auto& functionParams = function->functionparameters->functionparams;
+        size_t paramIndex = 0;
         
-        for (size_t i = 0; i < functionParams.size(); ++i) {
-            std::string paramType = getParameterLLVMType(functionParams[i], static_cast<size_t>(i));
-            std::string paramName = "param_" + std::to_string(i);
+        
+        // 首先处理 self 参数（如果存在）
+        if (function->functionparameters->hasSelfParam) {
+            // self 参数统一传递结构体类型指针
+            // 需要从函数名中提取 impl 的目标类型
+            std::string structType = "%struct_*"; // 默认类型
+            std::string functionName = function->identifier_name;
+            size_t underscorePos = functionName.find('_');
+            if (underscorePos != std::string::npos) {
+                std::string structName = functionName.substr(0, underscorePos);
+                structType = "%struct_" + structName;
+            }
+            
+            // 添加 self 参数到参数列表
+            std::string paramDecl = structType + "* %self";
+            parameters.push_back(paramDecl);
+            paramIndex++;
+        }
+        
+        // 处理剩余的普通参数
+        // 如果有 self 参数，需要跳过 functionparams 中的第一个参数（如果它是 self 的重复）
+        size_t startIndex = (function->functionparameters->hasSelfParam && functionParams.size() > 0) ? 1 : 0;
+        
+        for (size_t i = startIndex; i < functionParams.size(); ++i) {
+            std::string paramType = getParameterLLVMType(functionParams[i], i);
+            std::string paramName = "param_" + std::to_string(paramIndex);
             std::string paramDecl = paramType + " %" + paramName;
             parameters.push_back(paramDecl);
+            paramIndex++;
         }
         
         return parameters;
@@ -720,15 +745,37 @@ std::string FunctionCodegen::generateParameterList(std::shared_ptr<Function> fun
         std::ostringstream paramList;
         const auto& functionParams = function->functionparameters->functionparams;
         
+        // 首先处理 self 参数（如果存在）
+        size_t paramIndex = 0;
+        
+        // 检查是否有 self 参数
+        if (function->functionparameters->hasSelfParam) {
+            // self 参数统一传递结构体类型指针
+            // 需要从函数名中提取 impl 的目标类型
+            std::string structType = "%struct_*"; // 默认类型
+            std::string functionName = function->identifier_name;
+            size_t underscorePos = functionName.find('_');
+            if (underscorePos != std::string::npos) {
+                std::string structName = functionName.substr(0, underscorePos);
+                structType = "%struct_" + structName;
+            }
+            
+            // 添加 self 参数到参数列表
+            paramList << structType << "* %self";
+            paramIndex++;
+        }
+        
+        // 处理剩余的普通参数
         for (size_t i = 0; i < functionParams.size(); ++i) {
-            if (i > 0) {
+            if (paramIndex > 0) {
                 paramList << ", ";
             }
             
             std::string paramType = getParameterLLVMType(functionParams[i], i);
-            std::string paramName = "param_" + std::to_string(i);
+            std::string paramName = "param_" + std::to_string(paramIndex);
             
             paramList << paramType << " %" << paramName;
+            paramIndex++;
         }
         
         return paramList.str();
@@ -970,156 +1017,189 @@ void FunctionCodegen::setupParameterScope(std::shared_ptr<Function> function) {
     try {
         irBuilder->emitComment("Setting up parameter scope");
         
-        // 为每个参数分配栈空间并存储传入的参数值
-        if (function->functionparameters) {
-            for (size_t i = 0; i < function->functionparameters->functionparams.size(); ++i) {
-                auto param = function->functionparameters->functionparams[i];
-                if (param) {
-                    std::string paramType = getParameterLLVMType(param, static_cast<size_t>(i));
-                    
-                    // 获取参数的实际名称
-                    std::string actualParamName = getParameterName(param);
-                    if (actualParamName.empty()) {
-                        actualParamName = "param_" + std::to_string(i);
+        if (!function->functionparameters) {
+            return;
+        }
+        
+        size_t paramIndex = 0;
+        
+        // 首先处理 self 参数（如果存在）
+        if (function->functionparameters->hasSelfParam) {
+            irBuilder->emitComment("Setting up self parameter");
+            
+            // self 参数统一传递结构体类型指针
+            // 需要从函数名中提取 impl 的目标类型
+            std::string structType = "%struct_*"; // 默认类型
+            std::string functionName = function->identifier_name;
+            size_t underscorePos = functionName.find('_');
+            if (underscorePos != std::string::npos) {
+                std::string structName = functionName.substr(0, underscorePos);
+                structType = "%struct_" + structName;
+            }
+            
+            // 创建 self 参数的指针变量
+            std::string paramPtrReg = irBuilder->newRegister("self", "_ptr");
+            
+            // 根据用户要求，使用 bitcast 原类型到原类型实现显式的指针赋值
+            std::string incomingParamName = "%self"; // self 参数在签名中直接命名为 %self
+            
+            // 生成 bitcast 指令：%self_ptr = bitcast %struct_Node* %self to %struct_Node*
+            std::string bitcastInstruction = paramPtrReg + " = bitcast " + structType + "* " + incomingParamName + " to " + structType + "*";
+            irBuilder->emitInstruction(bitcastInstruction);
+            irBuilder->setRegisterType(paramPtrReg, structType + "*");
+            
+            // 将 self 参数添加到符号表中作为变量
+            auto currentScope = scopeTree->GetCurrentScope();
+            if (currentScope) {
+                // 创建 self 参数符号
+                auto paramSymbol = std::make_shared<Symbol>("self", SymbolKind::Variable);
+                paramSymbol->ismutable = true; // self 参数默认可变
+                
+                // 设置 self 参数的类型为结构体指针类型
+                // 这里需要根据实际的 impl 类型来设置
+                if (underscorePos != std::string::npos) {
+                    std::string structName = functionName.substr(0, underscorePos);
+                    // 创建对应的结构体类型
+                    paramSymbol->type = std::make_shared<SimpleType>(structName);
+                }
+                
+                // 添加到当前作用域
+                currentScope->Insert("self", paramSymbol);
+            }
+            
+            // 存储参数信息到当前函数上下文
+            if (currentFunction) {
+                currentFunction->parameters.push_back("self");
+                currentFunction->parameterRegisters["self"] = paramPtrReg;
+            }
+            
+            paramIndex++;
+        }
+        
+        // 处理剩余的普通参数
+        // 如果有 self 参数，需要跳过 functionparams 中的第一个参数（如果它是 self 的重复）
+        size_t startIndex = (function->functionparameters->hasSelfParam && function->functionparameters->functionparams.size() > 0) ? 1 : 0;
+        
+        for (size_t i = startIndex; i < function->functionparameters->functionparams.size(); ++i) {
+            auto param = function->functionparameters->functionparams[i];
+            if (param) {
+                std::string paramType = getParameterLLVMType(param, i);
+                
+                // 获取参数的实际名称
+                std::string actualParamName = getParameterName(param);
+                if (actualParamName.empty()) {
+                    actualParamName = "param_" + std::to_string(paramIndex);
+                }
+                
+                // 创建符合普通变量命名规则的指针变量名
+                std::string paramPtrReg = irBuilder->newRegister(actualParamName, "_ptr");
+                
+                // 对于普通变量参数，使用参数声明的实际类型
+                // 从 nodeTypeMap 获取参数的语义类型，然后映射到 LLVM 类型
+                std::string actualParamType = "i32"; // 默认类型
+                
+                auto it = nodeTypeMap.find(param.get());
+                if (it != nodeTypeMap.end() && it->second) {
+                    actualParamType = typeMapper->mapSemanticTypeToLLVM(it->second);
+                } else if (param->type) {
+                    // 从 AST 类型节点获取类型
+                    if (auto typePath = std::dynamic_pointer_cast<TypePath>(param->type)) {
+                        if (typePath->simplepathsegement) {
+                            std::string typeName = typePath->simplepathsegement->identifier;
+                            actualParamType = typeMapper->mapRxTypeToLLVM(typeName);
+                        }
                     }
+                }
+                
+                // 使用实际的参数类型进行 alloca
+                std::string allocaInstruction = paramPtrReg + " = alloca " + actualParamType + ", align 4";
+                irBuilder->emitInstruction(allocaInstruction);
+                irBuilder->setRegisterType(paramPtrReg, actualParamType + "*");
+                
+                // 将传入的参数值存储到分配的栈空间中
+                // 传入的参数在函数签名中的命名与 generateParameters 保持一致
+                std::string incomingParamName;
+                if (function->functionparameters->hasSelfParam) {
+                    // 如果有self参数，普通参数从 %param_1 开始编号
+                    incomingParamName = "%param_" + std::to_string(paramIndex);
+                } else {
+                    // 如果没有self参数，普通参数从 %param_0 开始编号
+                    incomingParamName = "%param_" + std::to_string(i);
+                }
+                
+                // 检查是否为指针类型参数
+                if (typeMapper->isPointerType(paramType)) {
+                    // 指针类型参数：直接使用传入的指针，不创建新的指针层级
+                    irBuilder->emitComment("Direct assignment for pointer parameter");
+                    std::string assignInstruction = paramPtrReg + " = " + incomingParamName;
+                    irBuilder->emitInstruction(assignInstruction);
+                    irBuilder->setRegisterType(paramPtrReg, paramType);
                     
-                    // 特殊处理 self 参数
-                    bool isSelfParam = false;
-                    std::string originalParamName = getParameterName(param);
+                    // 手动注册这个变量到 IRBuilder 的寄存器映射中，确保 getVariableRegister 能找到它
+                    irBuilder->registerVariableToCurrentScope(actualParamName, paramPtrReg, paramType);
+                } else if (typeMapper->isStructType(actualParamType) || typeMapper->isArrayType(actualParamType)) {
+                    // 聚合类型参数：传入的是指针，需要使用 memcpy 复制内容
+                    irBuilder->emitComment("Copying aggregate parameter using memcpy");
                     
-                    // 检查是否为 self 参数
-                    if (originalParamName == "self") {
-                        isSelfParam = true;
-                    } else if (function->functionparameters && function->functionparameters->hasSelfParam && i == 0) {
-                        // 第一个参数且函数有 self 参数标识（处理 &self 和 &mut self）
-                        isSelfParam = true;
-                    } else if (currentFunction && currentFunction->functionName.find('_') != std::string::npos && i == 0) {
-                        // impl 方法的第一个参数（备用检查）
-                        isSelfParam = true;
-                    }
+                    // 计算类型大小
+                    int typeSize = typeMapper->getTypeSize(actualParamType);
+                    std::string sizeReg = irBuilder->newRegister();
+                    std::string sizeInstruction = sizeReg + " = add i32 0, " + std::to_string(typeSize);
+                    irBuilder->emitInstruction(sizeInstruction);
+                    irBuilder->setRegisterType(sizeReg, "i32");
                     
-                    if (isSelfParam) {
-                        actualParamName = "self"; // 按要求使用 self
-                    }
+                    // 调用 builtin_memcpy 复制数据
+                    irBuilder->emitMemcpy(paramPtrReg, incomingParamName, sizeReg);
+                } else {
+                    // 基本类型参数：直接存储，确保类型匹配
+                    // 手动生成存储指令，确保类型正确
+                    std::string storeInstruction = "store " + actualParamType + " " + incomingParamName + ", " + actualParamType + "* " + paramPtrReg;
+                    irBuilder->emitInstruction(storeInstruction);
+                }
+                
+                // 将参数添加到符号表中作为变量
+                auto currentScope = scopeTree->GetCurrentScope();
+                if (currentScope) {
+                    // 创建参数符号
+                    auto paramSymbol = std::make_shared<Symbol>(actualParamName, SymbolKind::Variable);
                     
-                    // 创建符合普通变量命名规则的指针变量名
-                    std::string paramPtrName = actualParamName + "_ptr";
-                    
-                    // 首先调用 newRegister 来注册变量名到 variableCounters
-                    std::string paramPtrReg = irBuilder->newRegister(actualParamName, "_ptr");
-                    
-                    // 对于 self 参数，特殊处理
-                    if (isSelfParam) {
-                        irBuilder->emitComment("Setting up self parameter");
-                        
-                        // self 参数统一传递结构体类型指针
-                        // 根据用户要求，使用 bitcast 原类型到原类型实现显式的指针赋值
-                        std::string incomingParamName = "%param_" + std::to_string(i);
-                        
-                        // 生成 bitcast 指令：%self_ptr = bitcast %struct_Node* %param_0 to %struct_Node*
-                        std::string bitcastInstruction = paramPtrReg + " = bitcast " + paramType + " " + incomingParamName + " to " + paramType;
-                        irBuilder->emitInstruction(bitcastInstruction);
-                        irBuilder->setRegisterType(paramPtrReg, paramType);
-                    } else {
-                        // 对于普通变量参数，使用参数声明的实际类型
-                        // 从 nodeTypeMap 获取参数的语义类型，然后映射到 LLVM 类型
-                        std::string actualParamType = "i32"; // 默认类型
-                        
+                    // 从参数类型获取语义类型
+                    if (param->type) {
+                        // 从 nodeTypeMap 获取参数的语义类型
                         auto it = nodeTypeMap.find(param.get());
-                        if (it != nodeTypeMap.end() && it->second) {
-                            actualParamType = typeMapper->mapSemanticTypeToLLVM(it->second);
-                        } else if (param->type) {
-                            // 从 AST 类型节点获取类型
+                        if (it != nodeTypeMap.end()) {
+                            paramSymbol->type = it->second;
+                        } else {
+                            // 回退到字符串解析
                             if (auto typePath = std::dynamic_pointer_cast<TypePath>(param->type)) {
                                 if (typePath->simplepathsegement) {
                                     std::string typeName = typePath->simplepathsegement->identifier;
-                                    actualParamType = typeMapper->mapRxTypeToLLVM(typeName);
-                                }
-                            }
-                        }
-                        
-                        // 使用实际的参数类型进行 alloca
-                        std::string allocaInstruction = paramPtrReg + " = alloca " + actualParamType + ", align 4";
-                        irBuilder->emitInstruction(allocaInstruction);
-                        irBuilder->setRegisterType(paramPtrReg, actualParamType + "*");
-                        
-                        // 将传入的参数值存储到分配的栈空间中
-                        // 传入的参数在函数签名中命名为 %param_i
-                        std::string incomingParamName = "%param_" + std::to_string(i);
-                        
-                        // 检查是否为指针类型参数
-                        if (typeMapper->isPointerType(paramType)) {
-                            // 指针类型参数：直接使用传入的指针，不创建新的指针层级
-                            irBuilder->emitComment("Direct assignment for pointer parameter");
-                            std::string assignInstruction = paramPtrReg + " = " + incomingParamName;
-                            irBuilder->emitInstruction(assignInstruction);
-                            irBuilder->setRegisterType(paramPtrReg, paramType);
-                            
-                            // 手动注册这个变量到 IRBuilder 的寄存器映射中，确保 getVariableRegister 能找到它
-                            irBuilder->registerVariableToCurrentScope(actualParamName, paramPtrReg, paramType);
-                        } else if (typeMapper->isStructType(actualParamType) || typeMapper->isArrayType(actualParamType)) {
-                            // 聚合类型参数：传入的是指针，需要使用 memcpy 复制内容
-                            irBuilder->emitComment("Copying aggregate parameter using memcpy");
-                            
-                            // 计算类型大小
-                            int typeSize = typeMapper->getTypeSize(actualParamType);
-                            std::string sizeReg = irBuilder->newRegister();
-                            std::string sizeInstruction = sizeReg + " = add i32 0, " + std::to_string(typeSize);
-                            irBuilder->emitInstruction(sizeInstruction);
-                            irBuilder->setRegisterType(sizeReg, "i32");
-                            
-                            // 调用 builtin_memcpy 复制数据
-                            irBuilder->emitMemcpy(paramPtrReg, incomingParamName, sizeReg);
-                        } else {
-                            // 基本类型参数：直接存储，确保类型匹配
-                            // 手动生成存储指令，确保类型正确
-                            std::string storeInstruction = "store " + actualParamType + " " + incomingParamName + ", " + actualParamType + "* " + paramPtrReg;
-                            irBuilder->emitInstruction(storeInstruction);
-                        }
-                    }
-                    
-                    // 将参数添加到符号表中作为变量
-                    auto currentScope = scopeTree->GetCurrentScope();
-                    if (currentScope) {
-                        // 创建参数符号
-                        auto paramSymbol = std::make_shared<Symbol>(actualParamName, SymbolKind::Variable);
-                        
-                        // 从参数类型获取语义类型
-                        if (param->type) {
-                            // 从 nodeTypeMap 获取参数的语义类型
-                            auto it = nodeTypeMap.find(param.get());
-                            if (it != nodeTypeMap.end()) {
-                                paramSymbol->type = it->second;
-                            } else {
-                                // 回退到字符串解析
-                                if (auto typePath = std::dynamic_pointer_cast<TypePath>(param->type)) {
-                                    if (typePath->simplepathsegement) {
-                                        std::string typeName = typePath->simplepathsegement->identifier;
-                                        // 创建对应的语义类型
-                                        if (typeName == "i32") {
-                                            paramSymbol->type = std::make_shared<SignedIntType>();
-                                        } else if (typeName == "bool") {
-                                            paramSymbol->type = std::make_shared<SimpleType>("bool");
-                                        } else {
-                                            paramSymbol->type = std::make_shared<SignedIntType>(); // 默认类型
-                                        }
+                                    // 创建对应的语义类型
+                                    if (typeName == "i32") {
+                                        paramSymbol->type = std::make_shared<SignedIntType>();
+                                    } else if (typeName == "bool") {
+                                        paramSymbol->type = std::make_shared<SimpleType>("bool");
+                                    } else {
+                                        paramSymbol->type = std::make_shared<SignedIntType>(); // 默认类型
                                     }
                                 }
                             }
                         }
-                        
-                        paramSymbol->ismutable = true; // 参数默认可变
-                        
-                        // 添加到当前作用域
-                        currentScope->Insert(actualParamName, paramSymbol);
                     }
                     
-                    // 存储参数信息到当前函数上下文
-                    if (currentFunction) {
-                        currentFunction->parameters.push_back(actualParamName);
-                        currentFunction->parameterRegisters[actualParamName] = paramPtrReg;
-                    }
+                    paramSymbol->ismutable = true; // 参数默认可变
+                    
+                    // 添加到当前作用域
+                    currentScope->Insert(actualParamName, paramSymbol);
                 }
+                
+                // 存储参数信息到当前函数上下文
+                if (currentFunction) {
+                    currentFunction->parameters.push_back(actualParamName);
+                    currentFunction->parameterRegisters[actualParamName] = paramPtrReg;
+                }
+                
+                paramIndex++;
             }
         }
     }
@@ -1148,42 +1228,6 @@ std::string FunctionCodegen::getParameterLLVMType(std::shared_ptr<FunctionParam>
     }
     
     try {
-        // 检查是否为 self 参数（包括 self, &self, &mut self）
-        std::string paramName = getParameterName(param);
-        bool isSelfParam = false;
-        
-        // 检查参数名是否为 "self"
-        if (paramName == "self") {
-            isSelfParam = true;
-        } else {
-            // 对于 &self 和 &mut self，参数名可能不是 "self"
-            // 我们需要通过 FunctionParameters 的标志来识别
-            // 这里我们需要访问当前的函数信息来获取 FunctionParameters
-            if (currentFunction && currentFunction->functionName.find('_') != std::string::npos && paramIndex == 0) {
-                // 如果是impl方法的第一个参数，且函数有self参数标识，则认为是self参数
-                // 注意：这里我们假设第一个参数就是self参数，如果后续需要更精确的判断，
-                // 可以在FunctionCodegen中存储当前函数的FunctionParameters引用
-                isSelfParam = true;
-            }
-        }
-        
-        if (isSelfParam) {
-            // self 参数统一传递结构体类型指针
-            // 需要从函数上下文获取 impl 的目标类型
-            if (currentFunction && currentFunction->functionName.find('_') != std::string::npos) {
-                // 从方法名中提取结构体类型名 (格式：StructName_methodName)
-                std::string functionName = currentFunction->functionName;
-                size_t underscorePos = functionName.find('_');
-                if (underscorePos != std::string::npos) {
-                    std::string structName = functionName.substr(0, underscorePos);
-                    std::string structType = "%struct_" + structName;
-                    return structType + "*"; // 返回结构体指针类型
-                }
-            }
-            // 如果无法确定类型，返回默认指针类型
-            return "%struct_*";
-        }
-        
         // 优先从 nodeTypeMap 获取参数类型
         auto it = nodeTypeMap.find(param.get());
         if (it != nodeTypeMap.end() && it->second) {
@@ -1203,31 +1247,8 @@ std::string FunctionCodegen::getParameterLLVMType(std::shared_ptr<FunctionParam>
             return "i32";
         }
         
-        // 使用 TypeMapper 进行正确的类型映射
-        // 首先将 Type 节点转换为字符串表示，然后映射到 LLVM 类型
-        std::string typeStr;
-        if (auto typePath = std::dynamic_pointer_cast<TypePath>(param->type)) {
-            if (typePath->simplepathsegement) {
-                typeStr = typePath->simplepathsegement->identifier;
-            }
-        } else if (auto refType = std::dynamic_pointer_cast<ReferenceType>(param->type)) {
-            // 处理引用类型，如 &i32, &mut i32
-            if (refType->type) {
-                if (auto innerTypePath = std::dynamic_pointer_cast<TypePath>(refType->type)) {
-                    if (innerTypePath->simplepathsegement) {
-                        typeStr = (refType->ismut ? "&mut " : "&") + innerTypePath->simplepathsegement->identifier;
-                    }
-                }
-            }
-        }
-        
-        if (typeStr.empty()) {
-            // 如果无法确定类型字符串，使用默认类型
-            return "i32";
-        }
-        
-        // 使用 TypeMapper 映射到 LLVM 类型
-        std::string llvmType = typeMapper->mapRxTypeToLLVM(typeStr);
+        // 使用 TypeMapper 的新方法直接从 AST Type 节点映射到 LLVM 类型
+        std::string llvmType = typeMapper->mapASTTypeToLLVM(param->type);
         
         // 检查是否为聚合类型，如果是则改为指针类型
         if (typeMapper->isStructType(llvmType) || typeMapper->isArrayType(llvmType)) {
@@ -1250,32 +1271,8 @@ std::string FunctionCodegen::getFunctionReturnLLVMType(std::shared_ptr<Function>
     
     try {
         if (function->functionreturntype && function->functionreturntype->type) {
-            // 将 Type 节点转换为 LLVM 类型
-            // 检查是否是 TypePath
-            auto typePath = std::dynamic_pointer_cast<TypePath>(function->functionreturntype->type);
-            if (typePath && typePath->simplepathsegement) {
-                auto simpleSegment = typePath->simplepathsegement;
-                if (simpleSegment) {
-                    std::string typeName = simpleSegment->identifier;
-                    // 根据类型名称返回对应的 LLVM 类型
-                    if (typeName == "void") {
-                        return "void";
-                    } else if (typeName == "i32") {
-                        return "i32";
-                    } else if (typeName == "i64") {
-                        return "i32";  // 32位机器上i64映射为i32
-                    } else if (typeName == "bool") {
-                        return "i1";
-                    } else if (typeName == "str") {
-                        return "i8*";
-                    } else {
-                        // 默认为 i32
-                        return "i32";
-                    }
-                }
-            }
-            // 如果无法解析类型，默认为 i32
-            return "i32";
+            // 使用 TypeMapper 的新方法直接从 AST Type 节点映射到 LLVM 类型
+            return typeMapper->mapASTTypeToLLVM(function->functionreturntype->type);
         }
         return "void";
     }

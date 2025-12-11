@@ -65,6 +65,9 @@ public:
      */
     std::string mapSemanticTypeToLLVM(std::shared_ptr<SemanticType> type);
     
+    // 新增：直接从 AST Type 节点映射到 LLVM 类型
+    std::string mapASTTypeToLLVM(std::shared_ptr<Type> astType);
+    
     // ==================== 复合类型映射接口 ====================
     
     /**
@@ -305,4 +308,10 @@ private:
      * @return LLVM 类型字符串，如果不是特殊类型则返回空字符串
      */
     std::string handleSpecialSemanticType(std::shared_ptr<SemanticType> type);
+    
+    // 新增：处理具体 AST Type 类型的私有方法
+    std::string mapTypePathToLLVM(std::shared_ptr<TypePath> typePath);
+    std::string mapArrayTypeToLLVM(std::shared_ptr<ArrayType> arrayType);
+    std::string mapReferenceTypeToLLVM(std::shared_ptr<ReferenceType> refType);
+    std::string mapUnitTypeToLLVM(std::shared_ptr<UnitType> unitType);
 };
