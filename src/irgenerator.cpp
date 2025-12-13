@@ -403,10 +403,31 @@ bool IRGenerator::declareBuiltinFunctions() {
 bool IRGenerator::generateTopLevelItems(const std::vector<std::shared_ptr<Item>>& topLevelItems) {
     bool success = true;
     
+    // 首先生成所有结构体定义，确保它们在使用之前被定义
     for (const auto& item : topLevelItems) {
-        if (!generateTopLevelItem(item)) {
-            success = false;
-            // 继续处理其他项，收集所有错误
+        if (auto structDef = std::dynamic_pointer_cast<StructStruct>(item->item)) {
+            if (!generateStruct(structDef)) {
+                success = false;
+            }
+        }
+    }
+    
+    // 然后生成其他项（函数、impl等）
+    for (const auto& item : topLevelItems) {
+        if (auto function = std::dynamic_pointer_cast<Function>(item->item)) {
+            if (!generateFunction(function)) {
+                success = false;
+            }
+        }
+        else if (auto constant = std::dynamic_pointer_cast<ConstantItem>(item->item)) {
+            if (!generateConstant(constant)) {
+                success = false;
+            }
+        }
+        else if (auto impl = std::dynamic_pointer_cast<InherentImpl>(item->item)) {
+            if (!generateImpl(impl)) {
+                success = false;
+            }
         }
     }
     

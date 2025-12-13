@@ -457,7 +457,18 @@ std::string ExpressionGenerator::generateIndexExpression(std::shared_ptr<IndexEx
             // 检查接收者是否为路径表达式（变量访问）
             if (auto pathExpr = std::dynamic_pointer_cast<PathExpression>(fieldExpr->expression)) {
                 // 对于变量访问，获取变量的指针寄存器
-                std::string variableName = pathExpr->simplepath->simplepathsegements.back()->identifier;
+                auto lastSegment = pathExpr->simplepath->simplepathsegements.back();
+                std::string variableName;
+                
+                // 特殊处理 self 和 Self
+                if (lastSegment->isself) {
+                    variableName = "self";
+                } else if (lastSegment->isSelf) {
+                    variableName = "Self";
+                } else {
+                    variableName = lastSegment->identifier;
+                }
+                
                 receiverPtrReg = irBuilder->getVariableRegister(variableName);
             } else {
                 // 对于其他类型的表达式，生成表达式然后获取其地址
@@ -616,18 +627,37 @@ std::string ExpressionGenerator::generateCallExpression(std::shared_ptr<CallExpr
     }
     
     try {
-        // 获取函数名
+        // 获取函数名和路径信息
         std::string functionName;
+        std::string structName; // 用于关联函数
+        bool isAssociatedFunction = false;
+        
         if (auto pathExpr = std::dynamic_pointer_cast<PathExpression>(callExpr->expression)) {
-            auto lastSegment = pathExpr->simplepath->simplepathsegements.back();
+            // 检查是否为关联函数调用（如 Type::function）
+            if (pathExpr->simplepath->simplepathsegements.size() >= 2) {
+                // 这是关联函数调用，如 Stack::new()
+                auto typeSegment = pathExpr->simplepath->simplepathsegements[0];
+                auto functionSegment = pathExpr->simplepath->simplepathsegements.back();
+                
+                if (!typeSegment->isself && !typeSegment->isSelf) {
+                    structName = typeSegment->identifier;
+                    functionName = structName + "_" + functionSegment->identifier;
+                    isAssociatedFunction = true;
+                }
+            }
             
-            // 特殊处理 self 和 Self
-            if (lastSegment->isself) {
-                functionName = "self";
-            } else if (lastSegment->isSelf) {
-                functionName = "Self";
-            } else {
-                functionName = lastSegment->identifier;
+            // 如果不是关联函数，处理普通函数调用
+            if (!isAssociatedFunction) {
+                auto lastSegment = pathExpr->simplepath->simplepathsegements.back();
+                
+                // 特殊处理 self 和 Self
+                if (lastSegment->isself) {
+                    functionName = "self";
+                } else if (lastSegment->isSelf) {
+                    functionName = "Self";
+                } else {
+                    functionName = lastSegment->identifier;
+                }
             }
         } else {
             reportError("Unsupported function expression type");
@@ -646,11 +676,34 @@ std::string ExpressionGenerator::generateCallExpression(std::shared_ptr<CallExpr
         // 获取函数返回类型
         std::string returnType = getFunctionReturnType(functionName);
         if (returnType.empty()) {
-            returnType = "i32"; // 默认返回类型
+            // 如果找不到函数信息，尝试从类型映射中获取
+            auto it = nodeTypeMap.find(callExpr.get());
+            if (it != nodeTypeMap.end() && it->second) {
+                returnType = typeMapper->mapSemanticTypeToLLVM(it->second);
+                // 对于结构体类型，函数应该返回指针类型
+                if (typeMapper->isStructType(returnType)) {
+                    returnType = returnType + "*";
+                }
+            } else {
+                returnType = "i32"; // 默认返回类型
+            }
+        }
+        
+        // 特殊处理：如果这是关联函数调用且返回类型是 Self，确保返回指针类型
+        if (isAssociatedFunction && returnType != "i32" && returnType != "void" &&
+            returnType != "i8*" && returnType != "i1" && returnType.find("*") == std::string::npos) {
+            // 如果返回类型是结构体类型但没有指针，添加指针
+            if (returnType.find("%struct_") == 0) {
+                returnType = returnType + "*";
+            }
         }
         
         // 生成函数调用
         std::string resultReg = irBuilder->emitCall(functionName, args, returnType);
+        
+        // 确保寄存器类型正确设置
+        irBuilder->setRegisterType(resultReg, returnType);
+        
         return resultReg;
     }
     catch (const std::exception& e) {
@@ -2382,6 +2435,19 @@ std::string ExpressionGenerator::getFunctionReturnType(const std::string& functi
         auto functionSymbol = std::dynamic_pointer_cast<FunctionSymbol>(symbol);
         if (!functionSymbol || !functionSymbol->returntype) {
             return "";
+        }
+        
+        // 检查是否为 Self 类型
+        std::string returnTypeStr = functionSymbol->returntype->tostring();
+        if (returnTypeStr == "Self") {
+            // 从函数名中提取 impl 的目标类型
+            size_t underscorePos = functionName.find('_');
+            if (underscorePos != std::string::npos) {
+                std::string structName = functionName.substr(0, underscorePos);
+                // 对于 Self 类型，函数应该返回结构体指针类型
+                return "%struct_" + structName + "*";
+            }
+            return "%struct_*"; // 默认类型
         }
         
         // 将语义类型映射为 LLVM 类型

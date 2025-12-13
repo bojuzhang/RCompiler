@@ -609,7 +609,14 @@ std::string IRBuilder::emitGetElementPtr(const std::string& pointer, const std::
         resType = pointerType; // 默认使用指针类型
     }
     
-    std::string instruction = result + " = getelementptr " + resType + ", " + pointerType + " " + pointer + ", " + indicesStr;
+    // 对于 getelementptr 指令，第一个参数类型应该是指针指向的类型
+    // 如果 pointerType 是 T*，那么第一个参数应该是 T
+    std::string firstParamType = resType;
+    if (pointerType.back() == '*') {
+        firstParamType = pointerType.substr(0, pointerType.length() - 1);
+    }
+    
+    std::string instruction = result + " = getelementptr " + firstParamType + ", " + pointerType + " " + pointer + ", " + indicesStr;
     emitInstruction(instruction);
     
     // 对于数组索引，结果类型应该是指向元素类型的指针
@@ -910,6 +917,7 @@ std::string IRBuilder::emitCall(const std::string& functionName, const std::vect
     // 如果有返回值，分配结果寄存器
     if (!returnType.empty() && returnType != "void") {
         result = newRegister();
+        setRegisterType(result, returnType);
         instruction = result + " = call " + returnType + " @" + functionName + "(";
     } else {
         instruction = "call void @" + functionName + "(";
@@ -928,8 +936,13 @@ std::string IRBuilder::emitCall(const std::string& functionName, const std::vect
                 return result;
             }
         } else {
-            // 直接是字面量
-            instruction += "i32 " + args[i]; // 默认i32类型
+            // 直接是字面量，需要根据返回类型推断参数类型
+            // 对于布尔值，使用i1类型
+            if (returnType == "i1") {
+                instruction += "i1 " + args[i];
+            } else {
+                instruction += "i32 " + args[i]; // 默认i32类型
+            }
         }
     }
     

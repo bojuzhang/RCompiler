@@ -92,6 +92,13 @@ bool FunctionCodegen::generateFunction(std::shared_ptr<Function> function) {
         std::string functionName = getFunctionName(function);
         std::string returnType = getFunctionReturnLLVMType(function);
         
+        // 如果返回类型是结构体，先输出结构体定义
+        if (returnType.find("%struct_") == 0 && returnType.back() == '*') {
+            std::string structName = returnType.substr(0, returnType.length() - 1); // 去掉 *
+            irBuilder->emitComment("Forward declaration for struct: " + structName);
+            // 这里不需要额外的声明，因为结构体定义会在后面生成
+        }
+        
         // 进入函数上下文
         enterFunction(functionName, returnType);
         
@@ -1255,6 +1262,23 @@ std::string FunctionCodegen::getParameterLLVMType(std::shared_ptr<FunctionParam>
             return "i32";
         }
         
+        // 检查是否为 Self 类型
+        if (auto typePath = std::dynamic_pointer_cast<TypePath>(param->type)) {
+            if (typePath->simplepathsegement && typePath->simplepathsegement->isSelf) {
+                // Self 类型参数需要从当前函数的上下文中获取实际的类型
+                // 这里需要获取当前函数所属的 impl 类型
+                if (currentFunction) {
+                    std::string functionName = currentFunction->functionName;
+                    size_t underscorePos = functionName.find('_');
+                    if (underscorePos != std::string::npos) {
+                        std::string structName = functionName.substr(0, underscorePos);
+                        return "%struct_" + structName + "*";
+                    }
+                }
+                return "%struct_*"; // 默认类型
+            }
+        }
+        
         // 使用 TypeMapper 的新方法直接从 AST Type 节点映射到 LLVM 类型
         std::string llvmType = typeMapper->mapASTTypeToLLVM(param->type);
         
@@ -1279,8 +1303,33 @@ std::string FunctionCodegen::getFunctionReturnLLVMType(std::shared_ptr<Function>
     
     try {
         if (function->functionreturntype && function->functionreturntype->type) {
+            // 首先检查是否为 Self 类型
+            if (auto typePath = std::dynamic_pointer_cast<TypePath>(function->functionreturntype->type)) {
+                if (typePath->simplepathsegement) {
+                    // 检查是否为 Self 类型
+                    if (typePath->simplepathsegement->isSelf) {
+                        // 从函数名中提取 impl 的目标类型
+                        std::string functionName = function->identifier_name;
+                        size_t underscorePos = functionName.find('_');
+                        if (underscorePos != std::string::npos) {
+                            std::string structName = functionName.substr(0, underscorePos);
+                            // 对于结构体类型，函数应该返回指针类型
+                            return "%struct_" + structName + "*";
+                        }
+                        return "%struct_*"; // 默认类型
+                    }
+                }
+            }
+            
             // 使用 TypeMapper 的新方法直接从 AST Type 节点映射到 LLVM 类型
-            return typeMapper->mapASTTypeToLLVM(function->functionreturntype->type);
+            std::string llvmType = typeMapper->mapASTTypeToLLVM(function->functionreturntype->type);
+            
+            // 对于结构体类型，函数应该返回指针类型
+            if (typeMapper->isStructType(llvmType)) {
+                return llvmType + "*";
+            }
+            
+            return llvmType;
         }
         return "void";
     }
