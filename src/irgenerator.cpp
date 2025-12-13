@@ -335,6 +335,7 @@ bool IRGenerator::setupComponentDependencies() {
         // 设置 FunctionCodegen 的依赖
         functionCodegen->setExpressionGenerator(expressionGenerator.get());
         functionCodegen->setStatementGenerator(statementGenerator.get());
+        functionCodegen->setBuiltinDeclarator(builtinDeclarator.get());
         
         // 设置 StatementGenerator 的 FunctionCodegen 引用
         statementGenerator->setFunctionCodegen(functionCodegen.get());

@@ -45,6 +45,9 @@ private:
     // 语义分析阶段的类型信息映射
     std::unordered_map<ASTNode*, std::shared_ptr<SemanticType>> nodeTypeMap;
     
+    // BuiltinDeclarator 引用，用于区分内置函数和用户定义函数
+    class BuiltinDeclarator* builtinDeclarator;
+    
     // ==================== 函数上下文管理 ====================
     
     /**
@@ -56,21 +59,25 @@ private:
         std::string returnType;            // 返回类型
         std::string returnBlock;            // 返回基本块
         std::string returnValueReg;         // 返回值寄存器
+        std::string returnSlotPtr;          // 返回槽指针（用于用户定义函数）
+        bool isUserDefined;                // 是否为用户定义函数（需要返回槽机制）
         std::vector<std::pair<std::string, std::string>> returnInputs; // PHI节点输入
         bool hasReturnStatement;           // 是否有返回语句
         bool hasMultipleReturns;           // 是否有多个返回点
         std::vector<std::string> parameters; // 参数列表
         std::unordered_map<std::string, std::string> parameterRegisters; // 参数寄存器映射
         
-        FunctionContext() 
+        FunctionContext()
             : hasReturnStatement(false)
-            , hasMultipleReturns(false) {}
+            , hasMultipleReturns(false)
+            , isUserDefined(false) {}
             
         FunctionContext(const std::string& name, const std::string& retType)
             : functionName(name)
             , returnType(retType)
             , hasReturnStatement(false)
-            , hasMultipleReturns(false) {}
+            , hasMultipleReturns(false)
+            , isUserDefined(false) {}
     };
     
     // 函数上下文栈，支持嵌套函数
@@ -112,6 +119,12 @@ public:
      * @param stmtGen StatementGenerator 实例指针
      */
     void setStatementGenerator(StatementGenerator* stmtGen);
+    
+    /**
+     * 设置 BuiltinDeclarator 引用（用于区分内置函数和用户定义函数）
+     * @param builtinDecl BuiltinDeclarator 实例指针
+     */
+    void setBuiltinDeclarator(BuiltinDeclarator* builtinDecl);
     
     /**
      * 获取 ExpressionGenerator 引用
@@ -295,6 +308,28 @@ public:
     std::string getBuiltinFunctionType(const std::string& functionName);
     
     /**
+     * 检查函数是否为用户定义函数（需要返回槽机制）
+     * @param functionName 函数名
+     * @return 是否为用户定义函数
+     */
+    bool isUserDefinedFunction(const std::string& functionName);
+    
+    /**
+     * 生成用户定义函数的返回槽参数
+     * @param returnType 返回类型
+     * @return 返回槽参数字符串
+     */
+    std::string generateReturnSlotParameter(const std::string& returnType);
+    
+    /**
+     * 将值存储到返回槽中
+     * @param valueReg 要存储的值寄存器
+     * @param returnType 返回类型
+     * @return 是否成功存储
+     */
+    bool storeToReturnSlot(const std::string& valueReg, const std::string& returnType);
+    
+    /**
      * 生成函数调用的参数处理代码
      * @param callParams 调用参数节点
      * @return 参数寄存器列表
@@ -346,6 +381,18 @@ public:
      * @return 当前函数返回类型
      */
     std::string getCurrentFunctionReturnType() const;
+    
+    /**
+     * 获取当前函数的返回槽指针
+     * @return 返回槽指针寄存器名称
+     */
+    std::string getCurrentFunctionReturnSlot() const;
+    
+    /**
+     * 检查当前函数是否需要返回槽机制
+     * @return 是否需要返回槽机制
+     */
+    bool currentFunctionNeedsReturnSlot() const;
     
     // ==================== 错误处理接口 ====================
     
@@ -450,6 +497,17 @@ private:
     std::string generateFunctionCall(const std::string& functionName,
                                    const std::vector<std::string>& args,
                                    const std::string& returnType);
+    
+    /**
+     * 生成用户定义函数调用的完整 IR（使用返回槽机制）
+     * @param functionName 函数名
+     * @param args 参数列表
+     * @param calleeFunction 被调用函数节点
+     * @return 调用结果寄存器名称
+     */
+    std::string generateUserDefinedFunctionCall(const std::string& functionName,
+                                              const std::vector<std::string>& args,
+                                              std::shared_ptr<Function> calleeFunction);
     
     /**
      * 处理大结构体参数的传递优化

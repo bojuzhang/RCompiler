@@ -573,6 +573,17 @@ private:
     std::string getStructFieldType(const std::string& structName, const std::string& fieldName);
     
     /**
+     * 生成用户定义函数调用（使用返回槽机制）
+     * @param functionName 函数名
+     * @param args 参数列表
+     * @param callExpr 调用表达式节点
+     * @return 调用结果寄存器名称
+     */
+    std::string generateUserDefinedFunctionCall(const std::string& functionName,
+                                           const std::vector<std::string>& args,
+                                           std::shared_ptr<CallExpression> callExpr);
+    
+    /**
      * 判断是否应该使用无符号运算
      * @param binaryExpr 二元表达式节点
      * @return 是否应该使用无符号运算

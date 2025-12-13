@@ -670,7 +670,7 @@ std::string ExpressionGenerator::generateCallExpression(std::shared_ptr<CallExpr
             return generateBuiltinCall(functionName, args);
         }
         
-        // 生成参数表达式
+        // 用户定义函数：使用返回槽机制
         std::vector<std::string> args = generateCallArguments(callExpr->callparams);
         
         // 获取函数返回类型
@@ -698,13 +698,8 @@ std::string ExpressionGenerator::generateCallExpression(std::shared_ptr<CallExpr
             }
         }
         
-        // 生成函数调用
-        std::string resultReg = irBuilder->emitCall(functionName, args, returnType);
-        
-        // 确保寄存器类型正确设置
-        irBuilder->setRegisterType(resultReg, returnType);
-        
-        return resultReg;
+        // 用户定义函数调用：使用返回槽机制
+        return generateUserDefinedFunctionCall(functionName, args, callExpr);
     }
     catch (const std::exception& e) {
         reportError("Exception in generateCallExpression: " + std::string(e.what()));
@@ -1686,6 +1681,58 @@ std::vector<std::string> ExpressionGenerator::generateCallArguments(std::shared_
     }
     
     return args;
+}
+
+// ==================== 新增的用户定义函数调用处理 ====================
+
+std::string ExpressionGenerator::generateUserDefinedFunctionCall(const std::string& functionName,
+                                                          const std::vector<std::string>& args,
+                                                          std::shared_ptr<CallExpression> callExpr) {
+    try {
+        // 获取函数返回类型
+        std::string returnType = getFunctionReturnType(functionName);
+        if (returnType.empty()) {
+            // 如果找不到函数信息，尝试从类型映射中获取
+            auto it = nodeTypeMap.find(callExpr.get());
+            if (it != nodeTypeMap.end() && it->second) {
+                returnType = typeMapper->mapSemanticTypeToLLVM(it->second);
+                // 对于结构体类型，函数应该返回指针类型
+                if (typeMapper->isStructType(returnType)) {
+                    returnType = returnType + "*";
+                }
+            } else {
+                returnType = "i32"; // 默认返回类型
+            }
+        }
+        
+        // 如果返回类型是void，直接调用
+        if (returnType == "void") {
+            irBuilder->emitCall(functionName, args, "void");
+            return ""; // void函数调用不返回值
+        }
+        
+        // 分配返回槽空间
+        std::string returnSlotPtr = irBuilder->emitAlloca(returnType);
+        irBuilder->setRegisterType(returnSlotPtr, returnType + "*");
+        
+        // 构建参数列表：返回槽指针 + 原始参数
+        std::vector<std::string> finalArgs;
+        finalArgs.push_back(returnSlotPtr); // 第一个参数是返回槽指针
+        finalArgs.insert(finalArgs.end(), args.begin(), args.end());
+        
+        // 调用用户定义函数（返回void）
+        irBuilder->emitCall(functionName, finalArgs, "void");
+        
+        // 从返回槽加载结果
+        std::string resultReg = irBuilder->emitLoad(returnSlotPtr, returnType);
+        irBuilder->setRegisterType(resultReg, returnType);
+        
+        return resultReg;
+    }
+    catch (const std::exception& e) {
+        reportError("Exception in generateUserDefinedFunctionCall: " + std::string(e.what()));
+        return "";
+    }
 }
 
 bool ExpressionGenerator::isBuiltinFunction(const std::string& functionName) {
