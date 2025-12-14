@@ -770,12 +770,58 @@ std::string ExpressionGenerator::generateMethodCallExpression(std::shared_ptr<Me
             args.insert(args.begin(), receiverReg);
         }
         
-        // 获取方法返回类型
-        std::string returnType = "i32"; // 默认返回类型
+        // 检查是否为用户定义函数（需要 sret 机制）
+        bool isUserDefined = !isBuiltinFunction(methodName);
         
-        // 生成方法调用
-        std::string resultReg = irBuilder->emitCall(methodName, args, returnType);
-        return resultReg;
+        if (isUserDefined) {
+            // 获取方法返回类型
+            std::string returnType = getFunctionReturnType(methodName);
+            if (returnType.empty()) {
+                // 如果找不到函数信息，尝试从类型映射中获取
+                auto it = nodeTypeMap.find(methodCallExpr.get());
+                if (it != nodeTypeMap.end() && it->second) {
+                    returnType = typeMapper->mapSemanticTypeToLLVM(it->second);
+                    // 对于结构体类型，函数应该返回指针类型
+                    if (typeMapper->isStructType(returnType)) {
+                        returnType = returnType + "*";
+                    }
+                } else {
+                    returnType = "i32"; // 默认返回类型
+                }
+            }
+            
+            // 如果返回类型是void，直接调用
+            if (returnType == "void") {
+                irBuilder->emitCall(methodName, args, "void");
+                return ""; // void函数调用不返回值
+            }
+            
+            // 分配返回槽空间
+            std::string returnSlotPtr = irBuilder->emitAlloca(returnType);
+            irBuilder->setRegisterType(returnSlotPtr, returnType + "*");
+            
+            // 构建参数列表：返回槽指针 + 原始参数
+            std::vector<std::string> finalArgs;
+            finalArgs.push_back(returnSlotPtr); // 第一个参数是返回槽指针
+            finalArgs.insert(finalArgs.end(), args.begin(), args.end());
+            
+            // 调用用户定义函数（返回void）
+            irBuilder->emitCall(methodName, finalArgs, "void");
+            
+            // 从返回槽加载结果
+            std::string resultReg = irBuilder->emitLoad(returnSlotPtr, returnType);
+            irBuilder->setRegisterType(resultReg, returnType);
+            
+            return resultReg;
+        } else {
+            // 内置函数调用
+            // 获取方法返回类型
+            std::string returnType = "i32"; // 默认返回类型
+            
+            // 生成方法调用
+            std::string resultReg = irBuilder->emitCall(methodName, args, returnType);
+            return resultReg;
+        }
     }
     catch (const std::exception& e) {
         reportError("Exception in generateMethodCallExpression: " + std::string(e.what()));

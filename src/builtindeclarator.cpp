@@ -338,25 +338,25 @@ void BuiltinDeclarator::initializeBuiltinFunctions() {
 
 void BuiltinDeclarator::registerStandardBuiltins() {
     // 输出函数
-    registerCustomBuiltin("print", "void", {ParameterAttribute("i8*", "nocapture readonly")});
-    registerCustomBuiltin("println", "void", {ParameterAttribute("i8*", "nocapture readonly")});
+    registerCustomBuiltin("print", "void", {ParameterAttribute("ptr", "nocapture readonly")});
+    registerCustomBuiltin("println", "void", {ParameterAttribute("ptr", "nocapture readonly")});
     registerCustomBuiltin("printInt", "void", {ParameterAttribute("i32", "signext")});
     registerCustomBuiltin("printlnInt", "void", {ParameterAttribute("i32", "signext")});
     
     // 输入函数
-    registerCustomBuiltin("getString", "i8*", {});
+    registerCustomBuiltin("getString", "ptr", {});
     registerCustomBuiltin("getInt", "i32", {});
     
     // 内存管理函数
-    registerCustomBuiltin("malloc", "i8*", {ParameterAttribute("i32")});
-    registerCustomBuiltin("builtin_memset", "i8*", {
-        ParameterAttribute("i8*", "nocapture writeonly"),
+    registerCustomBuiltin("malloc", "ptr", {ParameterAttribute("i32")});
+    registerCustomBuiltin("builtin_memset", "ptr", {
+        ParameterAttribute("ptr", "nocapture writeonly"),
         ParameterAttribute("i8"),
         ParameterAttribute("i32")
     });
-    registerCustomBuiltin("builtin_memcpy", "i8*", {
-        ParameterAttribute("i8*", "nocapture writeonly"),
-        ParameterAttribute("i8*", "nocapture readonly"),
+    registerCustomBuiltin("builtin_memcpy", "ptr", {
+        ParameterAttribute("ptr", "nocapture writeonly"),
+        ParameterAttribute("ptr", "nocapture readonly"),
         ParameterAttribute("i32")
     });
     

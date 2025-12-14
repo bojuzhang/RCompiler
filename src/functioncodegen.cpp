@@ -607,10 +607,33 @@ bool FunctionCodegen::generateReturnStatement(std::shared_ptr<ReturnExpression> 
         
         // 生成返回值
         if (returnExpr->expression) {
-            std::string returnValue = generateReturnValue(returnExpr->expression);
-            if (returnValue.empty()) {
-                reportError("Failed to generate return value");
+            // 验证 ExpressionGenerator
+            if (!validateExpressionGenerator()) {
+                reportError("ExpressionGenerator not set for return value generation");
                 return false;
+            }
+            
+            // 生成表达式值
+            std::string returnValue = expressionGenerator->generateExpression(returnExpr->expression);
+            if (returnValue.empty()) {
+                reportError("Failed to generate return value expression");
+                return false;
+            }
+            
+            // 获取表达式类型
+            std::string valueType = getNodeLLVMType(returnExpr->expression);
+            std::string expectedType = getCurrentFunctionReturnType();
+            
+            // 进行类型转换（如果需要）
+            if (needsTypeConversion(valueType, expectedType)) {
+                std::string convertedReg = generateTypeConversion(returnValue, valueType, expectedType);
+                if (!convertedReg.empty()) {
+                    returnValue = convertedReg;
+                    valueType = expectedType;
+                } else {
+                    reportError("Failed to convert return value type from " + valueType + " to " + expectedType);
+                    return false;
+                }
             }
             
             if (needsReturnSlot) {
@@ -655,12 +678,6 @@ std::string FunctionCodegen::generateReturnValue(std::shared_ptr<Expression> exp
         }
         
         // 验证 ExpressionGenerator
-        // if (!validateExpressionGenerator()) {
-        //     reportError("ExpressionGenerator not set for return value generation");
-        //     return "";
-        // }
-        
-        // 生成表达式值
         if (!validateExpressionGenerator()) {
             reportError("ExpressionGenerator not set for return value generation");
             return "";
@@ -688,20 +705,8 @@ std::string FunctionCodegen::generateReturnValue(std::shared_ptr<Expression> exp
             }
         }
         
-        // 检查是否为用户定义函数（需要返回槽机制）
-        bool needsReturnSlot = currentFunctionNeedsReturnSlot();
-        if (needsReturnSlot) {
-            // 用户定义函数：将值存储到返回槽
-            if (!storeToReturnSlot(valueReg, expectedType)) {
-                reportError("Failed to store return value to return slot");
-                return "";
-            }
-            // 返回空字符串，表示没有直接的返回值
-            return "";
-        } else {
-            // 内置函数：正常返回值
-            return valueReg;
-        }
+        // 直接返回值寄存器，让调用者处理存储
+        return valueReg;
     }
     catch (const std::exception& e) {
         reportError("Exception in generateReturnValue: " + std::string(e.what()));
@@ -774,6 +779,7 @@ std::string FunctionCodegen::generateTailExpressionReturn(std::shared_ptr<Expres
             std::string convertedReg = generateTypeConversion(valueReg, valueType, expectedType);
             if (!convertedReg.empty()) {
                 valueReg = convertedReg;
+                valueType = expectedType;
             } else {
                 reportError("Failed to convert tail expression type from " + valueType + " to " + expectedType);
                 return "";
@@ -1708,7 +1714,16 @@ bool FunctionCodegen::storeToReturnSlot(const std::string& valueReg, const std::
         // 将值存储到返回槽中
         std::string returnSlotPtr = currentFunction->returnSlotPtr;
         irBuilder->emitComment("Storing value " + valueReg + " to return slot " + returnSlotPtr);
-        irBuilder->emitStore(valueReg, returnSlotPtr);
+        
+        // 确保返回槽指针在寄存器映射中
+        if (!irBuilder->getVariableRegister("return_slot").empty()) {
+            // 返回槽已经在寄存器映射中，直接使用
+            irBuilder->emitStore(valueReg, returnSlotPtr);
+        } else {
+            // 返回槽不在寄存器映射中，注册它
+            irBuilder->registerVariableToCurrentScope("return_slot", returnSlotPtr, returnType + "*");
+            irBuilder->emitStore(valueReg, returnSlotPtr);
+        }
         
         return true;
     }

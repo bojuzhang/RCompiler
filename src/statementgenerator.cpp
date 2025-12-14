@@ -190,8 +190,15 @@ bool StatementGenerator::generateExpressionStatement(std::shared_ptr<ExpressionS
     
     try {
         // 检查表达式是否为控制流表达式
-        // 控制流表达式（if、loop、while、break、continue、return）都应该委托给 ExpressionGenerator
-        // 因为它们都是 Expression 的子类
+        // 控制流表达式（if、loop、while、break、continue、return）都需要特殊处理
+        if (auto returnExpr = std::dynamic_pointer_cast<ReturnExpression>(exprStatement->astnode)) {
+            // 对于 return 语句，需要使用 FunctionCodegen 的 generateReturnStatement 方法
+            if (!functionCodegen) {
+                reportError("FunctionCodegen not set for return statement");
+                return false;
+            }
+            return functionCodegen->generateReturnStatement(returnExpr);
+        }
         
         // 调用 ExpressionGenerator 生成表达式
         std::string resultReg = expressionGenerator->generateExpression(exprStatement->astnode);
