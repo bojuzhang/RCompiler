@@ -360,8 +360,19 @@ bool FunctionCodegen::generateNestedFunctions(const std::vector<std::shared_ptr<
             std::string returnType = getFunctionReturnLLVMType(nestedFunc);
             std::vector<std::string> parameters = generateParameters(nestedFunc);
             
+            // 对于用户定义函数，返回类型应该是void
+            std::string actualReturnType = returnType;
+            bool isUserDefined = isUserDefinedFunction(nestedFunc->identifier_name);
+            
+            // 关键修复：检查函数返回类型是否为unit（void）
+            bool isUnitType = (actualReturnType == "void");
+            
+            if (isUserDefined) {
+                actualReturnType = "void";
+            }
+            
             // 生成函数定义开始（在全局定义域）
-            irBuilder->emitFunctionDef(functionName, returnType, parameters);
+            irBuilder->emitFunctionDef(functionName, actualReturnType, parameters);
             
             // 临时进入函数上下文以生成函数体
             enterFunction(functionName, returnType);
@@ -445,21 +456,22 @@ std::string FunctionCodegen::generateBuiltinCall(const std::string& functionName
 std::vector<std::string> FunctionCodegen::generateParameters(std::shared_ptr<Function> function) {
     std::vector<std::string> parameters;
     
-    if (!function || !function->functionparameters) {
+    if (!function) {
         return parameters;
     }
     
     try {
-        const auto& functionParams = function->functionparameters->functionparams;
-        size_t paramIndex = 0;
-        
-        // 检查是否为用户定义函数，如果是则添加返回槽参数
+        // 检查是否为用户定义函数，如果是则添加返回槽参数（即使没有其他参数）
         bool isUserDefined = isUserDefinedFunction(function->identifier_name);
-        if (isUserDefined) {
-            std::string returnType = getFunctionReturnLLVMType(function);
+        
+        // 关键修复：检查函数返回类型是否为unit（void）
+        // unit类型函数不需要return_slot参数
+        std::string returnType = getFunctionReturnLLVMType(function);
+        bool isUnitType = (returnType == "void");
+        
+        if (isUserDefined && !isUnitType) {
             std::string returnSlotParam = generateReturnSlotParameter(returnType);
             parameters.push_back(returnSlotParam);
-            paramIndex++;
             
             // 在函数上下文中标记需要返回槽
             if (currentFunction) {
@@ -467,6 +479,14 @@ std::vector<std::string> FunctionCodegen::generateParameters(std::shared_ptr<Fun
                 currentFunction->returnSlotPtr = "%return_slot";
             }
         }
+        
+        // 如果没有函数参数，直接返回（只包含返回槽参数，如果有的话）
+        if (!function->functionparameters) {
+            return parameters;
+        }
+        
+        const auto& functionParams = function->functionparameters->functionparams;
+        size_t paramIndex = (isUserDefined && !isUnitType) ? 1 : 0; // 如果有返回槽，参数索引从1开始
         
         // 首先处理 self 参数（如果存在）
         if (function->functionparameters->hasSelfParam) {
@@ -775,7 +795,10 @@ std::string FunctionCodegen::generateTailExpressionReturn(std::shared_ptr<Expres
         std::string expectedType = getCurrentFunctionReturnType();
         
         // 进行类型转换（如果需要）
-        if (needsTypeConversion(valueType, expectedType)) {
+        // 对于聚合类型，不需要进行类型转换，直接使用指针
+        if (irBuilder->isAggregateType(valueType) || irBuilder->isAggregateType(expectedType)) {
+            // 聚合类型：不需要转换，直接使用指针
+        } else if (needsTypeConversion(valueType, expectedType)) {
             std::string convertedReg = generateTypeConversion(valueReg, valueType, expectedType);
             if (!convertedReg.empty()) {
                 valueReg = convertedReg;
@@ -842,27 +865,68 @@ std::string FunctionCodegen::generateFunctionSignature(std::shared_ptr<Function>
         
         // 检查是否为用户定义函数，如果是则返回void
         bool isUserDefined = isUserDefinedFunction(function->identifier_name);
+        
+        // 关键修复：检查函数返回类型是否为unit（void）
+        std::string actualReturnType = getFunctionReturnLLVMType(function);
+        bool isUnitType = (actualReturnType == "void");
+        
         if (isUserDefined) {
             returnType = "void";
         }
         
-        // 对于用户定义函数，需要包含返回槽参数
+        // 对于用户定义函数，需要包含返回槽参数（除非是unit类型）
         std::string parameterList;
-        if (isUserDefined) {
+        if (isUserDefined && !isUnitType) {
             // 获取实际的返回类型
             std::string actualReturnType = getFunctionReturnLLVMType(function);
-            parameterList = actualReturnType + "* %return_slot";
+            // 关键修复：返回槽类型应该是 T*，而不是 T**
+            // 如果 actualReturnType 已经是 T*，那么返回槽就是 T* %return_slot
+            // 如果 actualReturnType 是 T，那么返回槽是 T* %return_slot
+            if (actualReturnType.find("*") != std::string::npos) {
+                parameterList = actualReturnType + " %return_slot";
+            } else {
+                parameterList = actualReturnType + "* %return_slot";
+            }
             
-            // 添加其他参数
-            std::string otherParams = generateParameterList(function);
-            if (!otherParams.empty()) {
-                parameterList += ", " + otherParams;
+            // 添加其他参数 - 修复：不要调用generateParameterList，直接在这里处理
+            // 避免重复添加返回槽参数
+            if (function->functionparameters) {
+                const auto& functionParams = function->functionparameters->functionparams;
+                size_t paramIndex = 1; // 从1开始，因为0是返回槽
+                
+                // 首先处理 self 参数（如果存在）
+                if (function->functionparameters->hasSelfParam) {
+                    // self 参数统一传递结构体类型指针
+                    std::string structType = "%struct_*"; // 默认类型
+                    std::string functionName = function->identifier_name;
+                    size_t underscorePos = functionName.find('_');
+                    if (underscorePos != std::string::npos) {
+                        std::string structName = functionName.substr(0, underscorePos);
+                        structType = "%struct_" + structName;
+                    }
+                    
+                    parameterList += ", " + structType + "* %self";
+                    paramIndex++;
+                }
+                
+                // 处理剩余的普通参数
+                size_t startIndex = (function->functionparameters->hasSelfParam && functionParams.size() > 0) ? 1 : 0;
+                
+                for (size_t i = startIndex; i < functionParams.size(); ++i) {
+                    std::string paramType = getParameterLLVMType(functionParams[i], i);
+                    std::string paramName = "param_" + std::to_string(paramIndex);
+                    
+                    parameterList += ", " + paramType + " %" + paramName;
+                    paramIndex++;
+                }
             }
         } else {
             parameterList = generateParameterList(function);
         }
         
-        return returnType + " @" + functionName + "(" + parameterList + ")";
+        std::string signature = returnType + " @" + functionName + "(" + parameterList + ")";
+        irBuilder->emitComment("Generated function signature: " + signature);
+        return signature;
     }
     catch (const std::exception& e) {
         reportError("Exception in generateFunctionSignature: " + std::string(e.what()));
@@ -882,6 +946,22 @@ std::string FunctionCodegen::generateParameterList(std::shared_ptr<Function> fun
         // 检查是否为用户定义函数
         bool isUserDefined = isUserDefinedFunction(function->identifier_name);
         
+        // 关键修复：检查函数返回类型是否为unit（void）
+        std::string returnType = getFunctionReturnLLVMType(function);
+        bool isUnitType = (returnType == "void");
+        
+        // 对于用户定义函数，总是添加返回槽参数作为第一个参数（除非是unit类型）
+        if (isUserDefined && !isUnitType) {
+            // 关键修复：返回槽类型应该是 T*，而不是 T**
+            // 如果 returnType 已经是 T*，那么返回槽就是 T* %return_slot
+            // 如果 returnType 是 T，那么返回槽是 T* %return_slot
+            if (returnType.find("*") != std::string::npos) {
+                paramList << returnType << " %return_slot";
+            } else {
+                paramList << returnType << "* %return_slot";
+            }
+        }
+        
         // 首先处理 self 参数（如果存在）
         size_t paramIndex = 0;
         
@@ -898,7 +978,7 @@ std::string FunctionCodegen::generateParameterList(std::shared_ptr<Function> fun
             }
             
             // 添加 self 参数到参数列表
-            if (paramIndex > 0) {
+            if (paramIndex > 0 || isUserDefined) {
                 paramList << ", ";
             }
             paramList << structType << "* %self";
@@ -911,7 +991,7 @@ std::string FunctionCodegen::generateParameterList(std::shared_ptr<Function> fun
         size_t startParamIndex = isUserDefined ? 1 : 0;
         
         for (size_t i = 0; i < functionParams.size(); ++i) {
-            if (paramIndex > 0) {
+            if (paramIndex > 0 || isUserDefined) {
                 paramList << ", ";
             }
             
@@ -941,16 +1021,28 @@ std::string FunctionCodegen::generateFunctionType(std::shared_ptr<Function> func
         
         // 检查是否为用户定义函数，如果是则返回void
         bool isUserDefined = isUserDefinedFunction(function->identifier_name);
+        
+        // 关键修复：检查函数返回类型是否为unit（void）
+        std::string actualReturnType = getFunctionReturnLLVMType(function);
+        bool isUnitType = (actualReturnType == "void");
+        
         if (isUserDefined) {
             returnType = "void";
         }
         
-        // 对于用户定义函数，需要包含返回槽参数
+        // 对于用户定义函数，需要包含返回槽参数（除非是unit类型）
         std::string parameterList;
-        if (isUserDefined) {
+        if (isUserDefined && !isUnitType) {
             // 获取实际的返回类型
             std::string actualReturnType = getFunctionReturnLLVMType(function);
-            parameterList = actualReturnType + "* %return_slot";
+            // 关键修复：返回槽类型应该是 T*，而不是 T**
+            // 如果 actualReturnType 已经是 T*，那么返回槽就是 T* %return_slot
+            // 如果 actualReturnType 是 T，那么返回槽是 T* %return_slot
+            if (actualReturnType.find("*") != std::string::npos) {
+                parameterList = actualReturnType + " %return_slot";
+            } else {
+                parameterList = actualReturnType + "* %return_slot";
+            }
             
             // 添加其他参数
             std::string otherParams = generateParameterList(function);
@@ -1190,11 +1282,33 @@ void FunctionCodegen::setupParameterScope(std::shared_ptr<Function> function) {
         
         // 检查是否为用户定义函数，处理返回槽参数
         bool isUserDefined = isUserDefinedFunction(function->identifier_name);
-        if (isUserDefined) {
+        
+        // 关键修复：检查函数返回类型是否为unit（void）
+        // unit类型函数不需要return_slot参数
+        std::string returnType = getFunctionReturnLLVMType(function);
+        bool isUnitType = (returnType == "void");
+        
+        if (isUserDefined && !isUnitType) {
             irBuilder->emitComment("Setting up return slot parameter for user-defined function");
             
             // 返回槽参数是第一个参数，名为 %return_slot
             std::string returnSlotParam = "%return_slot";
+            
+            // 关键修复：将返回槽参数注册到IRBuilder的寄存器系统中
+            std::string returnType = getFunctionReturnLLVMType(function);
+            std::string returnSlotType;
+            
+            // 根据sret约定，返回槽类型应该始终是 T*
+            if (returnType.find("*") != std::string::npos) {
+                // 返回类型已经是指针（聚合类型），返回槽类型是相同的指针类型
+                returnSlotType = returnType;
+            } else {
+                // 返回类型是基本类型，返回槽类型是指向该类型的指针
+                returnSlotType = returnType + "*";
+            }
+            
+            // 注册返回槽参数到IRBuilder
+            irBuilder->registerVariableToCurrentScope("return_slot", returnSlotParam, returnSlotType);
             
             // 将返回槽参数添加到符号表中
             auto currentScope = scopeTree->GetCurrentScope();
@@ -1204,9 +1318,8 @@ void FunctionCodegen::setupParameterScope(std::shared_ptr<Function> function) {
                 returnSlotSymbol->ismutable = true; // 返回槽可变
                 
                 // 设置返回槽的类型为指针类型，指向实际的返回类型
-                std::string returnType = getFunctionReturnLLVMType(function);
                 // 创建一个简单的指针类型，使用字符串表示
-                auto pointerType = std::make_shared<SimpleType>(returnType + "*");
+                auto pointerType = std::make_shared<SimpleType>(returnSlotType);
                 returnSlotSymbol->type = pointerType;
                 
                 // 添加到当前作用域
@@ -1278,8 +1391,8 @@ void FunctionCodegen::setupParameterScope(std::shared_ptr<Function> function) {
         // 处理剩余的普通参数
         // 计算起始索引，考虑返回槽参数和self参数
         size_t startIndex = 0;
-        if (isUserDefined) {
-            // 用户定义函数：跳过返回槽参数
+        if (isUserDefined && !isUnitType) {
+            // 用户定义函数（非unit类型）：跳过返回槽参数
             startIndex = 0;
         }
         if (function->functionparameters->hasSelfParam && function->functionparameters->functionparams.size() > 0) {
@@ -1318,8 +1431,8 @@ void FunctionCodegen::setupParameterScope(std::shared_ptr<Function> function) {
                 // 将传入的参数值存储到分配的栈空间中
                 // 传入的参数在函数签名中的命名与 generateParameters 保持一致
                 std::string incomingParamName;
-                if (isUserDefined) {
-                    // 用户定义函数：参数从 %param_1 开始（%param_0 是返回槽）
+                if (isUserDefined && !isUnitType) {
+                    // 用户定义函数（非unit类型）：参数从 %param_1 开始（%param_0 是返回槽）
                     incomingParamName = "%param_" + std::to_string(paramIndex);
                 } else if (function->functionparameters->hasSelfParam) {
                     // 如果有self参数，普通参数从 %param_1 开始编号
@@ -1696,12 +1809,34 @@ std::string FunctionCodegen::getParameterName(std::shared_ptr<FunctionParam> par
 
 bool FunctionCodegen::isUserDefinedFunction(const std::string& functionName) {
     // 检查是否为内置函数
-    return !isBuiltinFunction(functionName);
+    if (isBuiltinFunction(functionName)) {
+        return false;
+    }
+    
+    // main函数是特殊的，不应该使用sret机制
+    if (functionName == "main") {
+        return false;
+    }
+    
+    // 所有其他非内置函数都是用户定义函数，包括 associated function
+    // 例如：Node_new, Node_sum 等都需要 sret 机制
+    return true;
 }
 
 std::string FunctionCodegen::generateReturnSlotParameter(const std::string& returnType) {
     // 生成返回槽参数：指向返回类型的指针
-    return returnType + "* %return_slot";
+    // 根据sret约定，返回槽类型应该是 T*，其中T是实际的返回类型
+    // 关键修复：返回槽类型应该始终是 T*，而不是 T**
+    
+    if (returnType.find("*") != std::string::npos) {
+        // 返回类型已经是指针（聚合类型），返回槽应该是相同的指针类型 T*
+        // 例如：如果返回类型是 %struct_Node*，返回槽应该是 %struct_Node* %return_slot
+        return returnType + " %return_slot";
+    } else {
+        // 返回类型不是指针（基本类型），返回槽应该是指向返回类型的指针 T*
+        // 例如：如果返回类型是 i32，返回槽应该是 i32* %return_slot
+        return returnType + "* %return_slot";
+    }
 }
 
 bool FunctionCodegen::storeToReturnSlot(const std::string& valueReg, const std::string& returnType) {
@@ -1715,15 +1850,60 @@ bool FunctionCodegen::storeToReturnSlot(const std::string& valueReg, const std::
         std::string returnSlotPtr = currentFunction->returnSlotPtr;
         irBuilder->emitComment("Storing value " + valueReg + " to return slot " + returnSlotPtr);
         
-        // 确保返回槽指针在寄存器映射中
-        if (!irBuilder->getVariableRegister("return_slot").empty()) {
-            // 返回槽已经在寄存器映射中，直接使用
-            irBuilder->emitStore(valueReg, returnSlotPtr);
-        } else {
-            // 返回槽不在寄存器映射中，注册它
-            irBuilder->registerVariableToCurrentScope("return_slot", returnSlotPtr, returnType + "*");
-            irBuilder->emitStore(valueReg, returnSlotPtr);
+        // 生成存储指令
+        // 对于返回槽，我们需要手动构建存储指令，因为返回槽可能不在寄存器映射中
+        std::string valueRegType = irBuilder->getRegisterType(valueReg);
+        
+        // 关键修复：确定正确的存储类型
+        // 对于聚合类型返回值，我们需要存储结构体的值到返回槽中
+        // 返回槽的类型应该始终是 T*，其中T是基础类型
+        
+        std::string storeType = valueRegType;
+        std::string returnSlotType;
+        
+        if (storeType.empty()) {
+            storeType = returnType; // 使用返回类型作为默认
         }
+        
+        // 根据sret约定，返回槽类型应该始终是 T*
+        if (returnType.find("*") != std::string::npos) {
+            // 返回类型已经是指针（聚合类型），返回槽类型是相同的指针类型
+            returnSlotType = returnType;
+            
+            // 关键修复：对于聚合类型，如果valueReg是指针，我们需要使用memcpy复制内容
+            // 而不是存储指针本身
+            if (storeType == returnType) {
+                // valueReg的类型与返回槽类型相同，都是T*
+                // 这意味着我们需要复制指针指向的内容，而不是指针本身
+                irBuilder->emitComment("Copying aggregate return value using memcpy");
+                
+                // 计算类型大小
+                std::string baseType = returnType.substr(0, returnType.length() - 1); // 去掉 *
+                int typeSize = typeMapper->getTypeSize(baseType);
+                std::string sizeReg = irBuilder->newRegister();
+                std::string sizeInstruction = sizeReg + " = add i32 0, " + std::to_string(typeSize);
+                irBuilder->emitInstruction(sizeInstruction);
+                irBuilder->setRegisterType(sizeReg, "i32");
+                
+                // 关键修复：确保返回槽已注册到IRBuilder中
+                // 如果返回槽未注册，先注册它
+                if (irBuilder->getRegisterType(returnSlotPtr).empty()) {
+                    std::string returnSlotType = returnType;
+                    irBuilder->registerVariableToCurrentScope("return_slot", returnSlotPtr, returnSlotType);
+                }
+                
+                // 使用memcpy复制结构体内容
+                irBuilder->emitMemcpy(returnSlotPtr, valueReg, sizeReg);
+                return true;
+            }
+        } else {
+            // 返回类型是基本类型，返回槽类型是指向该类型的指针
+            returnSlotType = returnType + "*";
+        }
+        
+        // 手动构建存储指令
+        std::string instruction = "store " + storeType + " " + valueReg + ", " + returnSlotType + " " + returnSlotPtr;
+        irBuilder->emitInstruction(instruction);
         
         return true;
     }
@@ -1756,8 +1936,17 @@ std::string FunctionCodegen::generateUserDefinedFunctionCall(const std::string& 
             returnType = getFunctionReturnLLVMType(calleeFunction);
         }
         
-        // 分配返回槽空间
-        std::string returnSlotPtr = irBuilder->emitAlloca(returnType);
+        // 分配返回槽空间 - 关键修复：返回槽类型应该始终是 T*
+        // 无论返回类型是否已经是指针，我们都分配基础类型的指针空间
+        std::string returnSlotPtr;
+        if (returnType.find("*") != std::string::npos) {
+            // 返回类型已经是指针（聚合类型），去掉*后分配基础类型的指针空间
+            std::string baseType = returnType.substr(0, returnType.length() - 1);
+            returnSlotPtr = irBuilder->emitAlloca(baseType);
+        } else {
+            // 返回类型是基本类型，分配该类型的指针空间
+            returnSlotPtr = irBuilder->emitAlloca(returnType);
+        }
         
         // 构建参数列表：第一个参数是返回槽指针
         std::vector<std::string> callArgs;
@@ -1769,8 +1958,16 @@ std::string FunctionCodegen::generateUserDefinedFunctionCall(const std::string& 
         // 生成函数调用（返回类型为void）
         irBuilder->emitCall(functionName, callArgs, "void");
         
-        // 从返回槽加载返回值
-        std::string resultReg = irBuilder->emitLoad(returnSlotPtr, returnType);
+        // 对于聚合类型，直接返回返回槽指针（T*）
+        // 对于非聚合类型，从返回槽加载返回值
+        std::string resultReg;
+        if (irBuilder->isAggregateType(returnType)) {
+            // 聚合类型：返回指针 T*
+            resultReg = returnSlotPtr;
+        } else {
+            // 非聚合类型：加载值
+            resultReg = irBuilder->emitLoad(returnSlotPtr, returnType);
+        }
         
         return resultReg;
     }

@@ -7,12 +7,22 @@ impl Node {
     fn sum(self) -> i32 {
         self.x + self.y
     }
+    fn new() -> Self {
+        Node {x : 10, y : 20}
+    }
+    fn modify_x(&self, x : i32) {
+        self.x = x;
+    }
 }
 
 fn main() {
     let a : i32 = getInt();
     let b : i32 = getInt();
-    let node : Node = Node {x : a, y : b};
+    let mut node : Node = Node {x : a, y : b};
     printlnInt(node.sum());
+    let test : Node = Node::new();
+    printlnInt(test.sum());
+    node.modify_x(42);
+    printlnInt(node.x);
     exit(0);
 }

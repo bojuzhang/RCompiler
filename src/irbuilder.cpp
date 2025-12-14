@@ -465,7 +465,10 @@ std::string IRBuilder::emitAlloca(const std::string& type, int alignment) {
     std::string instruction = result + " = alloca " + type + alignStr;
     emitInstruction(instruction);
     
-    // alloca 指令的结果是指向分配类型的指针
+    // 关键修复：alloca 指令的结果应该是指向分配类型的指针
+    // 无论 type 是什么类型，alloca 的结果总是指向该类型的指针
+    // 如果 type 是 T*，那么 alloca 分配 T* 空间，结果是 T**
+    // 如果 type 是 T，那么 alloca 分配 T 空间，结果是 T*
     setRegisterType(result, type + "*");
     return result;
 }

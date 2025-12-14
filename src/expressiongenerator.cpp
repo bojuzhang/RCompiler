@@ -575,6 +575,9 @@ std::string ExpressionGenerator::generateStructExpression(std::shared_ptr<Struct
         std::string structType = "%struct_" + structName;
         std::string structReg = irBuilder->emitAlloca(structType);
         
+        // 确保寄存器类型正确设置为指针类型
+        irBuilder->setRegisterType(structReg, structType + "*");
+        
         // 处理结构体字段初始化
         if (auto structFields = std::dynamic_pointer_cast<StructExprFields>(structExpr->structinfo)) {
             for (const auto& field : structFields->structexprfields) {
@@ -607,9 +610,8 @@ std::string ExpressionGenerator::generateStructExpression(std::shared_ptr<Struct
             }
         }
         
-        // 对于结构体表达式，我们需要返回结构体的值而不是指针
-        // 但是由于结构体是聚合类型，我们需要在赋值时使用 memcpy
-        // 所以这里返回指针，让调用者处理
+        // 对于结构体表达式，返回结构体的指针
+        // 这样在 sret 机制中可以直接存储到返回槽
         return structReg;
     }
     catch (const std::exception& e) {
@@ -694,6 +696,14 @@ std::string ExpressionGenerator::generateCallExpression(std::shared_ptr<CallExpr
             returnType != "i8*" && returnType != "i1" && returnType.find("*") == std::string::npos) {
             // 如果返回类型是结构体类型但没有指针，添加指针
             if (returnType.find("%struct_") == 0) {
+                returnType = returnType + "*";
+            }
+        }
+        
+        // 对于聚合类型返回值，确保返回指针类型而不是值类型
+        if (returnType != "i32" && returnType != "void" && returnType != "i8*" && returnType != "i1" &&
+            (returnType.find("%struct_") == 0 || returnType.find("[") == 0)) {
+            if (returnType.find("*") == std::string::npos) {
                 returnType = returnType + "*";
             }
         }
@@ -1227,7 +1237,7 @@ std::string ExpressionGenerator::generateAssignmentExpression(std::shared_ptr<As
             }
         }
         
-        // 检查是否为聚合类型，如果是则使用 memcpy
+        // 检查是否为聚合类型，如果是则使用 builtin_memcpy
         if (irBuilder->isAggregateType(leftType)) {
             irBuilder->emitAggregateCopy(leftPtrReg, rightReg, leftType);
         } else {
@@ -1757,9 +1767,21 @@ std::string ExpressionGenerator::generateUserDefinedFunctionCall(const std::stri
             return ""; // void函数调用不返回值
         }
         
-        // 分配返回槽空间
-        std::string returnSlotPtr = irBuilder->emitAlloca(returnType);
-        irBuilder->setRegisterType(returnSlotPtr, returnType + "*");
+        // 分配返回槽空间 - 关键修复：返回槽类型应该始终是 T*
+        // 根据sret约定，返回槽参数的类型应该是T*，其中T是函数返回的基础类型
+        std::string returnSlotPtr;
+        
+        // 确定返回槽的基础类型
+        std::string baseType = returnType;
+        
+        // 如果返回类型已经是指针类型（T*），我们需要提取T
+        if (baseType.find("*") != std::string::npos) {
+            baseType = baseType.substr(0, baseType.length() - 1); // 去掉 *
+        }
+        
+        // 返回槽的类型应该是baseType*，即指向基础类型的指针
+        returnSlotPtr = irBuilder->emitAlloca(baseType);
+        irBuilder->setRegisterType(returnSlotPtr, baseType + "*");
         
         // 构建参数列表：返回槽指针 + 原始参数
         std::vector<std::string> finalArgs;
@@ -1769,11 +1791,22 @@ std::string ExpressionGenerator::generateUserDefinedFunctionCall(const std::stri
         // 调用用户定义函数（返回void）
         irBuilder->emitCall(functionName, finalArgs, "void");
         
-        // 从返回槽加载结果
-        std::string resultReg = irBuilder->emitLoad(returnSlotPtr, returnType);
-        irBuilder->setRegisterType(resultReg, returnType);
-        
-        return resultReg;
+        // 处理函数调用后的返回值
+        if (irBuilder->isAggregateType(baseType)) {
+            // 对于聚合类型，函数已经将结果写入返回槽，返回槽指针就是结果
+            // 返回槽指针的类型是 baseType*，这正是我们需要的
+            return returnSlotPtr;
+        } else if (returnType.find("*") != std::string::npos) {
+            // 对于指针类型返回值（如 T*），从返回槽加载指针值
+            std::string resultReg = irBuilder->emitLoad(returnSlotPtr, returnType);
+            irBuilder->setRegisterType(resultReg, returnType);
+            return resultReg;
+        } else {
+            // 对于基本类型返回值，从返回槽加载结果
+            std::string resultReg = irBuilder->emitLoad(returnSlotPtr, returnType);
+            irBuilder->setRegisterType(resultReg, returnType);
+            return resultReg;
+        }
     }
     catch (const std::exception& e) {
         reportError("Exception in generateUserDefinedFunctionCall: " + std::string(e.what()));
