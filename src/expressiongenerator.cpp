@@ -447,7 +447,7 @@ std::string ExpressionGenerator::generateIndexExpression(std::shared_ptr<IndexEx
             std::string arrayType = "[" + arraySize + " x " + elementType + "]";
             elementPtrReg = irBuilder->emitGetElementPtr(varReg, indices, arrayType);
         } else if (auto fieldExpr = std::dynamic_pointer_cast<FieldExpression>(indexExpr->expressionout)) {
-            // 处理结构体字段访问中的数组索引，如 node.arr[1]
+            // 处理结构体字段访问中的数组索引，如 self.data[self.top]
             // 获取接收者类型
             std::string receiverType = getExpressionType(fieldExpr->expression);
             
@@ -470,6 +470,7 @@ std::string ExpressionGenerator::generateIndexExpression(std::shared_ptr<IndexEx
                 }
                 
                 receiverPtrReg = irBuilder->getVariableRegister(variableName);
+                // receiverType = irBuilder->getRegisterType(receiverPtrReg);
             } else {
                 // 对于其他类型的表达式，生成表达式然后获取其地址
                 std::string receiverReg = generateExpression(fieldExpr->expression);
@@ -870,6 +871,7 @@ std::string ExpressionGenerator::generateFieldExpression(std::shared_ptr<FieldEx
             }
             
             receiverPtrReg = irBuilder->getVariableRegister(variableName);
+            receiverType = irBuilder->getRegisterType(receiverPtrReg);
         } else {
             // 对于其他类型的表达式，生成表达式然后获取其地址
             std::string receiverReg = generateExpression(fieldExpr->expression);
@@ -887,6 +889,8 @@ std::string ExpressionGenerator::generateFieldExpression(std::shared_ptr<FieldEx
                 receiverPtrReg = receiverReg;
             }
         }
+
+        // std::cerr << "Field: " << receiverType << " " << receiverPtrReg << " " << fieldExpr->identifier << "\n";
         
         // 确保我们有指针
         std::string receiverPtrRegType = irBuilder->getRegisterType(receiverPtrReg);
@@ -897,6 +901,7 @@ std::string ExpressionGenerator::generateFieldExpression(std::shared_ptr<FieldEx
         
         // 计算字段地址
         std::string fieldPtrReg = generateFieldAccessAddress(receiverPtrReg, fieldExpr->identifier, receiverType);
+        // std::cerr << "fieldPtrReg: " << fieldPtrReg << "\n";
         if (fieldPtrReg.empty()) {
             reportError("Failed to calculate field address: " + fieldExpr->identifier);
             return "";
@@ -908,9 +913,16 @@ std::string ExpressionGenerator::generateFieldExpression(std::shared_ptr<FieldEx
             fieldType = "i32"; // 默认类型
         }
         
-        // 加载字段值
-        std::string valueReg = irBuilder->emitLoad(fieldPtrReg, fieldType);
-        return valueReg;
+        // 检查字段类型是否为聚合类型
+        if (irBuilder->isAggregateType(fieldType)) {
+            // 对于聚合类型字段（如数组），返回指针而不是加载值
+            // 这样在赋值和索引操作中可以直接使用
+            return fieldPtrReg;
+        } else {
+            // 对于基本类型字段，加载值
+            std::string valueReg = irBuilder->emitLoad(fieldPtrReg, fieldType);
+            return valueReg;
+        }
     }
     catch (const std::exception& e) {
         reportError("Exception in generateFieldExpression: " + std::string(e.what()));
@@ -1264,6 +1276,7 @@ std::string ExpressionGenerator::generateCompoundAssignmentExpression(std::share
     try {
         // 分析左值表达式
         auto [leftPtrReg, leftType] = analyzeLValue(compoundAssignExpr->leftexpression);
+        // std::cerr << "test: " << leftPtrReg << " " << leftType << "\n";
         if (leftPtrReg.empty()) {
             reportError("Invalid left side of compound assignment");
             return "";
@@ -1498,6 +1511,7 @@ std::pair<std::string, std::string> ExpressionGenerator::analyzeLValue(std::shar
                 }
                 
                 receiverReg = irBuilder->getVariableRegister(variableName);
+                receiverType = irBuilder->getRegisterType(receiverReg);
             } else {
                 receiverReg = generateExpression(fieldExpr->expression);
             }
@@ -1510,12 +1524,13 @@ std::pair<std::string, std::string> ExpressionGenerator::analyzeLValue(std::shar
             return {fieldPtrReg, fieldType};
         }
         else if (auto indexExpr = std::dynamic_pointer_cast<IndexExpression>(expression)) {
-            // 索引访问
+            // 索引访问 - 修复复杂字段访问作为左值的情况
             std::string baseType = getExpressionType(indexExpr->expressionout);
             std::string indexReg = generateExpression(indexExpr->expressionin);
+            // std::cerr << "indexReg: " << indexReg << "\n";
             if (baseType.size() && baseType.back() == '*') {
                 baseType.pop_back();
-            } 
+            }
             
             std::string elementType;
             std::string elementPtrReg;
@@ -1529,8 +1544,67 @@ std::pair<std::string, std::string> ExpressionGenerator::analyzeLValue(std::shar
             } else if (typeMapper->isArrayType(baseType)) {
                 elementType = typeMapper->getArrayElementType(baseType);
                 
+                // 检查基础表达式是否是字段访问表达式（如 self.data）
+                if (auto fieldExpr = std::dynamic_pointer_cast<FieldExpression>(indexExpr->expressionout)) {
+                    // 处理字段访问中的数组索引，如 self.data[self.top]
+                    std::string receiverType = getExpressionType(fieldExpr->expression);
+                    std::string receiverPtrReg;
+                    
+                    // 检查接收者是否为路径表达式（变量访问）
+                    if (auto pathExpr = std::dynamic_pointer_cast<PathExpression>(fieldExpr->expression)) {
+                        // 对于变量访问，获取变量的指针寄存器
+                        auto lastSegment = pathExpr->simplepath->simplepathsegements.back();
+                        std::string variableName;
+                        
+                        // 特殊处理 self 和 Self
+                        if (lastSegment->isself) {
+                            variableName = "self";
+                        } else if (lastSegment->isSelf) {
+                            variableName = "Self";
+                        } else {
+                            variableName = lastSegment->identifier;
+                        }
+                        
+                        receiverPtrReg = irBuilder->getVariableRegister(variableName);
+                        // receiverType = irBuilder->getRegisterType(receiverPtrReg);
+                    } else {
+                        // 对于其他类型的表达式，生成表达式然后获取其地址
+                        std::string receiverReg = generateExpression(fieldExpr->expression);
+                        if (receiverReg.empty()) {
+                            reportError("Failed to generate receiver expression for field access");
+                            return {"", ""};
+                        }
+                        
+                        // 如果接收者不是指针，需要分配内存并存储
+                        std::string receiverRegType = irBuilder->getRegisterType(receiverReg);
+                        if (!irBuilder->isPointerType(receiverRegType)) {
+                            receiverPtrReg = irBuilder->emitAlloca(receiverType);
+                            irBuilder->emitStore(receiverReg, receiverPtrReg);
+                        } else {
+                            receiverPtrReg = receiverReg;
+                        }
+                    }
+                    
+                    // 计算字段地址（这里是数组字段的地址）
+                    std::string fieldPtrReg = generateFieldAccessAddress(receiverPtrReg, fieldExpr->identifier, receiverType);
+                    if (fieldPtrReg.empty()) {
+                        reportError("Failed to calculate field address: " + fieldExpr->identifier);
+                        return {"", ""};
+                    }
+                    
+                    // 现在fieldPtrReg是指向数组字段的指针，可以直接进行索引
+                    // 对于指向数组的指针 [N x T]*，我们需要两个索引：0（数组起始）和元素索引
+                    std::vector<std::string> indices = {"0", indexReg};
+                    // fieldPtrReg 的类型应该是 [N x T]*，这是 getelementptr 的第一个参数类型
+                    std::string fieldPtrRegType = irBuilder->getRegisterType(fieldPtrReg);
+                    // 但是 getelementptr 的第一个参数应该是去掉*的类型，即 [N x T]
+                    std::string arrayType = fieldPtrRegType.substr(0, fieldPtrRegType.length() - 1);
+                    elementPtrReg = irBuilder->emitGetElementPtr(fieldPtrReg, indices, arrayType);
+                    
+                    return {elementPtrReg, elementType};
+                }
                 // 检查基础表达式是否是路径表达式（变量访问）
-                if (auto pathExpr = std::dynamic_pointer_cast<PathExpression>(indexExpr->expressionout)) {
+                else if (auto pathExpr = std::dynamic_pointer_cast<PathExpression>(indexExpr->expressionout)) {
                     // 对于数组变量，直接从变量对应的指针读取元素
                     auto lastSegment = pathExpr->simplepath->simplepathsegements.back();
                     std::string variableName;
@@ -1671,6 +1745,10 @@ int ExpressionGenerator::getStructFieldIndex(const std::string& structName, cons
         std::string pureStructName = structName;
         if (structName.find("%struct_") == 0) {
             pureStructName = structName.substr(8); // 去掉 "%struct_" 前缀
+        }
+
+        while (!pureStructName.empty() && pureStructName.ends_with("*")) {
+            pureStructName.pop_back();
         }
         
         // 从符号表查找结构体定义
