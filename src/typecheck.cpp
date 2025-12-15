@@ -1206,7 +1206,7 @@ std::shared_ptr<SemanticType> TypeChecker::InferExpressionType(Expression& expr)
         if (unaryExpr->expression) {
             type = InferExpressionType(*unaryExpr->expression);
             if (unaryExpr->unarytype == Token::kMinus && (type->tostring() == "UnsignedInt" || type->tostring() == "Int")) {
-                return std::make_shared<SignedIntType>();
+                type = std::make_shared<SignedIntType>();
             }
         } else {
             type = nullptr;

@@ -400,13 +400,16 @@ std::string ExpressionGenerator::generateIndexExpression(std::shared_ptr<IndexEx
         std::string baseType = getExpressionType(indexExpr->expressionout);
         
         // 确定元素类型
-        std::string elementType;
-        if (typeMapper->isPointerType(baseType)) {
+        std::string elementType = baseType;
+        // 解指针
+        while (typeMapper->isPointerType(elementType)) {
             // 指针索引
-            elementType = typeMapper->getPointedType(baseType);
-        } else if (typeMapper->isArrayType(baseType)) {
+            elementType = typeMapper->getPointedType(elementType);
+        }
+
+        if (typeMapper->isArrayType(elementType)) {
             // 数组索引
-            elementType = typeMapper->getArrayElementType(baseType);
+            elementType = typeMapper->getArrayElementType(elementType);
         } else {
             reportError("Cannot index into non-pointer, non-array type: " + baseType);
             return "";
