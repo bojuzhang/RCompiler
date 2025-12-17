@@ -512,10 +512,17 @@ std::string ExpressionGenerator::generateIndexExpression(std::shared_ptr<IndexEx
             // 现在fieldPtrReg是指向数组字段的指针，可以直接进行索引
             // 对于指向数组的指针 [N x T]*，我们需要两个索引：0（数组起始）和元素索引
             std::vector<std::string> indices = {"0", indexReg};
-            // fieldPtrReg 的类型应该是 [N x T]*，这是 getelementptr 的第一个参数类型
-            std::string fieldPtrRegType = irBuilder->getRegisterType(fieldPtrReg);
-            // 但是 getelementptr 的第一个参数应该是去掉*的类型，即 [N x T]
-            std::string arrayType = fieldPtrRegType.substr(0, fieldPtrRegType.length() - 1);
+            
+            // 关键修复：直接从字段类型获取数组类型，而不依赖fieldPtrReg的类型
+            std::string fieldType = getStructFieldType(receiverType, fieldExpr->identifier);
+            std::string arrayType = fieldType;
+            
+            // 确保arrayType是数组类型
+            if (!typeMapper->isArrayType(arrayType)) {
+                reportError("Field is not an array type: " + fieldExpr->identifier + " -> " + arrayType);
+                return "";
+            }
+            
             elementPtrReg = irBuilder->emitGetElementPtr(fieldPtrReg, indices, arrayType);
         } else {
             // 生成基础表达式（数组或指针）
@@ -930,6 +937,11 @@ std::string ExpressionGenerator::generateFieldExpression(std::shared_ptr<FieldEx
         if (irBuilder->isAggregateType(fieldType)) {
             // 对于聚合类型字段（如数组），返回指针而不是加载值
             // 这样在赋值和索引操作中可以直接使用
+            
+            // 关键修复：确保fieldPtrReg的类型正确设置为字段类型的指针
+            // 但是generateFieldAccessAddress已经设置了正确的类型，这里不需要重复设置
+            // irBuilder->setRegisterType(fieldPtrReg, fieldType + "*");
+            
             return fieldPtrReg;
         } else {
             // 对于基本类型字段，加载值
@@ -1646,10 +1658,18 @@ std::pair<std::string, std::string> ExpressionGenerator::analyzeLValue(std::shar
                     // 现在fieldPtrReg是指向数组字段的指针，可以直接进行索引
                     // 对于指向数组的指针 [N x T]*，我们需要两个索引：0（数组起始）和元素索引
                     std::vector<std::string> indices = {"0", indexReg};
-                    // fieldPtrReg 的类型应该是 [N x T]*，这是 getelementptr 的第一个参数类型
-                    std::string fieldPtrRegType = irBuilder->getRegisterType(fieldPtrReg);
-                    // 但是 getelementptr 的第一个参数应该是去掉*的类型，即 [N x T]
-                    std::string arrayType = fieldPtrRegType.substr(0, fieldPtrRegType.length() - 1);
+                    
+                    // 关键修复：始终使用字段类型作为数组类型，而不是依赖fieldPtrReg的类型
+                    // 因为fieldPtrReg的类型可能不正确（特别是在指针参数的情况下）
+                    std::string fieldType = getStructFieldType(receiverType, fieldExpr->identifier);
+                    std::string arrayType = fieldType;
+                    
+                    // 确保arrayType是数组类型
+                    if (!typeMapper->isArrayType(arrayType)) {
+                        reportError("Field is not an array type: " + fieldExpr->identifier + " -> " + arrayType);
+                        return {"", ""};
+                    }
+                    
                     elementPtrReg = irBuilder->emitGetElementPtr(fieldPtrReg, indices, arrayType);
                     
                     return {elementPtrReg, elementType};
@@ -1766,7 +1786,15 @@ std::string ExpressionGenerator::generateFieldAccessAddress(const std::string& b
         std::vector<std::string> indices = {"0", std::to_string(fieldIndex)};
         
         // 获取指向的元素类型（去掉*）
-        std::string pointedType = basePtrType.substr(0, basePtrType.length() - 1);
+        std::string pointedType;
+        if (basePtrType.back() == '*') {
+            pointedType = basePtrType.substr(0, basePtrType.length() - 1);
+        } else {
+            pointedType = basePtrType; // 已经是正确的类型
+        }
+        
+        // 关键修复：对于字段访问，getelementptr的第一个参数类型应该是结构体类型
+        // 而不是字段类型，因为我们在访问结构体的字段
         std::string fieldPtrReg = irBuilder->emitGetElementPtr(basePtr, indices, pointedType);
         
         // 重要：设置正确的寄存器类型
@@ -1775,11 +1803,7 @@ std::string ExpressionGenerator::generateFieldAccessAddress(const std::string& b
         // 如果字段是基本类型，则 fieldPtrReg 的类型应该是 T*
         std::string fieldType = getStructFieldType(structType, fieldName);
         if (!fieldType.empty()) {
-            if (typeMapper->isArrayType(fieldType)) {
-                irBuilder->setRegisterType(fieldPtrReg, fieldType + "*");
-            } else {
-                irBuilder->setRegisterType(fieldPtrReg, fieldType + "*");
-            }
+            irBuilder->setRegisterType(fieldPtrReg, fieldType + "*");
         }
         
         return fieldPtrReg;
@@ -2720,6 +2744,11 @@ std::string ExpressionGenerator::getStructFieldType(const std::string& structNam
         std::string pureStructName = structName;
         if (structName.find("%struct_") == 0) {
             pureStructName = structName.substr(8); // 去掉 "%struct_" 前缀
+        }
+        
+        // 关键修复：处理指针类型，去掉末尾的 *
+        while (!pureStructName.empty() && pureStructName.back() == '*') {
+            pureStructName.pop_back();
         }
         
         // 从符号表查找结构体定义

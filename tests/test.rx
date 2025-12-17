@@ -1,9 +1,16 @@
+struct Node {
+    arr : [i32; 10],
+    val : i32
+}
+fn foo(node : &mut Node) -> i32 {
+    node.arr[1]
+}
+fn goo(node : Node) -> i32 {
+    node.arr[1]
+}
 fn main() {
-    struct Node {
-        x : i32,
-        y : i32
-    }
-    let mut node : Node = Node {x : 1, y : 2};
-    printlnInt(node.x);
+    let node : Node = Node {arr : [42; 10], val : 1};
+    printlnInt(foo(&mut node));
+    printlnInt(goo(node));
     exit(0);
 }

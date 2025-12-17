@@ -1598,7 +1598,7 @@ std::string FunctionCodegen::getParameterLLVMType(std::shared_ptr<FunctionParam>
         std::string llvmType = typeMapper->mapASTTypeToLLVM(param->type);
         
         // 检查是否为聚合类型，如果是则改为指针类型
-        if (typeMapper->isStructType(llvmType) || typeMapper->isArrayType(llvmType)) {
+        if ((typeMapper->isStructType(llvmType) || typeMapper->isArrayType(llvmType)) && (!llvmType.ends_with('*'))) {
             return llvmType + "*";
         }
         
