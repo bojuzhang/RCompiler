@@ -1,11 +1,9 @@
-fn foo(x : &mut i32) {
-    *x = 114514;
-}
-
 fn main() {
-    let mut x : i32 = 42;
-    printlnInt(x);
-    foo(&mut x);
-    printlnInt(x);
+    struct Node {
+        x : i32,
+        y : i32
+    }
+    let mut node : Node = Node {x : 1, y : 2};
+    printlnInt(node.x);
     exit(0);
 }

@@ -404,12 +404,30 @@ bool IRGenerator::declareBuiltinFunctions() {
 bool IRGenerator::generateTopLevelItems(const std::vector<std::shared_ptr<Item>>& topLevelItems) {
     bool success = true;
     
-    // 首先生成所有结构体定义，确保它们在使用之前被定义
+    // 首先收集所有结构体定义，包括函数内部的
+    std::vector<std::shared_ptr<StructStruct>> allStructs;
+    
+    // 收集顶层结构体定义
     for (const auto& item : topLevelItems) {
         if (auto structDef = std::dynamic_pointer_cast<StructStruct>(item->item)) {
-            if (!generateStruct(structDef)) {
-                success = false;
-            }
+            allStructs.push_back(structDef);
+        }
+    }
+    
+    // 递归收集函数内部的结构体定义
+    for (const auto& item : topLevelItems) {
+        if (auto function = std::dynamic_pointer_cast<Function>(item->item)) {
+            collectStructsFromFunction(function, allStructs);
+        }
+        else if (auto impl = std::dynamic_pointer_cast<InherentImpl>(item->item)) {
+            collectStructsFromImpl(impl, allStructs);
+        }
+    }
+    
+    // 生成所有结构体定义（在全局作用域）
+    for (const auto& structDef : allStructs) {
+        if (!generateStruct(structDef)) {
+            success = false;
         }
     }
     
@@ -769,4 +787,69 @@ std::string IRGenerator::generateStatistics() const {
     stats << ", Warnings: " << warningMessages.size();
     
     return stats.str();
+}
+
+// ==================== 结构体收集辅助方法 ====================
+
+void IRGenerator::collectStructsFromFunction(std::shared_ptr<Function> function,
+                                           std::vector<std::shared_ptr<StructStruct>>& allStructs) {
+    if (!function || !function->blockexpression) {
+        return;
+    }
+    
+    // 遍历函数体中的所有语句
+    for (const auto& stmt : function->blockexpression->statements) {
+        if (stmt && stmt->astnode) {
+            collectStructsFromStatement(stmt, allStructs);
+        }
+    }
+}
+
+void IRGenerator::collectStructsFromImpl(std::shared_ptr<InherentImpl> impl,
+                                        std::vector<std::shared_ptr<StructStruct>>& allStructs) {
+    if (!impl) {
+        return;
+    }
+    
+    // 遍历 impl 块中的所有关联项
+    for (const auto& item : impl->associateditems) {
+        if (item && item->consttantitem_or_function) {
+            if (auto function = std::dynamic_pointer_cast<Function>(item->consttantitem_or_function)) {
+                collectStructsFromFunction(function, allStructs);
+            }
+        }
+    }
+}
+
+void IRGenerator::collectStructsFromStatement(std::shared_ptr<Statement> statement,
+                                            std::vector<std::shared_ptr<StructStruct>>& allStructs) {
+    if (!statement || !statement->astnode) {
+        return;
+    }
+    
+    // 检查是否为项语句
+    if (auto item = std::dynamic_pointer_cast<Item>(statement->astnode)) {
+        if (auto structDef = std::dynamic_pointer_cast<StructStruct>(item->item)) {
+            // 检查是否已经收集过这个结构体
+            std::string structName = structDef->identifier;
+            bool alreadyCollected = false;
+            for (const auto& existing : allStructs) {
+                if (existing && existing->identifier == structName) {
+                    alreadyCollected = true;
+                    break;
+                }
+            }
+            if (!alreadyCollected) {
+                allStructs.push_back(structDef);
+            }
+        }
+        else if (auto function = std::dynamic_pointer_cast<Function>(item->item)) {
+            // 递归收集函数内部的结构体
+            collectStructsFromFunction(function, allStructs);
+        }
+        else if (auto impl = std::dynamic_pointer_cast<InherentImpl>(item->item)) {
+            // 递归收集 impl 块中的结构体
+            collectStructsFromImpl(impl, allStructs);
+        }
+    }
 }

@@ -525,36 +525,8 @@ bool StatementGenerator::generateStructItem(std::shared_ptr<StructStruct> struct
     try {
         irBuilder->emitComment("Struct definition: " + structDef->identifier);
         
-        // 生成结构体类型定义
-        std::string structName = structDef->identifier;
-        std::string structType = "%struct_" + structName;
-        
-        // 收集字段信息
-        std::vector<std::string> fieldTypes;
-        if (structDef->structfields) {
-            for (const auto& field : structDef->structfields->structfields) {
-                if (field && field->type) {
-                    std::string fieldType = typeToStringHelper(field->type);
-                    if (!fieldType.empty()) {
-                        fieldTypes.push_back(fieldType);
-                    } else {
-                        fieldTypes.push_back("i32"); // 默认类型
-                    }
-                }
-            }
-        }
-        
-        // 生成结构体类型定义
-        std::string structDefStr = structType + " = type {";
-        for (size_t i = 0; i < fieldTypes.size(); ++i) {
-            if (i > 0) structDefStr += ", ";
-            structDefStr += fieldTypes[i];
-        }
-        structDefStr += "}";
-        
-        // 这里应该将结构体定义添加到模块头部
-        // 暂时只生成注释
-        irBuilder->emitComment("Struct type: " + structDefStr);
+        // 注意：结构体定义现在由 IRGenerator 在全局作用域中统一处理
+        // 这里只需要生成注释，不需要重复生成结构体定义
         
         return true;
     }

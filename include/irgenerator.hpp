@@ -434,4 +434,30 @@ private:
      * @return 统计信息字符串
      */
     std::string generateStatistics() const;
+    
+    // ==================== 结构体收集辅助方法 ====================
+    
+    /**
+     * 从函数中收集结构体定义
+     * @param function 函数节点
+     * @param allStructs 收集到的结构体列表
+     */
+    void collectStructsFromFunction(std::shared_ptr<Function> function,
+                                   std::vector<std::shared_ptr<StructStruct>>& allStructs);
+    
+    /**
+     * 从 impl 块中收集结构体定义
+     * @param impl impl 块节点
+     * @param allStructs 收集到的结构体列表
+     */
+    void collectStructsFromImpl(std::shared_ptr<InherentImpl> impl,
+                                std::vector<std::shared_ptr<StructStruct>>& allStructs);
+    
+    /**
+     * 从语句中收集结构体定义
+     * @param statement 语句节点
+     * @param allStructs 收集到的结构体列表
+     */
+    void collectStructsFromStatement(std::shared_ptr<Statement> statement,
+                                   std::vector<std::shared_ptr<StructStruct>>& allStructs);
 };
