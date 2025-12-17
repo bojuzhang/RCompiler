@@ -1,0 +1,9 @@
+fn main() {
+    fn nested_function() -> i32 {
+        42
+    }
+    
+    let result = nested_function();
+    printlnInt(result);
+    exit(0)
+}

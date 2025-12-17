@@ -375,7 +375,12 @@ bool FunctionCodegen::generateNestedFunctions(const std::vector<std::shared_ptr<
             irBuilder->emitFunctionDef(functionName, actualReturnType, parameters);
             
             // 临时进入函数上下文以生成函数体
+            // 关键修复：正确设置isUserDefined标志
             enterFunction(functionName, returnType);
+            if (currentFunction && isUserDefined) {
+                currentFunction->isUserDefined = true;
+                currentFunction->returnSlotPtr = "%return_slot";
+            }
             
             // 生成函数序言
             generatePrologue(nestedFunc);
@@ -1419,13 +1424,7 @@ void FunctionCodegen::setupParameterScope(std::shared_ptr<Function> function) {
                 if (it != nodeTypeMap.end() && it->second) {
                     actualParamType = typeMapper->mapSemanticTypeToLLVM(it->second);
                 } else if (param->type) {
-                    // 从 AST 类型节点获取类型
-                    if (auto typePath = std::dynamic_pointer_cast<TypePath>(param->type)) {
-                        if (typePath->simplepathsegement) {
-                            std::string typeName = typePath->simplepathsegement->identifier;
-                            actualParamType = typeMapper->mapRxTypeToLLVM(typeName);
-                        }
-                    }
+                    actualParamType = typeMapper->mapASTTypeToLLVM(param->type);
                 }
                 
                 // 将传入的参数值存储到分配的栈空间中
@@ -1446,7 +1445,7 @@ void FunctionCodegen::setupParameterScope(std::shared_ptr<Function> function) {
                 std::string paramPtrReg = irBuilder->newRegister(actualParamName, "_ptr");
                 
                 // 检查是否为指针类型参数
-                if (typeMapper->isPointerType(paramType)) {
+                if (typeMapper->isPointerType(paramType) && irBuilder->isAggregateType(typeMapper->getPointedType(paramType))) {
                     // 指针类型参数：不再新 alloca 一个变量出来，直接通过 bitcast 实现指针间的 SSA 赋值
                     irBuilder->emitComment("Direct bitcast for pointer parameter");
                     
@@ -1466,7 +1465,7 @@ void FunctionCodegen::setupParameterScope(std::shared_ptr<Function> function) {
                 }
                 
                 // 对于指针类型参数，跳过后续的存储处理，因为已经通过 bitcast 处理了
-                if (typeMapper->isPointerType(paramType)) {
+                if (typeMapper->isPointerType(paramType) && irBuilder->isAggregateType(typeMapper->getPointedType(paramType))) {
                     // 指针类型参数已经通过 bitcast 处理，不需要额外的存储操作
                 } else if (typeMapper->isStructType(actualParamType) || typeMapper->isArrayType(actualParamType)) {
                     // 聚合类型参数：传入的是指针，需要使用 memcpy 复制内容

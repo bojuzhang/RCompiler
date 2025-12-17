@@ -4,6 +4,7 @@
 #include <memory>
 #include <stdexcept>
 #include <cctype>
+#include <string>
 
 // 包含 StatementGenerator 头文件以解决前向声明问题
 #include "statementgenerator.hpp"
@@ -272,10 +273,19 @@ std::string ExpressionGenerator::generatePathExpression(std::shared_ptr<PathExpr
                 return "";
             }
             
-            std::string llvmType = typeMapper->mapSemanticTypeToLLVM(symbol->type);
+            std::string llvmType = typeMapper->getPointedType(irBuilder->getRegisterType(variableReg));
+
+            if (llvmType.empty()) {
+                llvmType = typeMapper->mapSemanticTypeToLLVM(symbol->type);
+            }
             
+            // 检查是否为引用类型（&T 或 &mut T）
+            if (auto refType = std::dynamic_pointer_cast<ReferenceType>(symbol->type)) {
+                // 对于引用类型，返回指针而不是加载值
+                return variableReg;
+            }
             // 检查是否为聚合类型
-            if (irBuilder->isAggregateType(llvmType)) {
+            else if (irBuilder->isAggregateType(llvmType)) {
                 // 聚合类型：返回指针而不是加载值
                 // 这样在 let 语句初始化和赋值表达式中可以直接使用 memcpy
                 return variableReg;
@@ -1061,32 +1071,40 @@ std::string ExpressionGenerator::generateDereferenceExpression(std::shared_ptr<D
         }
         
         // 获取指针类型
-        std::string pointerType = getExpressionType(derefExpr->expression);
-        
-        // 确保是指针类型
-        if (!typeMapper->isPointerType(pointerType)) {
-            reportError("Cannot dereference non-pointer type: " + pointerType);
-            return "";
+        std::string pointerType = irBuilder->getRegisterType(pointerReg);
+        if (pointerType.empty()) {
+            pointerType = getExpressionType(derefExpr->expression);
         }
+
+        // // 确保是指针类型
+        // if (!typeMapper->isPointerType(pointerType)) {
+        //     reportError("Cannot dereference non-pointer type: " + pointerType);
+        //     return "";
+        // }
         
         // 获取指向的类型
-        std::string elementType = typeMapper->getPointedType(pointerType);
+        // std::string elementType = typeMapper->getPointedType(pointerType);
         
         // 对于解引用表达式，我们需要连续加载：
         // 如果是指向指针的指针（T**），先加载得到 T*，再加载得到 T
         // 如果是普通指针（T*），直接加载得到 T
-        std::string resultReg;
+        std::string resultReg = pointerReg;
         
-        if (typeMapper->isPointerType(pointerType) && typeMapper->isPointerType(elementType)) {
-            // 这是一个指向指针的指针（T**），需要两次加载
-            // 第一次加载：从 T** 加载 T*
-            std::string firstLoad = irBuilder->emitLoad(pointerReg, elementType);
-            // 第二次加载：从 T* 加载 T
-            std::string finalElementType = typeMapper->getPointedType(elementType);
-            resultReg = irBuilder->emitLoad(firstLoad, finalElementType);
-            irBuilder->setRegisterType(resultReg, finalElementType);
-        } else {
-            // 普通指针（T*），直接加载
+        // if (typeMapper->isPointerType(pointerType) && typeMapper->isPointerType(elementType)) {
+        //     // 这是一个指向指针的指针（T**），需要两次加载
+        //     // 第一次加载：从 T** 加载 T*
+        //     std::string firstLoad = irBuilder->emitLoad(pointerReg, elementType);
+        //     // 第二次加载：从 T* 加载 T
+        //     std::string finalElementType = typeMapper->getPointedType(elementType);
+        //     resultReg = irBuilder->emitLoad(firstLoad, finalElementType);
+        //     irBuilder->setRegisterType(resultReg, finalElementType);
+        // } else {
+        //     // 普通指针（T*），直接加载
+        //     resultReg = irBuilder->emitLoad(pointerReg, elementType);
+        //     irBuilder->setRegisterType(resultReg, elementType);
+        // }
+        if (typeMapper->isPointerType(pointerType)) {
+            std::string elementType = typeMapper->getPointedType(pointerType);
             resultReg = irBuilder->emitLoad(pointerReg, elementType);
             irBuilder->setRegisterType(resultReg, elementType);
         }
@@ -1466,10 +1484,11 @@ bool ExpressionGenerator::isLValue(std::shared_ptr<Expression> expression) {
         return false;
     }
     
-    // 简化实现：路径表达式、字段访问、索引表达式可以是左值
+    // 简化实现：路径表达式、字段访问、索引表达式、解引用表达式可以是左值
     return (std::dynamic_pointer_cast<PathExpression>(expression) != nullptr) ||
            (std::dynamic_pointer_cast<FieldExpression>(expression) != nullptr) ||
-           (std::dynamic_pointer_cast<IndexExpression>(expression) != nullptr);
+           (std::dynamic_pointer_cast<IndexExpression>(expression) != nullptr) ||
+           (std::dynamic_pointer_cast<DereferenceExpression>(expression) != nullptr);
 }
 
 std::pair<std::string, std::string> ExpressionGenerator::analyzeLValue(std::shared_ptr<Expression> expression) {
@@ -1525,6 +1544,35 @@ std::pair<std::string, std::string> ExpressionGenerator::analyzeLValue(std::shar
                 fieldType = "i32"; // 默认类型
             }
             return {fieldPtrReg, fieldType};
+        }
+        else if (auto derefExpr = std::dynamic_pointer_cast<DereferenceExpression>(expression)) {
+            // 解引用表达式作为左值：*ptr = value
+            // 生成指针表达式
+            std::string pointerReg = generateExpression(derefExpr->expression);
+            if (pointerReg.empty()) {
+                reportError("Failed to generate pointer for dereference lvalue");
+                return {"", ""};
+            }
+            
+            // 获取指针类型
+            std::string pointerType = irBuilder->getRegisterType(pointerReg);
+
+            if (pointerType.empty()) {
+                pointerType = getExpressionType(derefExpr->expression);
+            }
+            
+            // 确保是指针类型
+            if (!typeMapper->isPointerType(pointerType)) {
+                reportError("Cannot dereference non-pointer type: " + pointerType);
+                return {"", ""};
+            }
+            
+            // 获取指向的类型
+            std::string elementType = typeMapper->getPointedType(pointerType);
+            
+            // 对于解引用表达式作为左值，我们返回指针本身和指向的类型
+            // 这样在赋值时可以直接存储到该地址
+            return {pointerReg, elementType};
         }
         else if (auto indexExpr = std::dynamic_pointer_cast<IndexExpression>(expression)) {
             // 索引访问 - 修复复杂字段访问作为左值的情况
