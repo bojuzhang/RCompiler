@@ -1,16 +1,11 @@
 struct Node {
-    arr : [i32; 10],
-    val : i32
-}
-fn foo(node : &mut Node) -> i32 {
-    node.arr[1]
-}
-fn goo(node : Node) -> i32 {
-    node.arr[1]
+    x : i32,
+    y : i32
 }
 fn main() {
-    let node : Node = Node {arr : [42; 10], val : 1};
-    printlnInt(foo(&mut node));
-    printlnInt(goo(node));
+    let mut a : [Node; 2] = [Node {x : 1, y : 2}; 2];
+    let mut b : [Node; 2] = [Node {x : 42, y : 42}; 2];
+    a[0] = b[0];
+    printlnInt(a[0].x);
     exit(0);
 }

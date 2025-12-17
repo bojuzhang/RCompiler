@@ -544,6 +544,9 @@ std::string ExpressionGenerator::generateIndexExpression(std::shared_ptr<IndexEx
         }
         
         // 加载元素值
+        if (irBuilder->isAggregateType(elementType)) {
+            return elementPtrReg;
+        }
         std::string valueReg = irBuilder->emitLoad(elementPtrReg, elementType);
         return valueReg;
     }
