@@ -349,7 +349,12 @@ std::string ExpressionGenerator::generateArrayExpression(std::shared_ptr<ArrayEx
                 std::string elementPtrReg = irBuilder->emitGetElementPtr(arrayReg, indices, arrayType);
                 
                 // 存储元素值
-                irBuilder->emitStore(elementReg, elementPtrReg);
+                // 检查元素类型是否为聚合类型，如果是则使用 memcpy
+                if (irBuilder->isAggregateType(elementType)) {
+                    irBuilder->emitAggregateCopy(elementPtrReg, elementReg, elementType);
+                } else {
+                    irBuilder->emitStore(elementReg, elementPtrReg);
+                }
             }
             
             // 对于数组表达式，我们需要返回数组的值而不是指针
@@ -375,7 +380,12 @@ std::string ExpressionGenerator::generateArrayExpression(std::shared_ptr<ArrayEx
                 std::string elementPtrReg = irBuilder->emitGetElementPtr(arrayReg, indices, arrayType);
                 
                 // 存储元素值
-                irBuilder->emitStore(elementReg, elementPtrReg);
+                // 检查元素类型是否为聚合类型，如果是则使用 memcpy
+                if (irBuilder->isAggregateType(elementType)) {
+                    irBuilder->emitAggregateCopy(elementPtrReg, elementReg, elementType);
+                } else {
+                    irBuilder->emitStore(elementReg, elementPtrReg);
+                }
             }
             
             // 对于数组表达式，我们需要返回数组的值而不是指针
