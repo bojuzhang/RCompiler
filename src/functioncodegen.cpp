@@ -648,6 +648,11 @@ bool FunctionCodegen::generateReturnStatement(std::shared_ptr<ReturnExpression> 
             // 获取表达式类型
             std::string valueType = getNodeLLVMType(returnExpr->expression);
             std::string expectedType = getCurrentFunctionReturnType();
+
+            // 聚合类型实际值为指针类型
+            if (irBuilder->isAggregateType(valueType)) {
+                valueType += "*";
+            }
             
             // 进行类型转换（如果需要）
             if (needsTypeConversion(valueType, expectedType)) {

@@ -473,7 +473,7 @@ std::string TypeMapper::processNestedType(const std::string& typeStr) {
     
     // 处理结构体类型
     if (typeStr.find("struct_") != std::string::npos ||
-        (typeStr.length() > 2 && std::all_of(typeStr.begin(), typeStr.end(), [](char c) { return std::isalnum(c) || c == '_'; }))) {
+        (typeStr.length() > 0 && std::all_of(typeStr.begin(), typeStr.end(), [](char c) { return std::isalnum(c) || c == '_'; }))) {
         return mapStructTypeToLLVM(typeStr);
     }
     

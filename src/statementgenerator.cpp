@@ -120,7 +120,7 @@ bool StatementGenerator::generateLetStatement(std::shared_ptr<LetStatement> letS
         std::string llvmType;
         if (letStatement->type) {
             // 使用显式类型 - 从 Type 节点获取类型信息
-            llvmType = typeToStringHelper(letStatement->type);
+            llvmType = typeMapper->mapASTTypeToLLVM(letStatement->type);
             if (llvmType.empty()) {
                 llvmType = "i32"; // 默认类型
             }
@@ -548,7 +548,7 @@ bool StatementGenerator::generateConstantItem(std::shared_ptr<ConstantItem> cons
         // 确定常量类型
         std::string constType;
         if (constant->type) {
-            constType = typeToStringHelper(constant->type);
+            constType = typeMapper->mapASTTypeToLLVM(constant->type);
         } else {
             // 从表达式推断类型
             if (constant->expression && validateExpressionGenerator()) {
@@ -596,7 +596,7 @@ bool StatementGenerator::generateImplItem(std::shared_ptr<InherentImpl> impl) {
         // 获取实现的目标类型
         std::string targetType;
         if (impl->type) {
-            targetType = typeToStringHelper(impl->type);
+            targetType = typeMapper->mapASTTypeToLLVM(impl->type);
         }
         
         irBuilder->emitComment("Impl for type: " + targetType);
