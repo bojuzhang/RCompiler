@@ -650,8 +650,11 @@ bool FunctionCodegen::generateReturnStatement(std::shared_ptr<ReturnExpression> 
             std::string expectedType = getCurrentFunctionReturnType();
 
             // 聚合类型实际值为指针类型
-            if (irBuilder->isAggregateType(valueType)) {
+            if (irBuilder->isAggregateType(valueType) && !typeMapper->isPointerType(valueType)) {
                 valueType += "*";
+            }
+            if (irBuilder->isAggregateType(expectedType) && !typeMapper->isPointerType(expectedType)) {
+                expectedType += "*";
             }
             
             // 进行类型转换（如果需要）

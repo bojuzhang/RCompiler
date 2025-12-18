@@ -1,12 +1,13 @@
-struct Node {
-    x : i32,
+fn foo(
+    arr: &[i32; 2],
+) -> i32 {
+    let mut bad_char: [i32; 5] = [-1; 5]; // Bad character table
+    bad_char[arr[1 as usize] as usize] = 1;
+    114514
 }
 
-fn new_fs() -> Node {
-    let fs: Node = Node {x: 1};
-    return fs;
-}
 fn main() {
-    let node : Node = new_fs();
+    let mut a : [i32; 2] = [114, 514];
+    printlnInt(foo(&a));
     exit(0);
 }

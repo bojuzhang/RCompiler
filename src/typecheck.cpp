@@ -1858,6 +1858,9 @@ std::shared_ptr<SemanticType> TypeChecker::InferMethodCallExpressionType(MethodC
 }
 
 std::shared_ptr<SemanticType> TypeChecker::InferIndexExpressionType(IndexExpression& expr) {
+    if (expr.expressionin) {
+        InferExpressionType(*expr.expressionin);
+    }
     // 推断数组表达式的类型
     if (expr.expressionout) {
         auto arrayType = InferExpressionType(*expr.expressionout);
