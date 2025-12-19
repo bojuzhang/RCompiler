@@ -11,6 +11,7 @@
 #include "statementgenerator.hpp"
 #include "symbol.hpp"
 #include "typecheck.hpp"
+#include "typemapper.hpp"
 
 // ==================== 构造函数和基本初始化方法 ====================
 
@@ -1058,44 +1059,78 @@ std::string ExpressionGenerator::generateBorrowExpression(std::shared_ptr<Borrow
         // 获取操作数的类型
         std::string operandType = getExpressionType(borrowExpr->expression);
         
-        // 对于 &T 表达式，结果类型应该是 T*
-        std::string pointerType = operandType + "*";
+        // 检查是否为聚合类型
+        bool isAggregate = irBuilder->isAggregateType(operandType);
         
-        // 创建临时变量来存储指针（分配 T** 空间）
-        std::string tempPtrPtr = irBuilder->emitAlloca(pointerType);
-        irBuilder->setRegisterType(tempPtrPtr, pointerType + "*");
-        
-        // 如果操作数是左值（变量、字段访问等），获取其地址
-        if (isLValue(borrowExpr->expression)) {
-            auto [lvaluePtr, lvalueType] = analyzeLValue(borrowExpr->expression);
-            if (!lvaluePtr.empty()) {
-                // 直接存储左值的地址到 T** 中
-                irBuilder->emitStore(lvaluePtr, tempPtrPtr);
+        if (isAggregate) {
+            // 对于聚合类型，不应该再添加一层指针，直接返回操作数的地址
+            if (isLValue(borrowExpr->expression)) {
+                auto [lvaluePtr, lvalueType] = analyzeLValue(borrowExpr->expression);
+                if (!lvaluePtr.empty()) {
+                    // 对于聚合类型，直接返回指针，不需要额外的间接层
+                    return lvaluePtr;
+                } else {
+                    reportError("Failed to get lvalue address for aggregate borrow expression");
+                    return "";
+                }
             } else {
-                reportError("Failed to get lvalue address for borrow expression");
-                return "";
+                // 对于右值聚合类型，需要先存储到临时位置，然后返回地址
+                std::string operandReg = generateExpression(borrowExpr->expression);
+                if (operandReg.empty()) {
+                    reportError("Failed to generate operand for aggregate borrow expression");
+                    return "";
+                }
+                
+                // 分配空间存储右值
+                std::string tempStorage = irBuilder->emitAlloca(operandType);
+                
+                // 对于聚合类型，使用 builtin_memcpy 而不是 store
+                irBuilder->emitAggregateCopy(tempStorage, operandReg, operandType);
+                
+                // 返回临时存储的地址
+                return tempStorage;
             }
         } else {
-            // 对于右值，需要先存储到临时位置，然后取地址
-            std::string operandReg = generateExpression(borrowExpr->expression);
-            if (operandReg.empty()) {
-                reportError("Failed to generate operand for borrow expression");
-                return "";
+            // 对于非聚合类型，使用原有的逻辑
+            // 对于 &T 表达式，结果类型应该是 T*
+            std::string pointerType = operandType + "*";
+            
+            // 创建临时变量来存储指针（分配 T** 空间）
+            std::string tempPtrPtr = irBuilder->emitAlloca(pointerType);
+            irBuilder->setRegisterType(tempPtrPtr, pointerType + "*");
+            
+            // 如果操作数是左值（变量、字段访问等），获取其地址
+            if (isLValue(borrowExpr->expression)) {
+                auto [lvaluePtr, lvalueType] = analyzeLValue(borrowExpr->expression);
+                if (!lvaluePtr.empty()) {
+                    // 直接存储左值的地址到 T** 中
+                    irBuilder->emitStore(lvaluePtr, tempPtrPtr);
+                } else {
+                    reportError("Failed to get lvalue address for borrow expression");
+                    return "";
+                }
+            } else {
+                // 对于右值，需要先存储到临时位置，然后取地址
+                std::string operandReg = generateExpression(borrowExpr->expression);
+                if (operandReg.empty()) {
+                    reportError("Failed to generate operand for borrow expression");
+                    return "";
+                }
+                
+                // 分配空间存储右值
+                std::string tempStorage = irBuilder->emitAlloca(operandType);
+                irBuilder->emitStore(operandReg, tempStorage);
+                
+                // 将右值的地址存储到 T** 中
+                irBuilder->emitStore(tempStorage, tempPtrPtr);
             }
             
-            // 分配空间存储右值
-            std::string tempStorage = irBuilder->emitAlloca(operandType);
-            irBuilder->emitStore(operandReg, tempStorage);
+            // 加载指针值（从 T** 加载 T*）
+            std::string resultReg = irBuilder->emitLoad(tempPtrPtr, pointerType);
+            irBuilder->setRegisterType(resultReg, pointerType);
             
-            // 将右值的地址存储到 T** 中
-            irBuilder->emitStore(tempStorage, tempPtrPtr);
+            return resultReg;
         }
-        
-        // 加载指针值（从 T** 加载 T*）
-        std::string resultReg = irBuilder->emitLoad(tempPtrPtr, pointerType);
-        irBuilder->setRegisterType(resultReg, pointerType);
-        
-        return resultReg;
     }
     catch (const std::exception& e) {
         reportError("Exception in generateBorrowExpression: " + std::string(e.what()));
@@ -1125,40 +1160,28 @@ std::string ExpressionGenerator::generateDereferenceExpression(std::shared_ptr<D
             pointerType = getExpressionType(derefExpr->expression);
         }
 
-        // // 确保是指针类型
-        // if (!typeMapper->isPointerType(pointerType)) {
-        //     reportError("Cannot dereference non-pointer type: " + pointerType);
-        //     return "";
-        // }
-        
-        // 获取指向的类型
-        // std::string elementType = typeMapper->getPointedType(pointerType);
-        
-        // 对于解引用表达式，我们需要连续加载：
-        // 如果是指向指针的指针（T**），先加载得到 T*，再加载得到 T
-        // 如果是普通指针（T*），直接加载得到 T
-        std::string resultReg = pointerReg;
-        
-        // if (typeMapper->isPointerType(pointerType) && typeMapper->isPointerType(elementType)) {
-        //     // 这是一个指向指针的指针（T**），需要两次加载
-        //     // 第一次加载：从 T** 加载 T*
-        //     std::string firstLoad = irBuilder->emitLoad(pointerReg, elementType);
-        //     // 第二次加载：从 T* 加载 T
-        //     std::string finalElementType = typeMapper->getPointedType(elementType);
-        //     resultReg = irBuilder->emitLoad(firstLoad, finalElementType);
-        //     irBuilder->setRegisterType(resultReg, finalElementType);
-        // } else {
-        //     // 普通指针（T*），直接加载
-        //     resultReg = irBuilder->emitLoad(pointerReg, elementType);
-        //     irBuilder->setRegisterType(resultReg, elementType);
-        // }
-        if (typeMapper->isPointerType(pointerType)) {
-            std::string elementType = typeMapper->getPointedType(pointerType);
-            resultReg = irBuilder->emitLoad(pointerReg, elementType);
-            irBuilder->setRegisterType(resultReg, elementType);
+        // 确保是指针类型
+        if (!typeMapper->isPointerType(pointerType)) {
+            reportError("Cannot dereference non-pointer type: " + pointerType);
+            return "";
         }
         
-        return resultReg;
+        // 获取指向的类型
+        std::string elementType = typeMapper->getPointedType(pointerType);
+        
+        // 检查是否为聚合类型
+        bool isAggregate = irBuilder->isAggregateType(elementType);
+        
+        if (isAggregate) {
+            // 对于聚合类型，不应该专门 load 一次，直接返回指针
+            // 这样在后续的字段访问等操作中可以直接使用
+            return pointerReg;
+        } else {
+            // 对于非聚合类型，需要加载值
+            std::string resultReg = irBuilder->emitLoad(pointerReg, elementType);
+            irBuilder->setRegisterType(resultReg, elementType);
+            return resultReg;
+        }
     }
     catch (const std::exception& e) {
         reportError("Exception in generateDereferenceExpression: " + std::string(e.what()));
@@ -1909,9 +1932,10 @@ std::vector<std::string> ExpressionGenerator::generateCallArguments(std::shared_
         
         // 检查参数类型
         std::string argType = getExpressionType(expr);
+        auto actualType = typeMapper->isPointerType(argType) ? typeMapper->getPointedType(argType) : argType;
         
         // 如果是聚合类型，需要特殊处理
-        if (irBuilder->isAggregateType(argType)) {
+        if (irBuilder->isAggregateType(actualType) && !typeMapper->isPointerType(argType)) {
             // 为聚合类型参数分配临时空间
             std::string tempReg = irBuilder->emitAlloca(argType);
             

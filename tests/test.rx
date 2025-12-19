@@ -1,8 +1,13 @@
+struct Node {
+    x : i32,
+    y : i32
+}
+
 fn main() {
-    let a : i32 = 50;
-    let mut ans : i32 = a - 5 + 5;
-    printlnInt(ans);
-    ans = 100 / 5;
-    printlnInt(ans);
+    let mut node : Node = Node {x : 42, y : 42};
+    let ptr : &mut Node = &mut node;
+    printlnInt(ptr.x);
+    ptr.x = 114514;
+    printlnInt((*ptr).x);
     exit(0);
 }

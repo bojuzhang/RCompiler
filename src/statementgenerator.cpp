@@ -8,6 +8,7 @@
 // 包含 ExpressionGenerator 和 FunctionCodegen 头文件以解决前向声明问题
 #include "expressiongenerator.hpp"
 #include "functioncodegen.hpp"
+#include "typemapper.hpp"
 
 // 构造函数
 StatementGenerator::StatementGenerator(std::shared_ptr<IRBuilder> irBuilder,
@@ -141,6 +142,10 @@ bool StatementGenerator::generateLetStatement(std::shared_ptr<LetStatement> letS
                 // 使用默认类型
                 llvmType = "i32";
             }
+        }
+
+        if (typeMapper->isPointerType(llvmType) && irBuilder->isAggregateType(typeMapper->getPointedType(llvmType))) {
+            llvmType = typeMapper->getPointedType(llvmType);
         }
         
         // 3. 为变量分配栈空间
