@@ -1,13 +1,7 @@
-struct Node {
-    x : i32,
-    y : i32
-}
-
 fn main() {
-    let mut node : Node = Node {x : 42, y : 42};
-    let ptr : &mut Node = &mut node;
-    printlnInt(ptr.x);
-    ptr.x = 114514;
-    printlnInt((*ptr).x);
+    let mut arr : [i32; 2] = [42; 2];
+    let test : i32 = 1;
+    let ptr : &i32 = &test;
+    arr[*ptr as usize] = 10;
     exit(0);
 }

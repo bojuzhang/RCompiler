@@ -179,6 +179,17 @@ std::string ExpressionGenerator::generateLiteralExpression(std::shared_ptr<Liter
                         literal = literal.substr(0, literal.length() - 3);
                     }
                 }
+
+                if (literal.size() > 2) {
+                    if (literal.substr(0, 2) == "0x") {
+                        literal = std::to_string(std::stoll(literal.substr(2, literal.size() - 2), nullptr, 16));
+                    } else if (literal.substr(0, 2) == "0o") {
+                        literal = std::to_string(std::stoll(literal.substr(2, literal.size() - 2), nullptr, 8));
+                    } else if (literal.substr(0, 2) == "0b") {
+                        literal = std::to_string(std::stoll(literal.substr(2, literal.size() - 2), nullptr, 2));
+                    }
+                }
+                
                 std::string instruction = resultReg + " = add " + llvmType + " 0, " + literal;
                 irBuilder->emitInstruction(instruction);
                 irBuilder->setRegisterType(resultReg, llvmType);
@@ -803,6 +814,9 @@ std::string ExpressionGenerator::generateMethodCallExpression(std::shared_ptr<Me
             if (structName.find("%struct_") == 0) {
                 structName = structName.substr(8); // 去掉 "%struct_" 前缀
             }
+            while (structName.ends_with('*')) {
+                structName.pop_back();
+            }
             methodName = structName + "_" + methodCallExpr->method_name;
         } else {
             methodName = receiverType + "_" + methodCallExpr->method_name;
@@ -878,6 +892,11 @@ std::string ExpressionGenerator::generateMethodCallExpression(std::shared_ptr<Me
             irBuilder->emitCall(methodName, finalArgs, "void");
             
             // 从返回槽加载结果
+            // 如果是聚合类型则不 load
+            if (typeMapper->isPointerType(irBuilder->getRegisterType(returnSlotPtr)) &&
+               irBuilder->isAggregateType(typeMapper->getPointedType(irBuilder->getRegisterType(returnSlotPtr)))) {
+                return returnSlotPtr;
+            }
             std::string resultReg = irBuilder->emitLoad(returnSlotPtr, returnType);
             irBuilder->setRegisterType(resultReg, returnType);
             
@@ -1494,7 +1513,10 @@ std::string ExpressionGenerator::generateTypeCastExpression(std::shared_ptr<Type
         }
         
         // 获取源类型和目标类型
-        std::string sourceType = getExpressionType(typeCastExpr->expression);
+        std::string sourceType = irBuilder->getRegisterType(sourceReg);
+        if (sourceType.empty()) {
+            sourceType = getExpressionType(typeCastExpr->expression);
+        }
         // 将 Type 转换为字符串表示，然后映射到 LLVM 类型
         std::string targetTypeStr = typeToStringHelper(typeCastExpr->typenobounds);
         std::string targetType = typeMapper->mapRxTypeToLLVM(targetTypeStr);
