@@ -118,7 +118,7 @@ private:
                 return getLeftTokenBP(token) - 1;
             
             default:
-                return getLeftTokenBP(token);
+                return getLeftTokenBP(token) + 1;
         }
     }
 

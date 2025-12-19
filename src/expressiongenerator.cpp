@@ -2133,7 +2133,7 @@ std::string ExpressionGenerator::generateComparisonOperation(const std::string& 
         
         // 对于比较操作，操作数类型应该是操作数的实际类型，而不是结果类型
         // 比较操作的结果总是 i1，但操作数类型应该是 i32（整数比较）
-        std::string operandType = "i32"; // 假设整数比较，实际应该从操作数类型推断
+        std::string operandType = irBuilder->getRegisterType(left);
         std::string instruction = resultReg + " = icmp " + condition + " " + operandType + " " + left + ", " + right;
         
         irBuilder->emitInstruction(instruction);

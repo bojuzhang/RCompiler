@@ -1,7 +1,8 @@
-const VAL : i32 = 42;
-
 fn main() {
-    let a : i32 = VAL;
-    printlnInt(a);
+    let a : i32 = 50;
+    let mut ans : i32 = a - 5 + 5;
+    printlnInt(ans);
+    ans = 100 / 5;
+    printlnInt(ans);
     exit(0);
 }
