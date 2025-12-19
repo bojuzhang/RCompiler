@@ -7,7 +7,9 @@
 #include <string>
 
 // 包含 StatementGenerator 头文件以解决前向声明问题
+#include "lexer.hpp"
 #include "statementgenerator.hpp"
+#include "symbol.hpp"
 #include "typecheck.hpp"
 
 // ==================== 构造函数和基本初始化方法 ====================
@@ -157,7 +159,26 @@ std::string ExpressionGenerator::generateLiteralExpression(std::shared_ptr<Liter
         switch (literalExpr->tokentype) {
             case Token::kINTEGER_LITERAL: {
                 // 整数字面量
-                std::string instruction = resultReg + " = add " + llvmType + " 0, " + literalExpr->literal;
+                auto literal = literalExpr->literal;
+                if (literal.length() >= 5) {
+                    if (literal.substr(literal.length() - 5) == "usize") {
+                        literal = literal.substr(0, literal.length() - 5);
+                    }
+                    if (literal.substr(literal.length() - 5) == "isize") {
+                        literal = literal.substr(0, literal.length() - 5);
+                    }
+                }
+                
+                if (literal.length() >= 3) {
+                    std::string suffix = literal.substr(literal.length() - 3);
+                    if (suffix == "u32") {
+                        literal = literal.substr(0, literal.length() - 3);
+                    }
+                    if (suffix == "i32") {
+                        literal = literal.substr(0, literal.length() - 3);
+                    }
+                }
+                std::string instruction = resultReg + " = add " + llvmType + " 0, " + literal;
                 irBuilder->emitInstruction(instruction);
                 irBuilder->setRegisterType(resultReg, llvmType);
                 break;
@@ -266,6 +287,9 @@ std::string ExpressionGenerator::generatePathExpression(std::shared_ptr<PathExpr
         
         // 根据符号类型处理
         if (symbol->kind == SymbolKind::Variable || symbol->kind == SymbolKind::Constant) {
+            if (symbol->kind == SymbolKind::Constant) {
+                return typeChecker->constantEvaluator->GetConstantValue(variableName)->toString();
+            }
             // 变量或常量
             std::string variableReg = irBuilder->getVariableRegister(variableName);
             if (variableReg.empty()) {

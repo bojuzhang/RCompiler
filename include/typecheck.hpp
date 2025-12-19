@@ -14,7 +14,9 @@
 class TypeChecker : public ASTVisitor {
 private:
     std::shared_ptr<ScopeTree> scopeTree;
+public:
     std::shared_ptr<ConstantEvaluator> constantEvaluator;
+private:
     std::stack<ASTNode*> nodeStack;
     std::stack<std::shared_ptr<SemanticType>> expectedTypeStack;
     

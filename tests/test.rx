@@ -1,13 +1,7 @@
-fn foo(
-    arr: &[i32; 2],
-) -> i32 {
-    let mut bad_char: [i32; 5] = [-1; 5]; // Bad character table
-    bad_char[arr[1 as usize] as usize] = 1;
-    114514
-}
+const VAL : i32 = 42;
 
 fn main() {
-    let mut a : [i32; 2] = [114, 514];
-    printlnInt(foo(&a));
+    let a : i32 = VAL;
+    printlnInt(a);
     exit(0);
 }
