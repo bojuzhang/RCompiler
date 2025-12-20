@@ -1,7 +1,16 @@
+
+fn foo() {
+    if (true) {
+        
+    } else {
+        if (false) {
+
+        } else {
+
+        }
+    }
+}
+
 fn main() {
-    let mut arr : [i32; 2] = [42; 2];
-    let test : i32 = 1;
-    let ptr : &i32 = &test;
-    arr[*ptr as usize] = 10;
     exit(0);
 }

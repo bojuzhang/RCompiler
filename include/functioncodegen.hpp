@@ -327,7 +327,7 @@ public:
      * @param returnType 返回类型
      * @return 是否成功存储
      */
-    bool storeToReturnSlot(const std::string& valueReg, const std::string& returnType);
+    bool storeToReturnSlot(const std::string& valueReg, std::string returnType);
     
     /**
      * 生成函数调用的参数处理代码

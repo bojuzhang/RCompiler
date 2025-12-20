@@ -212,6 +212,8 @@ bool StatementGenerator::generateExpressionStatement(std::shared_ptr<ExpressionS
         if (exprStatement->hassemi && !resultReg.empty()) {
             // 添加注释说明结果被丢弃
             irBuilder->emitComment("Result of expression statement discarded");
+        } else {
+            mapExprStatementToRegname[exprStatement.get()] = resultReg;
         }
         
         return true;
@@ -403,6 +405,10 @@ std::string StatementGenerator::getStatementType(std::shared_ptr<Statement> stat
     }
     
     return "unknown";
+}
+
+std::string StatementGenerator::getStatementRegname(ExpressionStatement* exprStatement) {
+    return mapExprStatementToRegname[exprStatement];
 }
 
 bool StatementGenerator::isStatementTerminator(std::shared_ptr<Statement> statement) {

@@ -7,6 +7,7 @@
 #include <string>
 
 // 包含 StatementGenerator 头文件以解决前向声明问题
+#include "astnodes.hpp"
 #include "lexer.hpp"
 #include "statementgenerator.hpp"
 #include "symbol.hpp"
@@ -2337,6 +2338,9 @@ std::string ExpressionGenerator::generateBlockExpression(std::shared_ptr<BlockEx
             // 退出作用域
             scopeTree->ExitScope();
             return result;
+        } else if (blockExpr->statements.size() && dynamic_cast<ExpressionStatement*>(blockExpr->statements.back()->astnode.get())) {
+            scopeTree->ExitScope();
+            return statementGenerator->getStatementRegname(dynamic_cast<ExpressionStatement*>(blockExpr->statements.back()->astnode.get()));
         } else {
             // 没有尾表达式，需要根据块表达式的类型决定是否生成值
             // 退出作用域
@@ -2446,8 +2450,13 @@ std::string ExpressionGenerator::generateIfExpression(std::shared_ptr<IfExpressi
             if (thenTypeIt != nodeTypeMap.end()) {
                 std::string thenTypeStr = thenTypeIt->second->tostring();
                 if (thenTypeStr != "()") {
-                    // 将 then 分支的结果存储到分配的内存中
-                    irBuilder->emitStore(thenResult, resultPtr);
+                    // 检查结果类型是否为聚合类型，如果是则使用 builtin_memcpy
+                    if (irBuilder->isAggregateType(resultType)) {
+                        irBuilder->emitAggregateCopy(resultPtr, thenResult, resultType);
+                    } else {
+                        // 将 then 分支的结果存储到分配的内存中
+                        irBuilder->emitStore(thenResult, resultPtr);
+                    }
                 }
             }
         }
@@ -2463,8 +2472,13 @@ std::string ExpressionGenerator::generateIfExpression(std::shared_ptr<IfExpressi
                 if (elseTypeIt != nodeTypeMap.end()) {
                     std::string elseTypeStr = elseTypeIt->second->tostring();
                     if (elseTypeStr != "()") {
-                        // 将 else 分支的结果存储到分配的内存中
-                        irBuilder->emitStore(elseResult, resultPtr);
+                        // 检查结果类型是否为聚合类型，如果是则使用 builtin_memcpy
+                        if (irBuilder->isAggregateType(resultType)) {
+                            irBuilder->emitAggregateCopy(resultPtr, elseResult, resultType);
+                        } else {
+                            // 将 else 分支的结果存储到分配的内存中
+                            irBuilder->emitStore(elseResult, resultPtr);
+                        }
                     }
                 }
             }
@@ -2475,7 +2489,12 @@ std::string ExpressionGenerator::generateIfExpression(std::shared_ptr<IfExpressi
                 std::string elseResult = generateUnitValue();
                 // 对于没有 else 分支的情况，如果需要值，则赋 unit 值
                 // 但根据类型检查，这种情况应该已经在 typecheck 阶段报错了
-                irBuilder->emitStore(elseResult, resultPtr);
+                // 检查结果类型是否为聚合类型，如果是则使用 builtin_memcpy
+                if (irBuilder->isAggregateType(resultType)) {
+                    irBuilder->emitAggregateCopy(resultPtr, elseResult, resultType);
+                } else {
+                    irBuilder->emitStore(elseResult, resultPtr);
+                }
             }
             irBuilder->emitBr(endBB);
         }
@@ -2485,6 +2504,9 @@ std::string ExpressionGenerator::generateIfExpression(std::shared_ptr<IfExpressi
         
         // 如果需要值，从内存中加载结果并返回
         if (needsValue) {
+            if (irBuilder->isAggregateType(resultType)) {
+                return resultPtr;
+            }
             return irBuilder->emitLoad(resultPtr, resultType);
         } else {
             // 如果不需要值，返回空字符串
@@ -2646,7 +2668,12 @@ std::string ExpressionGenerator::generateBreakExpression(std::shared_ptr<BreakEx
             
             // 如果循环需要值且有结果存储指针，存储 break 值
             if (!loopCtx.resultPtr.empty()) {
-                irBuilder->emitStore(breakValue, loopCtx.resultPtr);
+                // 检查结果类型是否为聚合类型，如果是则使用 builtin_memcpy
+                if (irBuilder->isAggregateType(breakType)) {
+                    irBuilder->emitAggregateCopy(loopCtx.resultPtr, breakValue, breakType);
+                } else {
+                    irBuilder->emitStore(breakValue, loopCtx.resultPtr);
+                }
             }
             
             setBreakValue(breakValue, breakType);
@@ -2654,7 +2681,12 @@ std::string ExpressionGenerator::generateBreakExpression(std::shared_ptr<BreakEx
             // 如果没有 break 值表达式，但有结果存储指针，存储 unit 值
             if (!loopCtx.resultPtr.empty()) {
                 std::string unitValue = generateUnitValue();
-                irBuilder->emitStore(unitValue, loopCtx.resultPtr);
+                // 检查结果类型是否为聚合类型，如果是则使用 builtin_memcpy
+                if (loopCtx.resultType.empty() || !irBuilder->isAggregateType(loopCtx.resultType)) {
+                    irBuilder->emitStore(unitValue, loopCtx.resultPtr);
+                } else {
+                    irBuilder->emitAggregateCopy(loopCtx.resultPtr, unitValue, loopCtx.resultType);
+                }
                 setBreakValue(unitValue, "i32");
             } else {
                 setBreakValue(generateUnitValue(), "i32");

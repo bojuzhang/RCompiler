@@ -5,6 +5,7 @@
 #include <vector>
 
 // 包含 StatementGenerator 和 ExpressionGenerator 头文件以解决前向声明问题
+#include "astnodes.hpp"
 #include "statementgenerator.hpp"
 #include "expressiongenerator.hpp"
 
@@ -209,6 +210,52 @@ bool FunctionCodegen::generateFunctionBody(std::shared_ptr<Function> function) {
         if (function->blockexpression->expressionwithoutblock) {
             irBuilder->emitComment("Found tail expression, processing...");
             std::string tailValue = generateTailExpressionReturn(function->blockexpression->expressionwithoutblock);
+            irBuilder->emitComment("Tail expression generated value: " + tailValue);
+            if (!tailValue.empty()) {
+                if (needsReturnSlot) {
+                    irBuilder->emitComment("User-defined function: storing to return slot");
+                    // 用户定义函数：将值存储到返回槽
+                    std::string returnType = getCurrentFunctionReturnType();
+                    if (!storeToReturnSlot(tailValue, returnType)) {
+                        reportError("Failed to store tail expression value to return slot");
+                        return false;
+                    }
+                    // 返回void
+                    irBuilder->emitRetVoid();
+                    return true; // 避免继续执行
+                } else {
+                    irBuilder->emitComment("Builtin function: normal return");
+                    // 内置函数：正常返回值
+                    irBuilder->emitRet(tailValue);
+                    return true; // 避免继续执行
+                }
+            } else {
+                // 如果尾表达式生成失败，生成默认返回值
+                std::string defaultValue = generateDefaultReturn();
+                if (!defaultValue.empty()) {
+                    std::string returnType = getCurrentFunctionReturnType();
+                    if (needsReturnSlot) {
+                        // 用户定义函数：存储默认值到返回槽
+                        if (!storeToReturnSlot(defaultValue, returnType)) {
+                            reportError("Failed to store default return value to return slot");
+                            return false;
+                        }
+                        irBuilder->emitRetVoid();
+                    } else {
+                        // 内置函数：正常返回
+                        std::string instruction = "ret " + returnType + " " + defaultValue;
+                        irBuilder->emitInstruction(instruction);
+                    }
+                } else {
+                    irBuilder->emitRetVoid();
+                }
+                return true; // 避免继续执行
+            }
+        } else if ( function->functionreturntype &&
+                   !function->blockexpression->statements.empty() && 
+                   dynamic_cast<ExpressionStatement*>(function->blockexpression->statements.back()->astnode.get())->hassemi == false) {
+            irBuilder->emitComment("Found tail expression, processing...");
+            std::string tailValue = statementGenerator->getStatementRegname(dynamic_cast<ExpressionStatement*>(function->blockexpression->statements.back()->astnode.get()));
             irBuilder->emitComment("Tail expression generated value: " + tailValue);
             if (!tailValue.empty()) {
                 if (needsReturnSlot) {
@@ -1846,11 +1893,16 @@ std::string FunctionCodegen::generateReturnSlotParameter(const std::string& retu
     }
 }
 
-bool FunctionCodegen::storeToReturnSlot(const std::string& valueReg, const std::string& returnType) {
+bool FunctionCodegen::storeToReturnSlot(const std::string& valueReg, std::string returnType) {
     try {
         if (!currentFunction || currentFunction->returnSlotPtr.empty()) {
             reportError("No return slot available for user-defined function");
             return false;
+        }
+
+        // 数组的返回类型应该为指针
+        if (irBuilder->isAggregateType(returnType) && !typeMapper->isPointerType(returnType)) {
+            returnType = returnType +  "*";
         }
         
         // 将值存储到返回槽中

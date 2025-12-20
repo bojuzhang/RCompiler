@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <string>
+#include <unordered_set>
 #include <vector>
 #include <stack>
 #include <unordered_map>
@@ -34,6 +35,8 @@ private:
     std::shared_ptr<IRBuilder> irBuilder;
     std::shared_ptr<TypeMapper> typeMapper;
     std::shared_ptr<ScopeTree> scopeTree;
+
+    std::unordered_map<ExpressionStatement*, std::string> mapExprStatementToRegname;
     
     // ExpressionGenerator 和 FunctionCodegen 引用（延迟初始化以解决循环依赖）
     ExpressionGenerator* expressionGenerator;
@@ -223,6 +226,7 @@ public:
      * @return 类型信息字符串
      */
     std::string getStatementType(std::shared_ptr<Statement> statement);
+    std::string getStatementRegname(ExpressionStatement* exprStatement);
     
     /**
      * 检查语句是否为终止符
