@@ -508,8 +508,7 @@ bool IRGenerator::generateStruct(std::shared_ptr<StructStruct> structDef) {
         if (structDef->structfields) {
             for (const auto& field : structDef->structfields->structfields) {
                 if (field && field->type) {
-                    std::string fieldType = typeMapper->mapSemanticTypeToLLVM(
-                        nodeTypeMap[field->type.get()]);
+                    std::string fieldType = typeMapper->mapASTTypeToLLVM(field->type);
                     if (!fieldType.empty()) {
                         fieldTypes.push_back(fieldType);
                     } else {

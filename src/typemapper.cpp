@@ -236,12 +236,12 @@ std::string TypeMapper::mapFunctionTypeToLLVM(const std::vector<std::shared_ptr<
 }
 
 std::string TypeMapper::mapStructTypeToLLVM(const std::string& structName) {
-    // 验证结构体符号存在
-    auto structSymbol = lookupStructSymbol(structName);
-    if (!structSymbol) {
-        reportError("Unknown struct type: " + structName);
-        return "i8*"; // 默认指针类型
-    }
+    // // 验证结构体符号存在
+    // auto structSymbol = lookupStructSymbol(structName);
+    // if (!structSymbol) {
+    //     reportError("Unknown struct type: " + structName);
+    //     return "i8*"; // 默认指针类型
+    // }
     
     // 生成LLVM结构体类型
     return "%struct_" + structName;
