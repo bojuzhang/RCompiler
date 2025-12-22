@@ -1827,6 +1827,10 @@ std::shared_ptr<SemanticType> TypeChecker::InferMethodCallExpressionType(MethodC
     if (!receiverType) {
         return nullptr;
     }
+
+    for (const auto &expr : expr.callparams->expressions) {
+        InferExpressionType(*expr.get());
+    }
     
     std::string receiverTypeName = receiverType->tostring();
     std::string methodName = expr.method_name;
