@@ -2657,11 +2657,13 @@ void TypeChecker::visit(CompoundAssignmentExpression& node) {
     // 检查左值的可变性
     if (node.leftexpression) {
         CheckAssignmentMutability(*node.leftexpression);
+        auto leftType = InferExpressionType(*node.leftexpression);
     }
     
     // 访问右表达式以触发其中的类型检查（如 CallExpression 的参数检查）
     if (node.rightexpression) {
         node.rightexpression->accept(*this);
+        auto rightType = InferExpressionType(*node.rightexpression);
     }
     
     PopNode();

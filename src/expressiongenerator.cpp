@@ -1394,7 +1394,6 @@ std::string ExpressionGenerator::generateCompoundAssignmentExpression(std::share
     try {
         // 分析左值表达式
         auto [leftPtrReg, leftType] = analyzeLValue(compoundAssignExpr->leftexpression);
-        // std::cerr << "test: " << leftPtrReg << " " << leftType << "\n";
         if (leftPtrReg.empty()) {
             reportError("Invalid left side of compound assignment");
             return "";
