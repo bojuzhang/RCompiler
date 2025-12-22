@@ -1,0 +1,14 @@
+struct Node {
+    x : i32,
+    y : i32
+}
+
+impl Node {
+    fn sum(&self) -> i32 {
+        self.x + self.y
+    }
+}
+
+fn main() {
+    exit(0);
+}

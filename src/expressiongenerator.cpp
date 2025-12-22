@@ -844,7 +844,12 @@ std::string ExpressionGenerator::generateMethodCallExpression(std::shared_ptr<Me
             } else {
                 // 对于右值，需要分配临时空间并存储
                 receiverPtrReg = irBuilder->emitAlloca(receiverType);
-                irBuilder->emitStore(receiverReg, receiverPtrReg);
+                // 对于聚合类型，使用 builtin_memcpy 而不是 store
+                if (irBuilder->isAggregateType(receiverType)) {
+                    irBuilder->emitAggregateCopy(receiverPtrReg, receiverReg, receiverType);
+                } else {
+                    irBuilder->emitStore(receiverReg, receiverPtrReg);
+                }
             }
             
             // 将接收者指针作为第一个参数传递（self 参数）
@@ -865,10 +870,10 @@ std::string ExpressionGenerator::generateMethodCallExpression(std::shared_ptr<Me
                 auto it = nodeTypeMap.find(methodCallExpr.get());
                 if (it != nodeTypeMap.end() && it->second) {
                     returnType = typeMapper->mapSemanticTypeToLLVM(it->second);
-                    // 对于结构体类型，函数应该返回指针类型
-                    if (typeMapper->isStructType(returnType)) {
-                        returnType = returnType + "*";
-                    }
+                    // // 对于结构体类型，函数应该返回指针类型
+                    // if (typeMapper->isStructType(returnType)) {
+                    //     returnType = returnType + "*";
+                    // }
                 } else {
                     returnType = "i32"; // 默认返回类型
                 }

@@ -1,16 +1,38 @@
+/*
+struct Node {
+    x : i32,
+    y : i32
+}
 
-fn foo() {
-    if (true) {
-        
-    } else {
-        if (false) {
+struct Tree {
+    node : Node,
+    tmp : i32
+}
 
-        } else {
-
-        }
+impl Node {
+    fn get(&self) -> Node {
+        Node {x : self.x, y : self.y}
     }
 }
 
+impl Tree {
+    fn get_node(&self) -> Node {
+        self.node
+    }
+}
+*/
+
 fn main() {
+    /*
+    let node : Node = Node {x : 42, y : 42};
+    let tree : Tree = Tree {node : node, tmp : 114514};
+    let t : Node = tree.get_node().get();
+    printlnInt(t.x);
+    */
+
+    let arr : [[i32; 3]; 4] = [[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]];
+    printlnInt(arr[0][1]);
+    printlnInt(arr[1][0]);
+    
     exit(0);
 }

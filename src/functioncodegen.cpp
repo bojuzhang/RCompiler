@@ -1410,14 +1410,24 @@ void FunctionCodegen::setupParameterScope(std::shared_ptr<Function> function) {
             }
             
             // 创建 self 参数的指针变量
-            std::string paramPtrReg = irBuilder->newRegister("self", "_ptr");
+            std::string allocaReg = irBuilder->newRegister();
             
-            // 根据用户要求，使用 bitcast 原类型到原类型实现显式的指针赋值
+            // 根据新的策略：新建更高层指针，然后存储和加载
             std::string incomingParamName = "%self"; // self 参数在签名中直接命名为 %self
             
-            // 生成 bitcast 指令：%self_ptr = bitcast %struct_Node* %self to %struct_Node*
-            std::string bitcastInstruction = paramPtrReg + " = bitcast " + structType + "* " + incomingParamName + " to " + structType + "*";
-            irBuilder->emitInstruction(bitcastInstruction);
+            // 生成 alloca 指令：%var_x = alloca %struct_Node*
+            std::string allocaInstruction = allocaReg + " = alloca " + structType + "*, align 4";
+            irBuilder->emitInstruction(allocaInstruction);
+            irBuilder->setRegisterType(allocaReg, structType + "**");
+            
+            // 生成 store 指令：store %struct_Node* %self, %struct_Node** %var_x
+            std::string storeInstruction = "store " + structType + "* " + incomingParamName + ", " + structType + "** " + allocaReg;
+            irBuilder->emitInstruction(storeInstruction);
+            
+            // 生成 load 指令：%self_ptr = load %struct_Node*, %struct_Node** %var_x
+            std::string paramPtrReg = irBuilder->newRegister("self", "_ptr");
+            std::string loadInstruction = paramPtrReg + " = load " + structType + "*, " + structType + "** " + allocaReg;
+            irBuilder->emitInstruction(loadInstruction);
             irBuilder->setRegisterType(paramPtrReg, structType + "*");
             
             // 将 self 参数添加到符号表中作为变量
@@ -1501,13 +1511,23 @@ void FunctionCodegen::setupParameterScope(std::shared_ptr<Function> function) {
                 
                 // 检查是否为指针类型参数
                 if (typeMapper->isPointerType(paramType) && irBuilder->isAggregateType(typeMapper->getPointedType(paramType))) {
-                    // 指针类型参数：不再新 alloca 一个变量出来，直接通过 bitcast 实现指针间的 SSA 赋值
-                    irBuilder->emitComment("Direct bitcast for pointer parameter");
+                    // 指针类型参数：使用新的策略：新建更高层指针，然后存储和加载
+                    irBuilder->emitComment("New strategy for aggregate pointer parameter");
                     
-                    // 根据用户要求，使用 bitcast 原类型到原类型实现显式的指针赋值
-                    // 生成 bitcast 指令：%param_ptr = bitcast T* %param_X to T*
-                    std::string bitcastInstruction = paramPtrReg + " = bitcast " + paramType + " " + incomingParamName + " to " + paramType;
-                    irBuilder->emitInstruction(bitcastInstruction);
+                    // 生成 alloca 指令：%var_x = alloca T*
+                    std::string allocaReg = irBuilder->newRegister();
+                    std::string allocaInstruction = allocaReg + " = alloca " + paramType + ", align 4";
+                    irBuilder->emitInstruction(allocaInstruction);
+                    irBuilder->setRegisterType(allocaReg, paramType + "*");
+                    
+                    // 生成 store 指令：store T* %param_X, T** %var_x
+                    std::string storeInstruction = "store " + paramType + " " + incomingParamName + ", " + paramType + "* " + allocaReg;
+                    irBuilder->emitInstruction(storeInstruction);
+                    
+                    // 生成 load 指令：%param_ptr = load T*, T** %var_x
+                    std::string paramPtrReg = irBuilder->newRegister(actualParamName, "_ptr");
+                    std::string loadInstruction = paramPtrReg + " = load " + paramType + ", " + paramType + "* " + allocaReg;
+                    irBuilder->emitInstruction(loadInstruction);
                     irBuilder->setRegisterType(paramPtrReg, paramType);
                     
                     // 手动注册这个变量到 IRBuilder 的寄存器映射中，确保 getVariableRegister 能找到它
