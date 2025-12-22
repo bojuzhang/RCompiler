@@ -23,13 +23,17 @@ impl Tree {
 */
 
 struct Node {
-    arr : [i32; 3]
+    flag : bool
 }
 
 impl Node {
-    fn modify(&mut self, x : i32) {
-        self.arr[x as usize] += 114514;
+    fn foo(&self, arr : &mut [bool; 2], ) {
+        arr[1] = self.flag;
     }
+}
+
+fn goo(arr : &mut [bool; 2]) {
+    arr[0] = true;
 }
 
 fn main() {
@@ -40,9 +44,10 @@ fn main() {
     printlnInt(t.x);
     */
 
-    let mut node : Node = Node {arr : [1, 2, 3]};
-    node.modify(1);
-    printlnInt(node.arr[1]);
+    let mut arr : [bool; 2] = [false, false];
+    let node : Node = Node {flag : true};
+    node.foo(&mut arr);
+    printlnInt(arr[1] as i32);
     
     exit(0);
 }

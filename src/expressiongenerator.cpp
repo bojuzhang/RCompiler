@@ -1677,8 +1677,9 @@ std::pair<std::string, std::string> ExpressionGenerator::analyzeLValue(std::shar
             // 索引访问 - 修复复杂字段访问作为左值的情况
             std::string baseType = getExpressionType(indexExpr->expressionout);
             std::string indexReg = generateExpression(indexExpr->expressionin);
+            // std::cerr << "etst: " << baseType << " " << indexReg << "\n";
             // std::cerr << "indexReg: " << indexReg << "\n";
-            if (baseType.size() && baseType.back() == '*') {
+            while (baseType.size() && baseType.back() == '*') {
                 baseType.pop_back();
             }
             
