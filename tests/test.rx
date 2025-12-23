@@ -1,53 +1,10 @@
-/*
-struct Node {
-    x : i32,
-    y : i32
-}
-
-struct Tree {
-    node : Node,
-    tmp : i32
-}
-
-impl Node {
-    fn get(&self) -> Node {
-        Node {x : self.x, y : self.y}
-    }
-}
-
-impl Tree {
-    fn get_node(&self) -> Node {
-        self.node
-    }
-}
-*/
-
-struct Node {
-    flag : bool
-}
-
-impl Node {
-    fn foo(&self, arr : &mut [bool; 2], ) {
-        arr[1] = self.flag;
-    }
-}
-
-fn goo(arr : &mut [bool; 2]) {
-    arr[0] = true;
-}
-
 fn main() {
-    /*
-    let node : Node = Node {x : 42, y : 42};
-    let tree : Tree = Tree {node : node, tmp : 114514};
-    let t : Node = tree.get_node().get();
-    printlnInt(t.x);
-    */
-
-    let mut arr : [bool; 2] = [false, false];
-    let node : Node = Node {flag : true};
-    node.foo(&mut arr);
-    printlnInt(arr[1] as i32);
-    
+    let mut vm_state: i32 = 1;
+    let mut i: i32 = 0;
+    while (i < 10) {
+        let vm_state: i32 = vm_state + i;
+        i = i + 1;
+    }
+    printlnInt(vm_state);
     exit(0);
 }

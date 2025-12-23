@@ -61,6 +61,7 @@ struct ControlFlowContext {
 struct ScopeInfo {
     std::shared_ptr<Scope> scope;
     std::unordered_map<std::string, int> variableCounters;
+    std::unordered_map<std::string, int> variableExpCounters;
     std::unordered_set<std::string> registers;
     
     ScopeInfo(std::shared_ptr<Scope> s) : scope(s) {}
@@ -129,6 +130,7 @@ public:
     std::string getVariableRegister(const std::string& variableName);
     std::string getSymbolRegister(std::shared_ptr<Symbol> symbol);
     std::string getRegisterType(const std::string& registerName);
+    void cleanRegister(const std::vector<std::string> variableNames);
     void setRegisterType(const std::string& registerName, const std::string& type);
     std::shared_ptr<Scope> getRegisterScope(const std::string& registerName);
     

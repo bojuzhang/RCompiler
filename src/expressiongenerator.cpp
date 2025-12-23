@@ -2333,6 +2333,7 @@ std::string ExpressionGenerator::generateBlockExpression(std::shared_ptr<BlockEx
         // 生成块中的所有语句
         if (!generateBlockStatements(blockExpr->statements)) {
             reportError("Failed to generate block statements");
+            irBuilder->cleanRegister(scopeTree->GetCurrentScope()->typecheckAddedSymbols);
             scopeTree->ExitScope();
             return "";
         }
@@ -2341,14 +2342,18 @@ std::string ExpressionGenerator::generateBlockExpression(std::shared_ptr<BlockEx
         if (blockExpr->expressionwithoutblock) {
             std::string result = generateExpression(blockExpr->expressionwithoutblock);
             // 退出作用域
+            irBuilder->cleanRegister(scopeTree->GetCurrentScope()->typecheckAddedSymbols);
             scopeTree->ExitScope();
             return result;
         } else if (blockExpr->statements.size() && dynamic_cast<ExpressionStatement*>(blockExpr->statements.back()->astnode.get())) {
+            auto regname = statementGenerator->getStatementRegname(dynamic_cast<ExpressionStatement*>(blockExpr->statements.back()->astnode.get()));
+            irBuilder->cleanRegister(scopeTree->GetCurrentScope()->typecheckAddedSymbols);
             scopeTree->ExitScope();
-            return statementGenerator->getStatementRegname(dynamic_cast<ExpressionStatement*>(blockExpr->statements.back()->astnode.get()));
+            return regname;
         } else {
             // 没有尾表达式，需要根据块表达式的类型决定是否生成值
             // 退出作用域
+            irBuilder->cleanRegister(scopeTree->GetCurrentScope()->typecheckAddedSymbols);
             scopeTree->ExitScope();
             
             // 获取块表达式的类型

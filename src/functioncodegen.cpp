@@ -6,6 +6,7 @@
 
 // 包含 StatementGenerator 和 ExpressionGenerator 头文件以解决前向声明问题
 #include "astnodes.hpp"
+#include "irgenerator.hpp"
 #include "statementgenerator.hpp"
 #include "expressiongenerator.hpp"
 
@@ -91,6 +92,7 @@ bool FunctionCodegen::generateFunction(std::shared_ptr<Function> function) {
             return false;
         }
 
+        // irBuilder->cleanRegister(scopeTree->GetCurrentScope()->typecheckAddedSymbols);
         scopeTree->ExitScope();
         
         // 获取函数信息
@@ -136,6 +138,7 @@ bool FunctionCodegen::generateFunction(std::shared_ptr<Function> function) {
         // 退出函数上下文
         exitFunction();
 
+        // irBuilder->cleanRegister(scopeTree->GetCurrentScope()->typecheckAddedSymbols);
         scopeTree->ExitScope();
         
         return success;
@@ -325,6 +328,7 @@ bool FunctionCodegen::generateFunctionBody(std::shared_ptr<Function> function) {
             return true; // 避免继续执行
         }
 
+        irBuilder->cleanRegister(scopeTree->GetCurrentScope()->typecheckAddedSymbols);
         scopeTree->ExitScope();
         
         return true;

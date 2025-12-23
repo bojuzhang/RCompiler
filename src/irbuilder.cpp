@@ -95,9 +95,9 @@ void IRBuilder::cleanupScopeRegisters() {
 std::string IRBuilder::getVariableRegister(const std::string& variableName) {
     // 从当前作用域开始查找
     for (auto it = scopeStack.rbegin(); it != scopeStack.rend(); ++it) {
-        if (it->variableCounters.find(variableName) != it->variableCounters.end()) {
+        if (it->variableExpCounters.find(variableName) != it->variableExpCounters.end()) {
             // 找到变量，返回对应的寄存器
-            int counter = it->variableCounters[variableName];
+            int counter = it->variableExpCounters[variableName];
             
             // 构建期望的变量寄存器名模式
             std::string expectedPattern;
@@ -331,6 +331,7 @@ std::string IRBuilder::generateRegisterName(const std::string& variableName, con
         }
         
         int counter = ++scopeInfo.variableCounters[variableName];
+        scopeInfo.variableExpCounters[variableName] = counter;
         
         // 添加后缀
         if (!suffix.empty()) {
@@ -347,6 +348,22 @@ std::string IRBuilder::generateRegisterName(const std::string& variableName, con
     }
     
     return regName;
+}
+void IRBuilder::cleanRegister(const std::vector<std::string> variableNames) {
+    for (const auto &variableName : variableNames) {
+        if (!scopeStack.empty()) {
+            auto& scopeInfo = scopeStack.back();
+            
+            // 更新变量计数器
+            if (scopeInfo.variableExpCounters.find(variableName) == scopeInfo.variableExpCounters.end()) {
+                scopeInfo.variableExpCounters[variableName] = 0;
+            }
+
+            if (scopeInfo.variableExpCounters[variableName] > 0) {
+                --scopeInfo.variableExpCounters[variableName];
+            }
+        }
+    }
 }
 
 void IRBuilder::addRegister(const std::string& name, const std::string& type, bool isPointer, bool isTemporary) {
