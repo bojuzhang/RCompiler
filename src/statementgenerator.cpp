@@ -148,6 +148,15 @@ bool StatementGenerator::generateLetStatement(std::shared_ptr<LetStatement> letS
             llvmType = typeMapper->getPointedType(llvmType);
         }
         
+        // 修复：先生成表达式的值避免 shadow
+        if (!validateExpressionGenerator()) {
+            reportError("ExpressionGenerator not set for let statement initialization");
+            return false;
+        }
+        
+        // 调用 ExpressionGenerator 生成初始化表达式
+        std::string initReg = expressionGenerator->generateExpression(letStatement->expression);
+        
         // 3. 为变量分配栈空间
         std::string variableReg = allocateVariable(variableName, llvmType);
         if (variableReg.empty()) {
@@ -157,14 +166,6 @@ bool StatementGenerator::generateLetStatement(std::shared_ptr<LetStatement> letS
         
         // 4. 处理初始化
         if (letStatement->expression) {
-            if (!validateExpressionGenerator()) {
-                reportError("ExpressionGenerator not set for let statement initialization");
-                return false;
-            }
-            
-            // 调用 ExpressionGenerator 生成初始化表达式
-            std::string initReg = expressionGenerator->generateExpression(letStatement->expression);
-            
             if (!initReg.empty()) {
                 // 存储初始值到变量
                 storeVariable(variableName, initReg, llvmType);
