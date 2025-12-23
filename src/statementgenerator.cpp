@@ -6,6 +6,7 @@
 #include <memory>
 
 // 包含 ExpressionGenerator 和 FunctionCodegen 头文件以解决前向声明问题
+#include "astnodes.hpp"
 #include "expressiongenerator.hpp"
 #include "functioncodegen.hpp"
 #include "typemapper.hpp"
@@ -156,6 +157,29 @@ bool StatementGenerator::generateLetStatement(std::shared_ptr<LetStatement> letS
         
         // 调用 ExpressionGenerator 生成初始化表达式
         std::string initReg = expressionGenerator->generateExpression(letStatement->expression);
+
+        // 关键修复：在 let &mut 赋值时使用 bitcast 指针赋值而不是值赋值
+        if (dynamic_cast<ReferenceType*>(letStatement->type.get())) {
+            auto type = dynamic_cast<ReferenceType*>(letStatement->type.get());            
+            if (type->ismut) {
+                std::string variableReg = irBuilder->newRegister(variableName, "_ptr");
+                // 对于引用类型，需要使用 TypeMapper 来正确映射
+                // 例如：&i32 应该映射为 i32*，而不是 &i32
+                std::string actualType = llvmType;
+                if (llvmType.find('&') == 0) {
+                    // 这是一个引用类型，使用 TypeMapper 映射
+                    actualType = typeMapper->mapRxTypeToLLVM(llvmType);
+                }
+                // 手动设置寄存器类型
+                irBuilder->setRegisterType(variableReg, actualType + "*");
+
+                auto typeName = llvmType + "*";
+
+                auto instruction = variableReg + " = bitcast " + typeName + " " + initReg + " to " + typeName;
+                irBuilder->emitInstruction(instruction);
+                return true;
+            }
+        }
         
         // 3. 为变量分配栈空间
         std::string variableReg = allocateVariable(variableName, llvmType);
