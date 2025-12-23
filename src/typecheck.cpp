@@ -1507,6 +1507,10 @@ void TypeChecker::visit(CallExpression& node) {
 std::shared_ptr<SemanticType> TypeChecker::InferCallExpressionType(CallExpression& expr) {
     auto calleeType = InferExpressionType(*expr.expression);
 
+    for (const auto &param : expr.callparams->expressions) {
+        InferExpressionType(*param.get());
+    }
+
     // 查找函数符号
     // 如果callee是路径表达式，尝试解析为函数调用
     if (auto pathExpr = dynamic_cast<PathExpression*>(expr.expression.get())) {
