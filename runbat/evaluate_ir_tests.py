@@ -39,13 +39,17 @@ class IREvaluator:
             shutil.rmtree(self.temp_dir)
             
     def find_test_directories(self) -> List[Path]:
-        """查找所有测试目录（包含.rx文件的目录）"""
+        """查找所有测试目录（包含.rx文件的目录），只评测以comprehensive开头的测试点"""
         test_dirs = []
         if not self.test_dir.exists():
             return test_dirs
             
         for item in self.test_dir.iterdir():
             if item.is_dir():
+                # 只处理以comprehensive开头的目录
+                if not item.name.startswith("comprehensive"):
+                    continue
+                    
                 # 检查目录中是否有.rx文件
                 rx_files = list(item.glob("*.rx"))
                 if rx_files:
